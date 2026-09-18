@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import { requestRecipe, stateRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
-import Planner from "./Planner.jsx";
+import { readNavigation, navigationUrl } from "./navigation.js";
+import { readChat, writeChat } from "./chat-session.js";
 import { ingredients, allergyOptions } from "./data.js";
 import {
   availability,
   matchesProfile,
-  recommend,
   requiresReview,
 } from "./engine.js";
 
@@ -16,7 +16,6 @@ const pages = [
   { id: "pantry", label: "Mi despensa", icon: "pantry" },
   { id: "assistant", label: "Nutribot IA", icon: "spark" },
   { id: "recipes", label: "Mis recetas", icon: "book" },
-  { id: "planner", label: "Mi semana", icon: "calendar" },
   { id: "profile", label: "Mi perfil", icon: "user" },
 ];
 const ingredientById = Object.fromEntries(ingredients.map((i) => [i.id, i]));
@@ -86,7 +85,22 @@ export default function App() {
 function Workspace({ initial }) {
   const ingredients = initial.ingredients;
   const recipes = initial.recipes;
-  const [page, setPage] = useState("home");
+  const [navigation, setNavigation] = useState(() => readNavigation(new URL(location.href)));
+  const { page, mobile } = navigation;
+  useEffect(() => {
+    const restore = () => setNavigation(readNavigation(new URL(location.href)));
+    window.addEventListener("popstate", restore);
+    window.addEventListener("hashchange", restore);
+    return () => {
+      window.removeEventListener("popstate", restore);
+      window.removeEventListener("hashchange", restore);
+    };
+  }, []);
+  function navigate(next, replace = false) {
+    const url = navigationUrl(location.href, next);
+    if (url.href !== location.href) history[replace ? "replaceState" : "pushState"](null, "", url);
+    setNavigation(next);
+  }
   const [pantry, setPantry] = useState(initial.pantry);
   const [profile, setProfile] = useState(initial.profile);
   const [saved, setSaved] = useState(initial.saved);
@@ -94,9 +108,6 @@ function Workspace({ initial }) {
   const [connection, setConnection] = useState("checking");
   const allRecipes = [...generated, ...recipes];
   const [feedback, setFeedback] = useState(initial?.feedback || {});
-  const [mobile, setMobile] = useState(
-    new URLSearchParams(location.search).has("mobile"),
-  );
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Todos");
   const [recipeTab, setRecipeTab] = useState("Explorar");
@@ -104,9 +115,13 @@ function Workspace({ initial }) {
   const [selected, setSelected] = useState(null);
   const [servings, setServings] = useState(1);
   const [checked, setChecked] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [message, setMessage] = useState("");
-  const [maxTime, setMaxTime] = useState(30);
+  const [chat] = useState(() => {
+    try { return readChat(window.sessionStorage, allRecipes); }
+    catch { return { messages: [], draft: "", maxTime: 30 }; }
+  });
+  const [messages, setMessages] = useState(chat.messages);
+  const [message, setMessage] = useState(chat.draft);
+  const [maxTime, setMaxTime] = useState(chat.maxTime);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
@@ -115,7 +130,7 @@ function Workspace({ initial }) {
   const resetDialog = useRef(null);
   const pending = useRef(null);
   const end = useRef(null);
-  const ready = recommend(pantry, profile, 60, recipes);
+
   const persistence = usePersistence(initial, {
     pantry,
     profile,
@@ -123,6 +138,10 @@ function Workspace({ initial }) {
     feedback,
   });
   const [resetting, setResetting] = useState(false);
+  useEffect(() => {
+    try { writeChat(window.sessionStorage, { messages, draft: message, maxTime, busy }); }
+    catch { /* Browser storage can be disabled; recipes still persist on the server. */ }
+  }, [messages, message, maxTime, busy]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 3200);
@@ -166,7 +185,7 @@ function Workspace({ initial }) {
     }
   }, [pantry, profile, maxTime]);
   function go(id) {
-    setPage(id);
+    navigate({ ...navigation, page: id });
     setSearch("");
     window.scrollTo({ top: 0, behavior: "instant" });
   }
@@ -249,6 +268,7 @@ function Workspace({ initial }) {
       setGenerated(state.generated);
       setFeedback(state.feedback);
       setMessages([]);
+      setMessage("");
       setMaxTime(30);
       setConfirmReset(false);
       go("home");
@@ -320,17 +340,6 @@ function Workspace({ initial }) {
       </article>
     );
   }
-  function SectionHead({ eyebrow, title, action }) {
-    return (
-      <div className="section-heading">
-        <div>
-          {eyebrow && <div className="eyebrow">{eyebrow}</div>}
-          <h2>{title}</h2>
-        </div>
-        {action}
-      </div>
-    );
-  }
   const filteredIngredients = ingredients.filter(
     (i) =>
       (category === "Todos" || i.category === category) &&
@@ -340,10 +349,9 @@ function Workspace({ initial }) {
     <>
       <div className="preview-bar">
         <span>
-          <span className="status-dot" /> PROTOTIPO INTERACTIVO{" "}
-          <span className="preview-version">/ 01 · De la idea a tu mesa</span>
+          Nutribot · Recetas con tus ingredientes
         </span>
-        <button onClick={() => setMobile((m) => !m)}>
+        <button onClick={() => navigate({ ...navigation, mobile: !mobile }, true)}>
           <Icon name={mobile ? "monitor" : "phone"} size={15} />
           {mobile ? "Vista amplia" : "Vista móvil"}
         </button>
@@ -366,18 +374,6 @@ function Workspace({ initial }) {
               </button>
             ))}
           </nav>
-          <div className="sidebar-note">
-            <span className="leaf-badge">
-              <Icon name="leaf" size={25} />
-            </span>
-            <h3>
-              Pequeños ingredientes.
-              <br />
-              Grandes posibilidades.
-            </h3>
-            <p>Lo que tienes en casa puede ser tu próxima comida favorita.</p>
-            <span>HECHO PARA TU DÍA A DÍA</span>
-          </div>
           <button className="sidebar-user" onClick={() => go("profile")}>
             <span className="avatar">{profile.name.charAt(0) || "T"}</span>
             <span>
@@ -437,181 +433,25 @@ function Workspace({ initial }) {
               ))}
           </div>
           <main>
-            {page === "planner" && (
-              <Planner
-                recipes={allRecipes}
-                profile={profile}
-                pantry={pantry}
-                ingredients={ingredients}
-                flush={persistence.flush}
-                onOpen={openRecipe}
-              />
-            )}
             {page === "home" && (
-              <div className="page-enter">
-                <div className="welcome-row">
-                  <div>
-                    <div className="eyebrow greeting">
-                      <Icon name="sun" size={15} /> UN BUEN DÍA EMPIEZA EN TU
-                      COCINA
-                    </div>
-                    <h1>
-                      ¡Hola, {profile.name || "qué gusto verte"}!{" "}
-                      <span className="wave">✺</span>
-                    </h1>
-                    <p>Hoy, algo rico empieza con lo que ya tienes.</p>
-                  </div>
-                  <div className="date-chip">
-                    <Icon name="leaf" size={17} /> A tu ritmo. A tu gusto.
-                  </div>
+              <div className="page-enter simple-home">
+                <div className="page-title">
+                  <h1>¿Qué cocinamos hoy?</h1>
+                  <p>Genera recetas con los ingredientes que tienes y los filtros de tu perfil.</p>
                 </div>
-                <section className="hero">
-                  <div className="hero-copy">
-                    <Tag tone="hero-tag">
-                      <Icon name="spark" size={14} /> TU ASISTENTE DE COCINA CON
-                      IA
-                    </Tag>
-                    <h2>
-                      De lo que tienes,
-                      <br />a lo que <em>te encanta.</em>
-                    </h2>
-                    <p>
-                      Tus ingredientes, tus preferencias y una nueva idea para
-                      llevar a la mesa.
-                    </p>
-                    {button("Vamos a cocinar", () => generate(), "spark")}
-                    <span className="hero-footnote">
-                      Sin complicarte. Sin comprar de más.
-                    </span>
-                  </div>
-                  <div className="hero-visual">
-                    <img
-                      src="/bowl-nutribot.png"
-                      alt="Bowl de arroz, frijoles, aguacate y tomate, ejemplo de una receta casera"
-                    />
-                    <div className="hero-sticker">
-                      <span className="sticker-icon">
-                        <Icon name="leaf" size={20} />
-                      </span>
-                      <div>
-                        <strong>Con lo que hay en casa</strong>
-                        <span>Ingredientes sencillos, nuevas ideas</span>
-                      </div>
-                    </div>
-                    <span className="image-credit">
-                      Imagen ilustrativa · creada con IA
-                    </span>
-                  </div>
+                <section className="panel start-cooking">
+                  <Icon name="chef" size={38} />
+                  <h2>Tu cocina, en tres pasos</h2>
+                  <ol className="start-steps">
+                    <li><button className="text-btn" onClick={() => go("pantry")}>Elige tus ingredientes</button><span>{pantry.length} en tu despensa</span></li>
+                    <li><button className="text-btn" onClick={() => go("profile")}>Revisa tus preferencias y alergias</button><span>{profile.diet}</span></li>
+                    <li><span>Pide una receta a Nutribot</span><span>La IA usa tu despensa y tus filtros.</span></li>
+                  </ol>
+                  {button("Pedir una receta", () => go("assistant"), "spark")}
                 </section>
-                <div className="home-grid">
-                  <section className="pantry-summary panel">
-                    <SectionHead
-                      title="Tu despensa tiene potencial"
-                      action={
-                        <button
-                          className="text-btn"
-                          onClick={() => go("pantry")}
-                        >
-                          Editar
-                          <Icon name="arrow" size={16} />
-                        </button>
-                      }
-                    />
-                    <p className="section-description">
-                      {pantry.length} ingredientes listos para inspirarte.
-                    </p>
-                    <div className="ingredient-strip">
-                      {pantry.slice(0, 5).map((id) => (
-                        <button key={id} onClick={() => go("pantry")}>
-                          <span>{ingredientById[id].emoji}</span>
-                          <small>{ingredientById[id].name.split(" ")[0]}</small>
-                        </button>
-                      ))}
-                      <button
-                        className="add-ingredient"
-                        onClick={() => go("pantry")}
-                        aria-label="Añadir ingredientes"
-                      >
-                        <span>
-                          <Icon name="plus" />
-                        </span>
-                        <small>Añadir</small>
-                      </button>
-                    </div>
-                    <div className="pantry-summary-footer">
-                      <Icon name="leaf" size={15} />
-                      <span>Aprovecha primero lo que ya tienes.</span>
-                    </div>
-                  </section>
-                  <section className="profile-summary panel">
-                    <div className="profile-summary-top">
-                      <span className="soft-icon">
-                        <Icon name="shield" />
-                      </span>
-                      <span className="eyebrow">PENSADO PARA TI</span>
-                    </div>
-                    <h3>Tu cocina, tus preferencias</h3>
-                    <p>
-                      {profile.goal}. Personaliza las ideas desde tu perfil.
-                    </p>
-                    <div className="tags">
-                      <Tag>
-                        {profile.diet === "Sin preferencia"
-                          ? "Cocina variada"
-                          : profile.diet}
-                      </Tag>
-                      {profile.allergies.length > 0 && (
-                        <Tag>{profile.allergies.length} filtro(s)</Tag>
-                      )}
-                    </div>
-                    <button className="text-btn" onClick={() => go("profile")}>
-                      Completar mi perfil
-                      <Icon name="arrow" size={16} />
-                    </button>
-                  </section>
-                </div>
-                <section className="ideas-section">
-                  <SectionHead
-                    eyebrow="UN POCO DE INSPIRACIÓN"
-                    title="De tu despensa a tu plato"
-                    action={
-                      <button
-                        className="text-btn"
-                        onClick={() => go("recipes")}
-                      >
-                        Ver recetas
-                        <Icon name="arrow" size={16} />
-                      </button>
-                    }
-                  />
-                  {ready.length ? (
-                    <div className="recipe-grid">
-                      {ready.slice(0, 3).map((r) => (
-                        <RecipeCard key={r.id} recipe={r} />
-                      ))}
-                    </div>
-                  ) : (
-                    <Empty
-                      icon="chef"
-                      title={
-                        requiresReview(profile)
-                          ? "Tus indicaciones necesitan revisión"
-                          : "Tu próxima idea empieza en la despensa"
-                      }
-                      action={button("Ir a mi despensa", () => go("pantry"))}
-                    >
-                      No hay sugerencias disponibles con tu configuración
-                      actual.
-                    </Empty>
-                  )}
-                </section>
-                <div className="quiet-note">
-                  <Icon name="info" size={15} />
-                  <span>
-                    Estas tarjetas son ejemplos del catálogo. Pulsa «Vamos a
-                    cocinar» para generar recetas nuevas con Gemini.
-                  </span>
-                </div>
+                <button className="text-btn saved-shortcut" onClick={() => go("recipes")}>
+                  <Icon name="book" size={18} /> Ver mis recetas · {generated.length} generadas
+                </button>
               </div>
             )}
             {page === "pantry" && (
@@ -720,7 +560,7 @@ function Workspace({ initial }) {
                     <Icon name="spark" size={29} />
                   </span>
                   <div>
-                    <h1>Tu compañero de cocina</h1>
+                    <h1>Nutribot IA</h1>
                     <p>
                       Nutribot · Asistente IA{" "}
                       <span className="inline-demo">Gemini · Google</span>
@@ -738,6 +578,9 @@ function Workspace({ initial }) {
                     {requiresReview(profile)
                       ? "Revisión pendiente"
                       : profile.allergies.length + " filtros de alergias"}
+                  </button>
+                  <button className="text-btn" disabled={busy || (!messages.length && !message)} onClick={() => { setMessages([]); setMessage(""); }}>
+                    Limpiar chat
                   </button>
                   <label>
                     <Icon name="clock" size={17} />
@@ -763,7 +606,7 @@ function Workspace({ initial }) {
                       <h2>¿Qué cocinamos hoy?</h2>
                       <p>
                         Comencemos con tu despensa y las preferencias de tu
-                        perfil. Elige una idea para probar el recorrido.
+                        perfil. Elige una idea o escribe tu pedido.
                       </p>
                       <div className="suggestion-grid">
                         {[
@@ -1030,7 +873,7 @@ function Workspace({ initial }) {
           <footer className="app-footer">
             <Brand small />
             <span>Menos dudas. Más cocina.</span>
-            <span>Prototipo 0.2 · El Salvador</span>
+            <span>Recetas con IA</span>
           </footer>
         </div>
         <nav className="mobile-nav" aria-label="Navegación móvil">
@@ -1051,9 +894,7 @@ function Workspace({ initial }) {
                       ? "Recetas"
                       : p.id === "profile"
                         ? "Perfil"
-                        : p.id === "planner"
-                          ? "Semana"
-                          : "Inicio"}
+                        : "Inicio"}
               </span>
             </button>
           ))}
@@ -1252,7 +1093,7 @@ function Workspace({ initial }) {
         <Icon name="reset" size={30} />
         <h2 id="reset-title">¿Volvemos al inicio?</h2>
         <p>
-          Se borrarán el perfil, las recetas guardadas, el plan semanal, el chat y los cambios de
+          Se borrarán el perfil, las recetas guardadas, el chat y los cambios de
           esta instalación, también para otras pestañas de esta PC. Las copias
           de seguridad no se borran.
         </p>

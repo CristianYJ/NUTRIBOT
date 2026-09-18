@@ -1,6 +1,5 @@
 import pg from "pg";
 import { readFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
 import {
   ingredients,
   recipes,
@@ -9,7 +8,6 @@ import {
   allergyOptions,
 } from "../src/data.js";
 import { AppError, foodRules, validateOutput } from "./recipes.js";
-import { matchesProfile } from "../src/engine.js";
 import {
   validateState,
   validateRevision,
@@ -438,84 +436,6 @@ export async function openDatabase(options = {}) {
         return { importedRecipes: legacy.generated.length };
       });
     },
-    getPlan: () =>
-      transaction(async (c) => {
-        const state = await readState(c);
-        const map = new Map(
-          [...state.recipes, ...state.generated].map((r) => [r.id, r]),
-        );
-        const entries = (
-          await c.query(
-            "SELECT id,to_char(plan_date,'YYYY-MM-DD') AS date,meal,recipe_id AS \"recipeId\",servings FROM meal_plans WHERE profile_id=1 ORDER BY plan_date,meal",
-          )
-        ).rows;
-        return entries.map((e) => ({
-          ...e,
-          title: map.get(e.recipeId)?.title,
-          compatible: matchesProfile(map.get(e.recipeId), state.profile),
-          missing: map
-            .get(e.recipeId)
-            .ingredients.filter((id) => !state.pantry.includes(id)),
-        }));
-      }, true),
-    async addPlan(raw) {
-      validatePlan(raw);
-      return transaction(async (c) => {
-        await checkRevision(c, raw.revision);
-        const state = await readState(c),
-          recipe = [...state.recipes, ...state.generated].find(
-            (r) => r.id === raw.recipeId,
-          );
-        if (!recipe || !matchesProfile(recipe, state.profile))
-          throw new AppError(
-            "PLAN_RESTRICTED",
-            "La receta no cumple tus filtros actuales o requiere revisión.",
-          );
-        if (
-          Number(
-            (
-              await c.query(
-                "SELECT count(*) AS n FROM meal_plans WHERE profile_id=1",
-              )
-            ).rows[0].n,
-          ) >= 366
-        )
-          throw new AppError(
-            "PLAN_LIMIT",
-            "Puedes guardar hasta 366 comidas planificadas.",
-          );
-        const entry = (
-          await c.query(
-            "INSERT INTO meal_plans(id,profile_id,plan_date,meal,recipe_id,servings) VALUES($1,1,$2,$3,$4,$5) ON CONFLICT(profile_id,plan_date,meal) DO NOTHING RETURNING id",
-            [randomUUID(), raw.date, raw.meal, raw.recipeId, raw.servings],
-          )
-        ).rows[0];
-        if (!entry)
-          throw new AppError(
-            "PLAN_EXISTS",
-            "Ya hay una receta para ese día y comida. Retírala antes de elegir otra.",
-            409,
-          );
-        return entry;
-      });
-    },
-    async removePlan(id) {
-      if (typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id))
-        throw new AppError("INVALID_PLAN", "Plan no válido.");
-      return transaction(async (c) => {
-        const result = await c.query(
-          "DELETE FROM meal_plans WHERE id=$1 AND profile_id=1 RETURNING id",
-          [id],
-        );
-        if (!result.rowCount)
-          throw new AppError(
-            "NOT_FOUND",
-            "La comida ya no está en el plan.",
-            404,
-          );
-        return { deleted: true };
-      });
-    },
     summary: () =>
       transaction(
         async (c) => ({
@@ -565,25 +485,4 @@ export async function openDatabase(options = {}) {
     close: () => pool.end(),
   };
   return store;
-}
-function validatePlan(raw) {
-  validateRevision(raw?.revision);
-  if (
-    typeof raw?.date !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(raw.date) ||
-    !Number.isFinite(Date.parse(raw.date)) ||
-    new Date(raw.date).toISOString().slice(0, 10) !== raw.date ||
-    raw.date < "2000-01-01" ||
-    raw.date > "2100-12-31" ||
-    !["Desayuno", "Almuerzo", "Cena"].includes(raw.meal) ||
-    !Number.isInteger(raw.servings) ||
-    raw.servings < 1 ||
-    raw.servings > 4 ||
-    typeof raw.recipeId !== "string" ||
-    raw.recipeId.length > 100
-  )
-    throw new AppError(
-      "INVALID_PLAN",
-      "Revisa la fecha, la receta, la comida y las porciones (1 a 4).",
-    );
 }

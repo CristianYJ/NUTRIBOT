@@ -1,4 +1,4 @@
-import { constants, copyFileSync } from "node:fs";
+import { constants, copyFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const [major, minor] = process.versions.node.split(".").map(Number);
@@ -27,9 +27,18 @@ try {
   }
   console.log(".env ya existe; se conservó sin cambios.");
 }
-console.log(
-  "Prepara PostgreSQL siguiendo docs/POSTGRESQL.md y ejecuta npm run db:init. setup no modifica ninguna base existente.",
-);
+try {
+  writeFileSync(new URL("../.env.postgres-admin", import.meta.url),
+    "# Acceso privado para preparar PostgreSQL. No se sube a GitHub.\nPGHOST=127.0.0.1\nPGPORT=5432\nPGUSER=postgres\nPGPASSWORD=\n",
+    { flag: "wx", mode: 0o600 });
+  console.log("Se creó .env.postgres-admin. Completa la contraseña local de postgres.");
+} catch (error) {
+  if (error.code !== "EEXIST") {
+    console.error("No se pudo preparar .env.postgres-admin. Revisa los permisos.");
+    process.exit(1);
+  }
+}
+console.log("Primera instalación: npm run db:provision y npm run db:init. Ver README.md.");
 console.log(
   "Después ejecuta npm run dev y abre http://127.0.0.1:5173/?mobile=1",
 );

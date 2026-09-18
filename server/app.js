@@ -62,27 +62,6 @@ export function createAppServer({
           database: store?.provider || (store ? "sqlite" : "disabled"),
         });
       }
-      if (
-        url.pathname === "/api/summary" &&
-        req.method === "GET" &&
-        store?.summary
-      )
-        return json(res, 200, await store.summary());
-      if (url.pathname === "/api/plan" && store?.getPlan) {
-        if (req.method === "GET") return json(res, 200, await store.getPlan());
-        if (req.method === "POST")
-          return json(res, 201, await store.addPlan(await readJson(req)));
-        if (req.method === "DELETE")
-          return json(
-            res,
-            200,
-            await store.removePlan((await readJson(req)).id),
-          );
-        return json(res, 405, {
-          error: "METHOD_NOT_ALLOWED",
-          text: "Método no permitido.",
-        });
-      }
       if (url.pathname === "/api/state") {
         if (!store)
           throw new AppError(

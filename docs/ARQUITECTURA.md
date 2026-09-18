@@ -1,49 +1,33 @@
-# Camino del simulacro al MVP
+# Arquitectura actual
 
-**Actualización: PostgreSQL + Gemini local implementados.** El cliente carga y guarda datos mediante `/api/state`; `/api/recipes/suggest` usa la despensa y perfil almacenados, valida respuestas de Google y conserva las recetas. Ver [POSTGRESQL.md](POSTGRESQL.md) y [GEMINI.md](GEMINI.md). Hay un perfil por instalación; base nutricional, autenticación y publicación siguen pendientes. El resto conserva el plan original; el contrato completo del MVP aún no está implementado.
+React muestra cinco secciones: Inicio, Despensa, Nutribot IA, Mis recetas y Perfil. Vite sirve la interfaz en desarrollo. Un servidor Node.js atiende la API y consulta PostgreSQL mediante node-postgres.
 
-## Punto de partida
+## Generar una receta
 
-El alcance del primer avance del proyecto pide perfil, ingredientes, restricciones, recetas con pasos y porciones, datos nutricionales y retroalimentación. Esta versión permite evaluar ese recorrido sin depender del antiguo servidor Flask.
+1. La interfaz guarda despensa y perfil en PostgreSQL y obtiene su revisión.
+2. Envía el pedido y el tiempo máximo a `POST /api/recipes/suggest`.
+3. El servidor lee ingredientes y filtros guardados, comprueba la revisión y valida la petición.
+4. Gemini recibe el contexto culinario permitido. La clave permanece en el servidor.
+5. Se valida la respuesta. Receta, ingredientes, pasos y registro de generación se guardan en una transacción antes de responder.
 
-## Componentes de la aplicación real
+Los errores de cuota, red o validación se muestran al usuario; no se sustituyen por respuestas de ejemplo.
 
-1. **Cliente móvil:** trasladar las pantallas aprobadas a una aplicación móvil o empaquetar el cliente web tras evaluar los requisitos de cámara, notificaciones, funcionamiento sin conexión y distribución. La interfaz actual es React para navegador, no React Native.
-2. **Backend:** autenticación, perfiles, inventario con cantidades, reglas, catálogo y llamadas al proveedor de IA. Nunca enviar claves de proveedor al teléfono.
-3. **Base de datos:** usuarios, perfiles, restricciones normalizadas, ingredientes, cantidades y unidades, recetas, ingredientes por receta, fuentes nutricionales, favoritos, opiniones y revisiones.
-4. **Servicio de IA:** recibe contexto mínimo, utiliza ingredientes permitidos y devuelve un esquema estructurado. No tiene autoridad para modificar restricciones ni emitir validaciones clínicas.
-5. **Validación posterior:** verificar ingredientes, alérgenos, porciones, unidades y esquema antes de mostrar la respuesta. Datos incompletos o incompatibles deben detener la recomendación.
-6. **Fuente nutricional:** calcular porciones y macros con datos estructurados trazables. No usar números inventados por el modelo.
+## Datos y navegación
 
-## Contrato propuesto, todavía no implementado
+- PostgreSQL conserva perfil, despensa, favoritos, opiniones y recetas. Las escrituras usan consultas parametrizadas y revisiones para detectar conflictos entre pestañas.
+- La dirección guarda la sección (por ejemplo `#assistant`) y la vista móvil (`?mobile=1`). Recargar y usar Atrás/Adelante restaura la navegación.
+- SessionStorage conserva hasta 40 mensajes recientes y el borrador de esa pestaña. Guarda identificadores de recetas; al recargar sus detalles se obtienen de PostgreSQL. No es historial compartido ni memoria remota de Gemini.
+- El esquema inicial conserva la tabla histórica `meal_plans` y su vista para no eliminar datos de instalaciones anteriores. La función Semana, su interfaz y sus rutas API se retiraron del alcance actual. No se cambian migraciones ya aplicadas.
 
-`POST /api/recipes/suggest`
+## Organización
 
-Entrada: ingredientes normalizados con cantidades/unidades, filtros de alergias, preferencias y tiempo máximo. El servidor obtiene el perfil del usuario autenticado y valida los datos. Los documentos o notas médicas no deben enviarse a un proveedor sin un flujo específico de consentimiento, minimización y revisión profesional.
+| Carpeta | Contenido |
+| --- | --- |
+| src | Interfaz, navegación y cliente HTTP |
+| server | API, Gemini, validación y PostgreSQL |
+| server/postgres | Migraciones SQL |
+| scripts | Preparación, copias y validación |
+| tests | Reglas, API, navegación e integración con PostgreSQL |
+| docs | Instalación y validación |
 
-Salida: estado `ok`, `no_match` o `needs_review`; recetas con identificadores de ingredientes, cantidades, pasos, porciones, fuente y estado de revisión. Los números nutricionales deben incluir procedencia y versión. Los errores de IA y de red necesitan mensajes recuperables y no deben convertirse silenciosamente en resultados de demo.
-
-La función `generateDemo` en `src/engine.js` señala el punto de separación para reemplazar el proveedor local por el backend. Cambiar esa función por una llamada de red no implementa por sí solo la seguridad, autenticación, base nutricional ni revisión profesional.
-
-## Orden de construcción
-
-| Etapa                   | Entrega                                    | Criterio para avanzar                                         |
-| ----------------------- | ------------------------------------------ | ------------------------------------------------------------- |
-| 1. Validación visual    | Cinco pantallas y recorrido interactivo    | Equipo y usuarios comprenden la despensa, filtros y resultado |
-| 2. Datos y reglas       | Catálogos, unidades, alergias y pruebas    | Exclusiones obligatorias y casos sin coincidencias pasan      |
-| 3. Backend e IA         | Generación estructurada y errores visibles | Credenciales solo en servidor; entradas y salidas verificadas |
-| 4. Revisión nutricional | Fuentes, cálculo de porciones y revisión   | Trazabilidad y criterios aceptados por profesional            |
-| 5. Aplicación móvil     | Navegación nativa, distribución de prueba  | Pruebas en dispositivos físicos y accesibilidad               |
-| 6. Piloto               | Sesiones de uso y retroalimentación        | Hallazgos corregidos antes de una publicación comercial       |
-
-No se proponen diagnósticos, dosis ni modificación de tratamientos. Las indicaciones de un profesional necesitan un flujo explícito de revisión; su mera captura no es validación.
-
-## Trabajo del equipo
-
-- Gestión: mantener prioridades y criterios de aceptación.
-- UI/UX: validar pantallas y recorridos con usuarios.
-- Desarrollo: separar cliente, servidor y reglas; cambios mediante pull requests.
-- QA: probar incompatibilidades, vacíos, errores de red, restauración y dispositivos.
-- Profesional en nutrición: revisar criterios, fuentes y límites antes del piloto.
-
-El repositorio incluye una verificación básica para GitHub. Configurar protección de rama y revisores requiere crear primero el remoto.
+La aplicación escucha en esta PC y utiliza un perfil local. No implementa autenticación, una API pública ni una base nutricional validada. El adaptador SQLite solo permite importar una instalación anterior; la app actual escribe en PostgreSQL.

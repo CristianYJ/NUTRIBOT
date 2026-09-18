@@ -6,7 +6,7 @@ Se verificó una respuesta real de Google y una receta nueva con arroz, frijoles
 
 1. Ejecutar `npm run dev`.
 2. Abrir `http://127.0.0.1:5173/?mobile=1`.
-3. Pulsar «Vamos a cocinar» o escribir una petición culinaria completa.
+3. Abrir Nutribot IA y escribir una petición culinaria completa.
 4. Abrir el resultado y guardar con el corazón.
 5. Revisar Recetas > Guardadas: la etiqueta Gemini distingue las recetas generadas de los ejemplos.
 

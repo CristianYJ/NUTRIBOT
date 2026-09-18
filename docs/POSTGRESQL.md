@@ -1,6 +1,6 @@
-# Nutribot 0.2: PostgreSQL, Gemini y planificación
+# PostgreSQL y DBeaver
 
-La aplicación usa **PostgreSQL 18** como almacenamiento principal. SQLite queda como origen histórico de importación, sin recibir nuevas escrituras de la app. Se separan recetas, ingredientes, pasos, restricciones, favoritos, planificación y registros de generación en tablas relacionadas.
+La aplicación usa **PostgreSQL 18** como almacenamiento principal. SQLite queda como origen histórico de importación, sin recibir nuevas escrituras de la app. Se separan recetas, ingredientes, pasos, restricciones, favoritos y registros de generación en tablas relacionadas.
 
 ## En esta PC
 
@@ -17,7 +17,7 @@ Ya existía una base `nutribot` de otro propietario. Esta integración utiliza n
 
 1. Instalar Git, Node.js 22.19 o posterior de la serie 22 y [PostgreSQL 18](https://www.postgresql.org/download/). Recordar la contraseña del administrador elegida durante la instalación.
 2. Clonar el repositorio y ejecutar `npm ci` y `npm run setup`.
-3. Crear `.env.postgres-admin` en la raíz del proyecto con estos campos y completar la contraseña local del administrador. El archivo está ignorado por Git:
+3. Abrir `.env.postgres-admin`, creado por `npm run setup`, en la raíz del proyecto con estos campos y completar la contraseña local del administrador. El archivo está ignorado por Git:
 
 ```dotenv
 PGHOST=127.0.0.1
@@ -45,7 +45,7 @@ Si tu equipo ya tiene una base dedicada y un usuario con permisos sobre ella, co
 npm run dev
 ```
 
-Abrir `http://127.0.0.1:5173/?mobile=1`. Sin clave se pueden usar catálogo, perfil, favoritos y planificación; las generaciones nuevas requieren Gemini. Reiniciar el servidor después de cambiar `.env` o archivos del servidor.
+Abrir `http://127.0.0.1:5173/?mobile=1`. Sin clave se pueden usar catálogo, perfil y favoritos; las generaciones nuevas requieren Gemini. Reiniciar el servidor después de cambiar `.env` o archivos del servidor.
 
 ## Abrir en DBeaver
 
@@ -68,20 +68,16 @@ En `Views / Vistas` hay `recipe_summary` y `weekly_plan_details`, útiles para m
 | Recetas | `recipes`, `recipe_ingredients`, `recipe_steps`, `recipe_allergens` | Origen, modelo, cantidades para una porción y pasos ordenados |
 | Nutrición ilustrativa | `recipe_nutrition_examples` | Valores históricos del catálogo, marcados `demo_unverified`; no se añaden a recetas IA |
 | Interacción | `favorites`, `recipe_feedback` | Favoritos y opinión del perfil |
-| Planificación | `meal_plans` | Fecha, comida, receta y 1–4 porciones; un registro por día/comida/perfil |
+| Histórico, sin interfaz | `meal_plans` | Fecha, comida, receta y 1–4 porciones; un registro por día/comida/perfil |
 | Trazabilidad | `generation_events` | Resultado validado de la llamada, modelo, fecha y número de recetas; sin prompt ni notas médicas |
 
 `recipe_summary` muestra cantidades de ingredientes, pasos y favoritos. `weekly_plan_details` une planificación con los títulos de las recetas.
 
 Las relaciones y restricciones están en [001_schema.sql](../server/postgres/001_schema.sql). Hay claves primarias, foráneas, límites numéricos, campos obligatorios, índices y restricciones de unicidad. Las recetas ya no se guardan como un único documento JSON: sus ingredientes y pasos son registros consultables.
 
-## Qué cambia en la app
+## Alcance actual
 
-- **Mi semana:** programar recetas por fecha y desayuno/almuerzo/cena, indicar porciones, consultar semanas y retirar comidas sin borrar recetas.
-- **Qué falta para esta semana:** lista de ingredientes ausentes de la despensa para las comidas visibles. No calcula cuánto comprar: el inventario aún registra presencia, no cantidades.
-- **Resumen:** número de recetas de IA, favoritas y comidas planificadas leído desde PostgreSQL.
-- Si cambian los filtros, una comida ya planificada queda señalada para revisión cuando se vuelve a consultar el plan. La API no permite añadir una receta incompatible con los filtros actuales.
-- Gemini sigue recibiendo únicamente contexto culinario permitido. El servidor obtiene los filtros de PostgreSQL, valida la respuesta y guarda recetas y registro de generación en la misma transacción.
+Perfil, despensa, recetas, favoritos y opiniones se guardan en PostgreSQL. Semana se retiró de la interfaz y de la API para concentrar el proyecto en recetas. La tabla histórica meal_plans y su vista permanecen por compatibilidad; no se borran datos ni se modifica la migración ya aplicada.
 
 ## Integridad y fallos
 

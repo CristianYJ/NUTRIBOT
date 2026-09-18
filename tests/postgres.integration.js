@@ -219,54 +219,14 @@ test("SQLite import is atomic, repeatable, and refuses to overwrite an edited ta
     code: "IMPORT_NOT_EMPTY",
   });
 });
-test("weekly planner validates dates, portions, unique slots and current dietary restrictions", async (t) => {
-  const f = await fixture(t);
-  const plan = {
-    revision: 0,
-    date: "2026-10-05",
-    meal: "Almuerzo",
-    recipeId: "bowl",
-    servings: 2,
-  };
-  const added = await f.store.addPlan(plan);
-  assert(added.id);
-  await assert.rejects(f.store.addPlan(plan), { code: "PLAN_EXISTS" });
-  for (const patch of [
-    { date: "2026-02-30" },
-    { servings: 0 },
-    { servings: 5 },
-    { meal: "inventada" },
-    { recipeId: "missing" },
-  ])
-    await assert.rejects(f.store.addPlan({ ...plan, ...patch }));
-  const state = await f.store.getState();
-  await f.store.saveState({
-    ...writable(state),
-    profile: { ...state.profile, medicalNotes: "Prueba de pausa" },
-  });
-  assert.equal((await f.store.getPlan())[0].compatible, false);
-  await assert.rejects(
-    f.store.addPlan({ ...plan, revision: 1, date: "2026-10-06" }),
-    { code: "PLAN_RESTRICTED" },
-  );
-  await f.store.removePlan(added.id);
-  assert.equal((await f.store.getPlan()).length, 0);
-});
-test("reset clears plan and personal recipes but keeps catalogue; stale AI cannot resurrect deleted data", async (t) => {
+test("reset clears personal recipes but keeps catalogue; stale AI cannot resurrect deleted data", async (t) => {
   const f = await fixture(t),
     r = result();
   await f.store.saveGenerated(r, 0);
-  await f.store.addPlan({
-    revision: 0,
-    date: "2026-10-05",
-    meal: "Cena",
-    recipeId: r.recipes[0].id,
-    servings: 1,
-  });
+
   const state = await f.store.reset(0);
   assert.equal(state.generated.length, 0);
   assert.equal(state.recipes.length, 6);
-  assert.equal((await f.store.getPlan()).length, 0);
   await assert.rejects(f.store.saveGenerated(r, 0), { code: "STATE_CONFLICT" });
   assert.equal((await f.store.summary()).generations, 0);
 });
@@ -328,22 +288,8 @@ test("HTTP uses PostgreSQL restrictions, persists asynchronous results, and reje
   });
   assert.equal(response.status, 200);
   assert.equal((await f.store.getState()).generated.length, 1);
-  assert.equal(
-    (
-      await send("/api/plan", "POST", {
-        revision: 2,
-        date: "2026-10-05",
-        meal: "Almuerzo",
-        recipeId: "bowl",
-        servings: 1,
-      })
-    ).status,
-    201,
-  );
-  assert.equal(
-    (await (await send("/api/summary", "GET")).json()).plannedMeals,
-    1,
-  );
+  assert.equal((await send("/api/plan", "GET")).status, 404);
+  assert.equal((await f.store.summary()).generated, 1);
 });
 test("HTTP reports unavailable PostgreSQL without leaking database error details", async (t) => {
   const server = createAppServer({

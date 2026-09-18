@@ -4,7 +4,6 @@ SELECT version, applied_at FROM nutribot.schema_migrations;
 SELECT tablename FROM pg_tables WHERE schemaname='nutribot' ORDER BY tablename;
 SELECT source, count(*) AS total FROM nutribot.recipes GROUP BY source;
 SELECT * FROM nutribot.recipe_summary ORDER BY created_at DESC;
-SELECT * FROM nutribot.weekly_plan_details ORDER BY plan_date, meal;
 SELECT r.title, i.name, ri.amount, ri.position
 FROM nutribot.recipe_ingredients ri
 JOIN nutribot.recipes r ON r.id=ri.recipe_id

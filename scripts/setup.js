@@ -27,11 +27,8 @@ try {
   }
   console.log(".env ya existe; se conservó sin cambios.");
 }
-const { openDatabase } = await import("../server/database.js");
-const store = openDatabase();
-store.close();
 console.log(
-  "Base de datos local preparada en data/nutribot.sqlite. Los datos existentes se conservan.",
+  "Prepara PostgreSQL siguiendo docs/POSTGRESQL.md y ejecuta npm run db:init. setup no modifica ninguna base existente.",
 );
 console.log(
   "Después ejecuta npm run dev y abre http://127.0.0.1:5173/?mobile=1",

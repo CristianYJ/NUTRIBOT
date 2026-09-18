@@ -53,13 +53,36 @@ export function createAppServer({
       if (req.headers["sec-fetch-site"] === "cross-site")
         throw new AppError("FORBIDDEN", "Origen no autorizado.", 403);
       const url = new URL(req.url, `http://${host}`);
-      if (req.method === "GET" && url.pathname === "/api/health")
+      if (req.method === "GET" && url.pathname === "/api/health") {
+        if (store?.health) await store.health();
         return json(res, 200, {
           configured: Boolean(apiKey),
           provider: "gemini",
           model,
-          database: store ? "sqlite" : "disabled",
+          database: store?.provider || (store ? "sqlite" : "disabled"),
         });
+      }
+      if (
+        url.pathname === "/api/summary" &&
+        req.method === "GET" &&
+        store?.summary
+      )
+        return json(res, 200, await store.summary());
+      if (url.pathname === "/api/plan" && store?.getPlan) {
+        if (req.method === "GET") return json(res, 200, await store.getPlan());
+        if (req.method === "POST")
+          return json(res, 201, await store.addPlan(await readJson(req)));
+        if (req.method === "DELETE")
+          return json(
+            res,
+            200,
+            await store.removePlan((await readJson(req)).id),
+          );
+        return json(res, 405, {
+          error: "METHOD_NOT_ALLOWED",
+          text: "Método no permitido.",
+        });
+      }
       if (url.pathname === "/api/state") {
         if (!store)
           throw new AppError(
@@ -67,15 +90,16 @@ export function createAppServer({
             "La base de datos no está disponible.",
             503,
           );
-        if (req.method === "GET") return json(res, 200, store.getState());
+        if (req.method === "GET") return json(res, 200, await store.getState());
         if (!["PUT", "DELETE"].includes(req.method))
           return json(res, 405, {
             error: "METHOD_NOT_ALLOWED",
             text: "Método no permitido.",
           });
         const raw = await readJson(req);
-        if (req.method === "PUT") return json(res, 200, store.saveState(raw));
-        return json(res, 200, store.reset(raw.revision));
+        if (req.method === "PUT")
+          return json(res, 200, await store.saveState(raw));
+        return json(res, 200, await store.reset(raw.revision));
       }
       if (url.pathname === "/api/recipes/suggest") {
         if (req.method !== "POST")
@@ -87,7 +111,7 @@ export function createAppServer({
         let state;
         if (store) {
           validateRevision(raw?.revision);
-          state = store.getState();
+          state = await store.getState();
           if (state.revision !== raw.revision)
             throw new AppError(
               "STATE_CONFLICT",
@@ -137,7 +161,7 @@ export function createAppServer({
           if (!res.destroyed) {
             // Only validated provider output enters history. An old response cannot
             // restore recipes after a reset or a change of profile in another tab.
-            if (store) store.saveGenerated(result, state.revision);
+            if (store) await store.saveGenerated(result, state.revision);
             json(res, 200, result);
           }
         } finally {
@@ -184,6 +208,23 @@ export function createAppServer({
       }
       json(res, 404, { error: "NOT_FOUND", text: "Ruta no encontrada." });
     } catch (error) {
+      if (!(error instanceof AppError) && store?.provider === "postgresql") {
+        const constraint = [
+          "23502",
+          "23503",
+          "23505",
+          "23514",
+          "22001",
+          "22P02",
+        ].includes(error.code);
+        error = new AppError(
+          constraint ? "INVALID_DATA" : "DATABASE_UNAVAILABLE",
+          constraint
+            ? "Los datos no cumplen las reglas de la base. Revisa los campos y vuelve a intentar."
+            : "No se pudo completar la operación. Comprueba que PostgreSQL esté disponible y vuelve a intentar.",
+          constraint ? 400 : 503,
+        );
+      }
       if (!res.destroyed && !res.headersSent)
         json(res, error instanceof AppError ? error.status : 500, {
           error: error instanceof AppError ? error.code : "INTERNAL_ERROR",

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import { requestRecipe, stateRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
+import Planner from "./Planner.jsx";
 import { ingredients, allergyOptions } from "./data.js";
 import {
   availability,
@@ -15,6 +16,7 @@ const pages = [
   { id: "pantry", label: "Mi despensa", icon: "pantry" },
   { id: "assistant", label: "Nutribot IA", icon: "spark" },
   { id: "recipes", label: "Mis recetas", icon: "book" },
+  { id: "planner", label: "Mi semana", icon: "calendar" },
   { id: "profile", label: "Mi perfil", icon: "user" },
 ];
 const ingredientById = Object.fromEntries(ingredients.map((i) => [i.id, i]));
@@ -168,9 +170,9 @@ function Workspace({ initial }) {
     setSearch("");
     window.scrollTo({ top: 0, behavior: "instant" });
   }
-  function openRecipe(r) {
+  function openRecipe(r, portions = 1) {
     setSelected(r);
-    setServings(1);
+    setServings(portions);
     setChecked([]);
   }
   function toggleSave(id) {
@@ -435,6 +437,16 @@ function Workspace({ initial }) {
               ))}
           </div>
           <main>
+            {page === "planner" && (
+              <Planner
+                recipes={allRecipes}
+                profile={profile}
+                pantry={pantry}
+                ingredients={ingredients}
+                flush={persistence.flush}
+                onOpen={openRecipe}
+              />
+            )}
             {page === "home" && (
               <div className="page-enter">
                 <div className="welcome-row">
@@ -1018,7 +1030,7 @@ function Workspace({ initial }) {
           <footer className="app-footer">
             <Brand small />
             <span>Menos dudas. Más cocina.</span>
-            <span>Prototipo 0.1 · El Salvador</span>
+            <span>Prototipo 0.2 · El Salvador</span>
           </footer>
         </div>
         <nav className="mobile-nav" aria-label="Navegación móvil">
@@ -1039,7 +1051,9 @@ function Workspace({ initial }) {
                       ? "Recetas"
                       : p.id === "profile"
                         ? "Perfil"
-                        : "Inicio"}
+                        : p.id === "planner"
+                          ? "Semana"
+                          : "Inicio"}
               </span>
             </button>
           ))}
@@ -1238,7 +1252,7 @@ function Workspace({ initial }) {
         <Icon name="reset" size={30} />
         <h2 id="reset-title">¿Volvemos al inicio?</h2>
         <p>
-          Se borrarán el perfil, las recetas guardadas, el chat y los cambios de
+          Se borrarán el perfil, las recetas guardadas, el plan semanal, el chat y los cambios de
           esta instalación, también para otras pestañas de esta PC. Las copias
           de seguridad no se borran.
         </p>

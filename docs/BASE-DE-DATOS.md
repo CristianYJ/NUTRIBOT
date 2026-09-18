@@ -1,3 +1,7 @@
+# Historial: etapa SQLite (sustituida)
+
+**La versión actual usa PostgreSQL.** Para instalar, conectar DBeaver o validar, sigue [POSTGRESQL.md](POSTGRESQL.md) y [VALIDACION.md](VALIDACION.md). Los comandos y límites descritos debajo pertenecen a la etapa anterior.
+
 # Base de datos local y Gemini
 
 Nutribot combina SQLite con la API de Gemini. SQLite conserva la información; Gemini propone recetas usando la despensa y los filtros guardados. DBeaver es un administrador con el que puedes consultar las tablas, no el motor de base de datos.

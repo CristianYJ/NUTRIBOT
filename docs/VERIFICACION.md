@@ -1,5 +1,17 @@
 # Verificación del prototipo
 
+## PostgreSQL + planificación, versión 0.2 (17 de septiembre de 2026)
+
+- PostgreSQL 18: bases dedicadas `nutribot_project` y `nutribot_project_test`, esquema de aplicación `nutribot`, 21 tablas y 2 vistas. La app usa un rol sin superusuario, creación de bases ni administración de roles.
+- Migración de SQLite conservando perfil, despensa, 2 recetas generadas y 2 favoritos. Se compararon los datos tras importar y se conservó el archivo original con una copia privada. No se modificó la base preexistente `nutribot`.
+- 27 pruebas generales y 9 pruebas de integración con PostgreSQL aprobadas, junto con la compilación. La integración cubre restricciones SQL, transacciones, concurrencia, importación, planificación, API y fallos de conexión. Se ejecuta en esquemas aislados de la base de pruebas.
+- `db:validate` comprobó integridad, relaciones, pasos ordenados y separación de nutrición ilustrativa respecto a recetas de IA.
+- `db:verify-backup` creó una copia consistente y la restauró en la base de pruebas: coincidieron los recuentos de las 21 tablas. Se retiró el esquema restaurado sin cambiar el origen.
+- Una llamada real a Gemini con perfil ficticio generó una receta y comprobó su persistencia en un esquema aislado de PostgreSQL. La prueba no envió el perfil personal almacenado en la app.
+- Navegador: se añadió una comida de 2 porciones, se recuperó al recargar, se abrió el detalle con esas porciones y se comprobaron los ingredientes faltantes. Después se retiró únicamente la comida de prueba. Vista móvil revisada.
+- Procedimiento reproducible: [VALIDACION.md](VALIDACION.md). Instalación y conexión en DBeaver: [POSTGRESQL.md](POSTGRESQL.md).
+- Estas comprobaciones cubren los casos descritos; no garantizan ausencia total de errores. Continúa siendo una app local con un perfil, sin autenticación ni validación clínica.
+
 ## SQLite + Gemini (17 de septiembre de 2026)
 
 - 27 pruebas automáticas aprobadas. Las 5 nuevas cubren persistencia tras reabrir, migración sin duplicados, relaciones entre tablas, validación/rollback, consultas parametrizadas, conflictos de revisión, borrado y generación desde el estado almacenado.

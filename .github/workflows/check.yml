@@ -17,3 +17,34 @@ jobs:
       - run: npm ci
       - run: npm run setup
       - run: npm run check
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: nutribot_ci
+          POSTGRES_PASSWORD: ci-only-disposable-password
+          POSTGRES_DB: nutribot_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: nutribot_ci
+      PGPASSWORD: ci-only-disposable-password
+      PGDATABASE: nutribot_ci
+      PGTESTDATABASE: nutribot_ci_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:postgres

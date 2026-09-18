@@ -2767,3 +2767,119 @@ main {
   cursor: pointer;
   padding: 4px 0;
 }
+.planner-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.planner-stats > div {
+  padding: 18px;
+  border-radius: 16px;
+  background: #edf0e3;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.planner-stats strong {
+  font-size: 28px;
+  color: #405a30;
+}
+.planner-stats span {
+  font-size: 12px;
+}
+.planner-form,
+.planner-shopping {
+  padding: 24px;
+  margin-bottom: 24px;
+}
+.planner-form h2,
+.planner-shopping h2 {
+  margin-bottom: 18px;
+}
+.planner-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.planner-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+.planner-fields input,
+.planner-fields select {
+  min-width: 0;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d9decf;
+  border-radius: 10px;
+  background: white;
+  font: inherit;
+  color: inherit;
+}
+.planner-recipe {
+  grid-column: 1/-1;
+}
+.planner-week {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin: 24px 0;
+  font-size: 13px;
+}
+.planner-week .btn {
+  padding: 10px 16px;
+}
+.planner-days {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.planner-day {
+  padding: 22px;
+}
+.planner-day h3 {
+  text-transform: capitalize;
+  margin-bottom: 12px;
+}
+.planned-meal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid #e4e6db;
+  align-items: flex-start;
+}
+.planned-meal .text-btn {
+  text-align: left;
+}
+.planner-shopping li {
+  margin: 8px 20px;
+}
+.mobile-preview .planner-days {
+  grid-template-columns: 1fr;
+}
+.mobile-preview .planner-stats > div {
+  padding: 12px;
+}
+.mobile-preview .planner-form,
+.mobile-preview .planner-shopping {
+  padding: 18px;
+}
+@media (max-width: 600px) {
+  .planner-days {
+    grid-template-columns: 1fr;
+  }
+  .planner-stats > div {
+    padding: 12px;
+  }
+  .planner-form,
+  .planner-shopping {
+    padding: 18px;
+  }
+}

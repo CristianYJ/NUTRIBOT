@@ -1,4 +1,10 @@
 const paths = {
+  calendar: (
+    <>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M7 3v4m10-4v4M3 11h18m-14 4h3m4 0h3" />
+    </>
+  ),
   home: (
     <>
       <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z" />

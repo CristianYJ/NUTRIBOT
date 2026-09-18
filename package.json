@@ -1,6 +1,6 @@
 {
   "name": "nutribot-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,15 +10,23 @@
     "setup": "node scripts/setup.js",
     "db:init": "node scripts/database.js init",
     "db:backup": "node scripts/database.js backup",
+    "db:provision": "node scripts/provision-postgres.js",
+    "db:import:sqlite": "node scripts/database.js import-sqlite",
+    "db:validate": "node scripts/database.js validate",
+    "db:verify-backup": "node scripts/verify-backup.js",
+    "test:postgres": "node --test tests/postgres.integration.js",
+    "check:full": "npm run check && npm run test:postgres && npm run db:validate",
     "dev": "node server/dev.js",
     "start": "node server/index.js",
     "test:gemini": "node server/smoke.js",
+    "test:gemini:postgres": "node scripts/smoke-postgres-gemini.js",
     "build": "vite build",
     "preview": "node server/index.js",
     "test": "node --test tests/*.test.js",
     "check": "npm run test && npm run build"
   },
   "dependencies": {
+    "pg": "8.23.0",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },

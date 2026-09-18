@@ -11,3 +11,4 @@ data/
 *.sqlite-*
 *.db
 *.db-*
+*.dump

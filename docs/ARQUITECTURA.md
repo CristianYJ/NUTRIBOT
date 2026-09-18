@@ -1,6 +1,6 @@
 # Camino del simulacro al MVP
 
-**Actualización: SQLite + Gemini local implementados.** El cliente carga y guarda datos mediante `/api/state`; `/api/recipes/suggest` usa la despensa y perfil almacenados, valida respuestas de Google y conserva las recetas. Ver [BASE-DE-DATOS.md](BASE-DE-DATOS.md) y [GEMINI.md](GEMINI.md). Hay un perfil por instalación; base nutricional, autenticación y publicación siguen pendientes. El resto conserva el plan original; el contrato completo del MVP aún no está implementado.
+**Actualización: PostgreSQL + Gemini local implementados.** El cliente carga y guarda datos mediante `/api/state`; `/api/recipes/suggest` usa la despensa y perfil almacenados, valida respuestas de Google y conserva las recetas. Ver [POSTGRESQL.md](POSTGRESQL.md) y [GEMINI.md](GEMINI.md). Hay un perfil por instalación; base nutricional, autenticación y publicación siguen pendientes. El resto conserva el plan original; el contrato completo del MVP aún no está implementado.
 
 ## Punto de partida
 

@@ -14,7 +14,7 @@ Se verificó una respuesta real de Google y una receta nueva con arroz, frijoles
 
 ## Controles
 
-- El servidor lee despensa y filtros desde SQLite y verifica la revisión antes de generar. Las recetas validadas se guardan antes de enviarse al navegador. Ver [BASE-DE-DATOS.md](BASE-DE-DATOS.md).
+- El servidor lee despensa y filtros desde PostgreSQL y verifica la revisión antes de generar. Las recetas validadas se guardan antes de enviarse al navegador. Ver [POSTGRESQL.md](POSTGRESQL.md).
 - Esquema y validación posterior de título, tiempo, ingredientes, cantidades y pasos.
 - Ingredientes permitidos calculados en servidor según inventario, dieta y alergias.
 - Metadatos de alérgenos y origen calculados por el servidor, no confiados al modelo.
@@ -30,7 +30,7 @@ Los filtros de texto son parciales, no una comprensión exhaustiva del lenguaje.
 
 ## Privacidad
 
-Google recibe el mensaje actual, ingredientes permitidos, tiempo, preferencia y alergias. El perfil completo se guarda en SQLite mediante la API local de estado; no se envía a Google. La API de recetas lee los filtros almacenados y convierte las notas/exclusiones en un booleano de pausa. Un mensaje libre puede contener datos personales si el usuario los escribe. Usar datos ficticios.
+Google recibe el mensaje actual, ingredientes permitidos, tiempo, preferencia y alergias. El perfil completo se guarda en PostgreSQL mediante la API local de estado; no se envía a Google. La API de recetas lee los filtros almacenados y convierte las notas/exclusiones en un booleano de pausa. Un mensaje libre puede contener datos personales si el usuario los escribe. Usar datos ficticios.
 
 La clave se lee en servidor desde `.env`, nunca se imprime ni se incluye en la compilación. `.env.example` no contiene una clave real. No usar el prefijo `VITE_` para secretos. Reiniciar el servidor al cambiar la clave. Restaurar datos locales no elimina solicitudes ya procesadas por Google; sus condiciones y la configuración de la cuenta aplican.
 

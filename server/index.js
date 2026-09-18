@@ -1,9 +1,19 @@
 import { createAppServer } from "./app.js";
 import { config } from "./config.js";
 import { openDatabase } from "./database.js";
-const store = openDatabase();
+let store;
+try {
+  store = await openDatabase();
+} catch {
+  console.error(
+    "No se pudo abrir PostgreSQL. Revisa .env y ejecuta npm run db:init.",
+  );
+  process.exit(1);
+}
 const server = createAppServer({ ...config, serveStatic: true, store });
-server.on("close", () => store.close());
+server.on("close", () => {
+  store.close().catch(() => {});
+});
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {
     server.close();

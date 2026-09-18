@@ -1,8 +1,8 @@
 # Nutribot
 
-Aplicación web con vista móvil que genera recetas con **Gemini de Google**, a partir de los ingredientes disponibles, preferencias y alergias declaradas. Incluye despensa, perfil, asistente y recetario con favoritos.
+Aplicación web con vista móvil que genera recetas con **Gemini de Google**, a partir de los ingredientes disponibles, preferencias y alergias declaradas. Incluye despensa, perfil, asistente, recetario con favoritos y planificación semanal.
 
-**SQLite + Gemini:** perfil, despensa, catálogo, recetas generadas, favoritos y opiniones se conservan en una base local, incluso al cerrar el navegador. Puedes consultar las tablas con DBeaver. Ver [base de datos y guía de DBeaver](docs/BASE-DE-DATOS.md).
+**PostgreSQL 18 + Gemini:** datos persistentes en 21 tablas relacionadas, planificación de comidas y lista orientativa de ingredientes que faltan. Ver [instalación y DBeaver](docs/POSTGRESQL.md) y [cómo validar el proyecto](docs/VALIDACION.md).
 
 Es un prototipo en desarrollo: funciona localmente en el navegador. Todavía no es una app Android/iOS instalable ni un servicio publicado. Las recetas generadas por Gemini se distinguen de las tarjetas de ejemplo.
 
@@ -12,6 +12,7 @@ Es un prototipo en desarrollo: funciona localmente en el navegador. Todavía no 
 
 - [Git](https://git-scm.com/downloads).
 - [Node.js](https://nodejs.org/en/download) **22, versión 22.19 o posterior dentro de la serie 22**, con npm incluido. Si usas nvm, `nvm install` y `nvm use` leen `.nvmrc` donde esa función esté disponible.
+- [PostgreSQL 18](https://www.postgresql.org/download/) instalado y activo. DBeaver es opcional para consultar las tablas.
 - Un editor como Visual Studio Code.
 - Acceso a este repositorio; si es privado, el propietario debe invitarte como colaborador y debes aceptar la invitación.
 - Una clave de [Google AI Studio](https://aistudio.google.com/api-keys) para generar recetas. La interfaz y las pruebas automáticas pueden usarse sin clave; la generación real requiere acceso y cuota del modelo.
@@ -35,7 +36,14 @@ npm ci
 npm run setup
 ```
 
-`npm ci` instala las versiones registradas en `package-lock.json`. `npm run setup` crea tu archivo `.env` privado y tu base SQLite en `data/nutribot.sqlite`. Conserva la clave y los datos existentes. No hace llamadas a Google ni requiere instalar otro servidor de bases de datos. Si Node muestra `ExperimentalWarning` sobre SQLite, es un aviso del módulo incluido; no es un fallo de instalación.
+`npm ci` instala las versiones de `package-lock.json`. `npm run setup` crea `.env` si falta y conserva las claves existentes. A continuación sigue [POSTGRESQL.md](docs/POSTGRESQL.md) para preparar el acceso privado del administrador y ejecutar:
+
+```sh
+npm run db:provision
+npm run db:init
+```
+
+Se crean `nutribot_project` y `nutribot_project_test` con un usuario limitado. Las bases ajenas se conservan. Si vienes de SQLite, detén la app e importa una sola vez con `npm run db:import:sqlite` antes de empezar a editar la base nueva.
 
 ### 3. Guardar tu clave
 
@@ -59,12 +67,17 @@ La dirección `127.0.0.1` funciona en la misma PC. Cada compañero ejecuta su pr
 
 | Comando | Uso |
 | --- | --- |
-| `npm run setup` | Preparar `.env` y SQLite conservando datos existentes |
-| `npm run db:init` | Preparar la base y mostrar su ubicación para DBeaver |
-| `npm run db:backup` | Crear una copia consistente y privada de la base |
+| `npm run setup` | Preparar `.env` conservando las claves |
+| `npm run db:provision` | Crear las bases y el usuario de PostgreSQL local |
+| `npm run db:init` | Aplicar el esquema y catálogo sin duplicarlos |
+| `npm run db:validate` | Comprobar integridad y permisos de la base actual |
+| `npm run db:backup` | Crear una copia privada con pg_dump |
+| `npm run db:verify-backup` | Restaurar una copia en pruebas y comprobarla |
 | `npm run dev` | Iniciar interfaz y API local |
-| `npm run check` | Ejecutar pruebas y compilar, sin Google ni clave real |
-| `npm run test:gemini` | Prueba real opcional con datos ficticios; consume cuota |
+| `npm run check` | Pruebas generales y compilación, sin Google ni PostgreSQL |
+| `npm run test:postgres` | Pruebas de integración en PostgreSQL real, sin Google |
+| `npm run check:full` | Pruebas generales, integración, compilación e integridad |
+| `npm run test:gemini:postgres` | Prueba real opcional de IA y persistencia con datos ficticios; consume cuota |
 | `npm run build` | Compilar la interfaz |
 | `npm start` | Servir la compilación y API en `http://127.0.0.1:8787` |
 
@@ -72,9 +85,9 @@ Detén el servidor de desarrollo antes de usar `npm start`, porque ambos necesit
 
 ## Trabajar en equipo
 
-Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para crear ramas, enviar cambios y actualizar tu copia. GitHub Actions ejecuta las pruebas y compilación en Windows y Ubuntu en cada push y pull request, sin claves de Google.
+Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para crear ramas, enviar cambios y actualizar tu copia. GitHub Actions ejecuta las pruebas y compilación en Windows y Ubuntu en cada push y pull request, sin claves de Google. Un trabajo adicional prueba la integración en PostgreSQL 18.
 
-Solo se publica esta carpeta. Los PDF académicos y el test original están fuera del repositorio. `node_modules/`, `dist/`, `.env`, `data/` (base y copias) y los archivos temporales de verificación no se suben.
+Solo se publica esta carpeta. Los PDF académicos y el test original están fuera del repositorio. `node_modules/`, `dist/`, `.env`, `data/` (copias y SQLite histórico) y los archivos temporales de verificación no se suben.
 
 **Subir código a GitHub no publica la aplicación en Internet.** El despliegue es una etapa posterior: requiere alojar también el servidor, configurar su secreto y preparar controles de acceso y uso. Publicar únicamente `dist/` en GitHub Pages no conecta la IA.
 
@@ -84,6 +97,7 @@ Solo se publica esta carpeta. Los PDF académicos y el test original están fuer
 | --- | --- |
 | No reconoce `node`, `npm` o `git` | Instala el requisito y abre una terminal nueva |
 | PowerShell bloquea `npm.ps1` | Usa `npm.cmd` en lugar de `npm`, o abre Símbolo del sistema |
+| PostgreSQL no conecta | Comprueba servicio y variables PG de `.env`; consulta POSTGRESQL.md |
 | Falta la clave | Ejecuta `npm run setup`, completa `.env`, guarda y reinicia |
 | Google rechaza clave, modelo o cuota | Revisa tu proyecto y acceso en AI Studio; la app muestra el error y permite volver a intentar |
 | Puerto 5173 o 8787 ocupado | Detén la otra instancia de Nutribot con Ctrl+C y vuelve a iniciar |
@@ -97,26 +111,27 @@ Solo se publica esta carpeta. Los PDF académicos y el test original están fuer
 - No interpreta recetas médicas, calcula necesidades nutricionales ni certifica compatibilidad con alergias. Las validaciones de ingredientes y filtros son parciales; no garantizan ausencia de trazas o contaminación cruzada.
 - Las recetas de IA no inventan calorías/macros; los valores del catálogo son ejemplos. Peso, estatura y objetivo forman parte del prototipo de perfil.
 - Cada petición es independiente; no se envía historial remoto. Para modificar una receta, describe la petición completa.
-- Perfil, despensa, favoritos, opiniones y recetas generadas se guardan en SQLite; el chat vive en memoria. Espera a ver «Cambios guardados en esta PC» antes de cerrar. Restaurar borra los datos de esta instalación, no copias de seguridad ni datos ya procesados por Google.
+- Perfil, despensa, favoritos, opiniones, recetas generadas y planificación se guardan en PostgreSQL; el chat vive en memoria. Espera a ver «Cambios guardados en esta PC» antes de cerrar. Restaurar borra los datos de esta instalación, no copias de seguridad ni datos ya procesados por Google.
 - La base no está cifrada por la app. No hay cuentas: las pestañas de una misma instalación comparten el perfil. Cada compañero tiene su propia base en su PC; no hay sincronización remota.
-- Los datos temporales de la versión anterior no se importan automáticamente. El catálogo sigue siendo de demostración; SQLite no aporta validación nutricional ni clínica.
+- Los datos temporales de la versión anterior no se importan automáticamente. SQLite se puede importar explícitamente una sola vez. El catálogo sigue siendo de demostración; PostgreSQL no aporta validación nutricional ni clínica.
 
 ## Estructura y documentación
 
 ```text
 src/                 Interfaz React, catálogo y cliente de la API
 server/              API local, conexión a Gemini y validación
-server/migrations/   Esquema SQL versionado
+server/postgres/     Esquema PostgreSQL versionado
 scripts/             Preparación y copias de seguridad
-data/                Base SQLite privada (ignorada por Git)
-tests/               Pruebas sin credenciales reales
+data/                Copias privadas y SQLite histórico (ignorado por Git)
+tests/               Pruebas unitarias e integración con base separada
 public/              Recursos visuales
 docs/                Documentación técnica y antecedentes
 .github/workflows/   Verificación automática
 ```
 
 - [Integración con Gemini](docs/GEMINI.md).
-- [Base de datos, tablas, DBeaver y copias](docs/BASE-DE-DATOS.md).
+- [PostgreSQL, tablas, DBeaver y copias](docs/POSTGRESQL.md).
+- [Validación y demostración para la entrega](docs/VALIDACION.md).
 - [Arquitectura y evolución prevista](docs/ARQUITECTURA.md).
 - [Verificaciones realizadas](docs/VERIFICACION.md).
 - [Revisión del proyecto original](docs/REVISION-ORIGINAL.md).

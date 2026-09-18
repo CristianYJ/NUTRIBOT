@@ -2,9 +2,16 @@ import { createServer } from "vite";
 import { createAppServer } from "./app.js";
 import { config } from "./config.js";
 import { openDatabase } from "./database.js";
-const store = openDatabase();
+let store;
+try {
+  store = await openDatabase();
+} catch {
+  console.error(
+    "No se pudo abrir PostgreSQL. Revisa .env y ejecuta npm run db:init.",
+  );
+  process.exit(1);
+}
 const api = createAppServer({ ...config, store });
-api.on("close", () => store.close());
 api.on("error", () => {
   console.error("No se pudo abrir el servidor local en el puerto 8787.");
   process.exit(1);
@@ -31,6 +38,7 @@ async function stop() {
     api.close(resolve);
     api.closeAllConnections();
   });
+  await store.close();
   process.exit(0);
 }
 process.on("SIGINT", stop);

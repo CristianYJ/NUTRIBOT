@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openDatabase } from "../server/database.js";
+import { openDatabase } from "../server/sqlite-legacy.js";
 import { createAppServer } from "../server/app.js";
 import { validateOutput } from "../server/recipes.js";
 

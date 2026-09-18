@@ -1,14 +1,14 @@
 import { ingredients, allergyOptions } from "../src/data.js";
 import { AppError } from "./recipes.js";
 
-const goals = [
+export const goals = [
   "Comer más variado",
   "Aprovechar mis ingredientes",
   "Mantener mi peso",
   "Bajar de peso",
   "Aumentar de peso",
 ];
-const diets = ["Sin preferencia", "Vegetariana", "Vegana"];
+export const diets = ["Sin preferencia", "Vegetariana", "Vegana"];
 const ids = new Set(ingredients.map((i) => i.id));
 const string = (s, max) => typeof s === "string" && s.length <= max;
 const measurement = (s, min, max) =>

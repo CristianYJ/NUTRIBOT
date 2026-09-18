@@ -2,6 +2,8 @@
 
 Aplicación web con vista móvil que genera recetas con **Gemini de Google**, a partir de los ingredientes disponibles, preferencias y alergias declaradas. Incluye despensa, perfil, asistente y recetario con favoritos.
 
+**SQLite + Gemini:** perfil, despensa, catálogo, recetas generadas, favoritos y opiniones se conservan en una base local, incluso al cerrar el navegador. Puedes consultar las tablas con DBeaver. Ver [base de datos y guía de DBeaver](docs/BASE-DE-DATOS.md).
+
 Es un prototipo en desarrollo: funciona localmente en el navegador. Todavía no es una app Android/iOS instalable ni un servicio publicado. Las recetas generadas por Gemini se distinguen de las tarjetas de ejemplo.
 
 ## Instalar en otra PC
@@ -9,7 +11,7 @@ Es un prototipo en desarrollo: funciona localmente en el navegador. Todavía no 
 ### 1. Requisitos
 
 - [Git](https://git-scm.com/downloads).
-- [Node.js](https://nodejs.org/en/download) **22, versión 22.12 o posterior dentro de la serie 22**, con npm incluido. Si usas nvm, `nvm install` y `nvm use` leen `.nvmrc` donde esa función esté disponible.
+- [Node.js](https://nodejs.org/en/download) **22, versión 22.19 o posterior dentro de la serie 22**, con npm incluido. Si usas nvm, `nvm install` y `nvm use` leen `.nvmrc` donde esa función esté disponible.
 - Un editor como Visual Studio Code.
 - Acceso a este repositorio; si es privado, el propietario debe invitarte como colaborador y debes aceptar la invitación.
 - Una clave de [Google AI Studio](https://aistudio.google.com/api-keys) para generar recetas. La interfaz y las pruebas automáticas pueden usarse sin clave; la generación real requiere acceso y cuota del modelo.
@@ -33,7 +35,7 @@ npm ci
 npm run setup
 ```
 
-`npm ci` instala las versiones registradas en `package-lock.json`. `npm run setup` crea tu archivo `.env` privado y nunca sobrescribe uno existente. No hace llamadas a Google.
+`npm ci` instala las versiones registradas en `package-lock.json`. `npm run setup` crea tu archivo `.env` privado y tu base SQLite en `data/nutribot.sqlite`. Conserva la clave y los datos existentes. No hace llamadas a Google ni requiere instalar otro servidor de bases de datos. Si Node muestra `ExperimentalWarning` sobre SQLite, es un aviso del módulo incluido; no es un fallo de instalación.
 
 ### 3. Guardar tu clave
 
@@ -57,7 +59,9 @@ La dirección `127.0.0.1` funciona en la misma PC. Cada compañero ejecuta su pr
 
 | Comando | Uso |
 | --- | --- |
-| `npm run setup` | Crear `.env` sin sobrescribirlo |
+| `npm run setup` | Preparar `.env` y SQLite conservando datos existentes |
+| `npm run db:init` | Preparar la base y mostrar su ubicación para DBeaver |
+| `npm run db:backup` | Crear una copia consistente y privada de la base |
 | `npm run dev` | Iniciar interfaz y API local |
 | `npm run check` | Ejecutar pruebas y compilar, sin Google ni clave real |
 | `npm run test:gemini` | Prueba real opcional con datos ficticios; consume cuota |
@@ -70,7 +74,7 @@ Detén el servidor de desarrollo antes de usar `npm start`, porque ambos necesit
 
 Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para crear ramas, enviar cambios y actualizar tu copia. GitHub Actions ejecuta las pruebas y compilación en Windows y Ubuntu en cada push y pull request, sin claves de Google.
 
-Solo se publica esta carpeta. Los PDF académicos y el test original están fuera del repositorio. `node_modules/`, `dist/`, `.env` y los archivos temporales de verificación no se suben.
+Solo se publica esta carpeta. Los PDF académicos y el test original están fuera del repositorio. `node_modules/`, `dist/`, `.env`, `data/` (base y copias) y los archivos temporales de verificación no se suben.
 
 **Subir código a GitHub no publica la aplicación en Internet.** El despliegue es una etapa posterior: requiere alojar también el servidor, configurar su secreto y preparar controles de acceso y uso. Publicar únicamente `dist/` en GitHub Pages no conecta la IA.
 
@@ -93,15 +97,18 @@ Solo se publica esta carpeta. Los PDF académicos y el test original están fuer
 - No interpreta recetas médicas, calcula necesidades nutricionales ni certifica compatibilidad con alergias. Las validaciones de ingredientes y filtros son parciales; no garantizan ausencia de trazas o contaminación cruzada.
 - Las recetas de IA no inventan calorías/macros; los valores del catálogo son ejemplos. Peso, estatura y objetivo forman parte del prototipo de perfil.
 - Cada petición es independiente; no se envía historial remoto. Para modificar una receta, describe la petición completa.
-- Perfil, despensa, favoritos y recetas generadas se guardan en `sessionStorage`; el chat vive en memoria. Restaurar borra datos locales de esa sesión, no datos ya procesados por Google.
-- No hay cuentas ni base de datos compartida. Los cambios personales de un compañero no aparecen en la copia de otro.
+- Perfil, despensa, favoritos, opiniones y recetas generadas se guardan en SQLite; el chat vive en memoria. Espera a ver «Cambios guardados en esta PC» antes de cerrar. Restaurar borra los datos de esta instalación, no copias de seguridad ni datos ya procesados por Google.
+- La base no está cifrada por la app. No hay cuentas: las pestañas de una misma instalación comparten el perfil. Cada compañero tiene su propia base en su PC; no hay sincronización remota.
+- Los datos temporales de la versión anterior no se importan automáticamente. El catálogo sigue siendo de demostración; SQLite no aporta validación nutricional ni clínica.
 
 ## Estructura y documentación
 
 ```text
 src/                 Interfaz React, catálogo y cliente de la API
 server/              API local, conexión a Gemini y validación
-scripts/setup.js     Preparación del entorno privado
+server/migrations/   Esquema SQL versionado
+scripts/             Preparación y copias de seguridad
+data/                Base SQLite privada (ignorada por Git)
 tests/               Pruebas sin credenciales reales
 public/              Recursos visuales
 docs/                Documentación técnica y antecedentes
@@ -109,6 +116,7 @@ docs/                Documentación técnica y antecedentes
 ```
 
 - [Integración con Gemini](docs/GEMINI.md).
+- [Base de datos, tablas, DBeaver y copias](docs/BASE-DE-DATOS.md).
 - [Arquitectura y evolución prevista](docs/ARQUITECTURA.md).
 - [Verificaciones realizadas](docs/VERIFICACION.md).
 - [Revisión del proyecto original](docs/REVISION-ORIGINAL.md).

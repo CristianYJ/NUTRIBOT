@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AppError, parseInput, preflight } from "./recipes.js";
 import { generateWithGemini } from "./gemini.js";
+import { validateRevision } from "./state-validation.js";
 
 const dist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -30,6 +31,7 @@ export function createAppServer({
   model = "gemini-3.5-flash-lite",
   generate = generateWithGemini,
   serveStatic = false,
+  store,
 } = {}) {
   const requests = new Map();
   let active = 0;
@@ -56,40 +58,54 @@ export function createAppServer({
           configured: Boolean(apiKey),
           provider: "gemini",
           model,
+          database: store ? "sqlite" : "disabled",
         });
+      if (url.pathname === "/api/state") {
+        if (!store)
+          throw new AppError(
+            "DATABASE_UNAVAILABLE",
+            "La base de datos no está disponible.",
+            503,
+          );
+        if (req.method === "GET") return json(res, 200, store.getState());
+        if (!["PUT", "DELETE"].includes(req.method))
+          return json(res, 405, {
+            error: "METHOD_NOT_ALLOWED",
+            text: "Método no permitido.",
+          });
+        const raw = await readJson(req);
+        if (req.method === "PUT") return json(res, 200, store.saveState(raw));
+        return json(res, 200, store.reset(raw.revision));
+      }
       if (url.pathname === "/api/recipes/suggest") {
         if (req.method !== "POST")
           return json(res, 405, {
             error: "METHOD_NOT_ALLOWED",
             text: "Utiliza POST para solicitar recetas.",
           });
-        if (!req.headers["content-type"]?.startsWith("application/json"))
-          throw new AppError(
-            "CONTENT_TYPE",
-            "La solicitud debe tener formato JSON.",
-            415,
-          );
-        const chunks = [];
-        let size = 0;
-        for await (const chunk of req) {
-          size += chunk.length;
-          if (size > 12000)
+        let raw = await readJson(req, 12000);
+        let state;
+        if (store) {
+          validateRevision(raw?.revision);
+          state = store.getState();
+          if (state.revision !== raw.revision)
             throw new AppError(
-              "BODY_TOO_LARGE",
-              "La solicitud es demasiado grande.",
-              413,
+              "STATE_CONFLICT",
+              "Los datos cambiaron. Recarga la versión guardada antes de generar.",
+              409,
             );
-          chunks.push(chunk);
-        }
-        const body = Buffer.concat(chunks).toString("utf8");
-        let raw;
-        try {
-          raw = JSON.parse(body);
-        } catch {
-          throw new AppError(
-            "INVALID_JSON",
-            "La solicitud no es un JSON válido.",
-          );
+          raw = {
+            ...raw,
+            pantry: state.pantry,
+            profile: {
+              diet: state.profile.diet,
+              allergies: state.profile.allergies,
+              needsReview: Boolean(
+                state.profile.exclusions.trim() ||
+                  state.profile.medicalNotes.trim(),
+              ),
+            },
+          };
         }
         const input = parseInput(raw);
         const stopped = preflight(input);
@@ -118,7 +134,12 @@ export function createAppServer({
             model,
             signal: controller.signal,
           });
-          if (!res.destroyed) json(res, 200, result);
+          if (!res.destroyed) {
+            // Only validated provider output enters history. An old response cannot
+            // restore recipes after a reset or a change of profile in another tab.
+            if (store) store.saveGenerated(result, state.revision);
+            json(res, 200, result);
+          }
         } finally {
           active--;
           res.off("close", cancel);
@@ -173,4 +194,33 @@ export function createAppServer({
         });
     }
   });
+}
+
+async function readJson(req, limit = 150000) {
+  if (!req.headers["content-type"]?.startsWith("application/json"))
+    throw new AppError(
+      "CONTENT_TYPE",
+      "La solicitud debe tener formato JSON.",
+      415,
+    );
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit)
+      throw new AppError(
+        "BODY_TOO_LARGE",
+        "La solicitud es demasiado grande.",
+        413,
+      );
+    chunks.push(chunk);
+  }
+  try {
+    const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error();
+    return value;
+  } catch {
+    throw new AppError("INVALID_JSON", "La solicitud no es un JSON válido.");
+  }
 }

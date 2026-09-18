@@ -18,8 +18,8 @@ export function availability(recipe, pantry) {
     total: recipe.ingredients.length,
   };
 }
-export function recommend(pantry, profile, maxTime = 60) {
-  return recipes.filter(
+export function recommend(pantry, profile, maxTime = 60, catalog = recipes) {
+  return catalog.filter(
     (r) =>
       matchesProfile(r, profile) &&
       r.time <= maxTime &&

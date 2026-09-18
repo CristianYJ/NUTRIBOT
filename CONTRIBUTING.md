@@ -51,13 +51,13 @@ npm run setup
 npm run dev
 ```
 
-`setup` conserva tu clave existente. Si hay nuevas variables en `.env.example`, agrégalas manualmente a tu `.env`. Git no sincroniza claves, perfiles ni recetas guardadas en el navegador.
+`setup` conserva tu clave y aplica la preparación de SQLite sin reiniciar datos existentes. Si hay nuevas variables en `.env.example`, agrégalas manualmente a tu `.env`. Git no sincroniza claves ni bases de datos; cada PC tiene su propia información. Usa `npm run db:backup` antes de cambios importantes del esquema y revisa [la guía de base de datos](docs/BASE-DE-DATOS.md).
 
 Si Git informa conflictos o cambios locales pendientes, conserva tu trabajo y resuelve el conflicto con el equipo; no uses `reset --hard` ni pushes forzados para saltarte el problema.
 
 ## Claves y pruebas
 
-- Nunca incluir `.env`, claves, contraseñas ni datos médicos o personales reales en commits, capturas o incidencias.
+- Nunca incluir `.env`, `data/`, bases SQLite, copias, claves, contraseñas ni datos médicos o personales reales en commits, capturas o incidencias.
 - `git check-ignore .env` debe mostrar `.env`.
 - `npm run check` usa un proveedor simulado; no requiere ninguna clave y no consume cuota.
 - `npm run test:gemini` sí llama a Google con datos ficticios. Se ejecuta manualmente y no forma parte de GitHub Actions.

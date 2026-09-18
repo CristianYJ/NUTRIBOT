@@ -2731,3 +2731,39 @@ main {
     scroll-behavior: auto !important;
   }
 }
+/* Local persistence status remains visible without exposing database details. */
+.database-loading {
+  max-width: 620px;
+  margin: 12vh auto;
+  padding: 24px;
+}
+.database-loading h1 {
+  margin-top: 36px;
+}
+.storage-status {
+  padding: 9px 26px;
+  font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: #526139;
+  background: #f1f3e9;
+}
+.storage-status.saving {
+  color: #725824;
+  background: #fff5d9;
+}
+.storage-status.error {
+  color: #8c3428;
+  background: #fff0e9;
+}
+.storage-status button {
+  color: inherit;
+  text-decoration: underline;
+  font: inherit;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px 0;
+}

@@ -6,3 +6,8 @@ dist/
 *.log
 artifacts/
 .DS_Store
+data/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*

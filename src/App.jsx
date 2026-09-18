@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
-import { requestRecipe } from "./api.js";
-import {
-  ingredients,
-  initialPantry,
-  initialProfile,
-  allergyOptions,
-  recipes,
-} from "./data.js";
+import { requestRecipe, stateRequest } from "./api.js";
+import { usePersistence } from "./usePersistence.js";
+import { ingredients, allergyOptions } from "./data.js";
 import {
   availability,
   matchesProfile,
@@ -23,25 +18,6 @@ const pages = [
   { id: "profile", label: "Mi perfil", icon: "user" },
 ];
 const ingredientById = Object.fromEntries(ingredients.map((i) => [i.id, i]));
-const stateKey = "nutribot-demo-v1";
-function readSession() {
-  try {
-    const s = JSON.parse(sessionStorage.getItem(stateKey));
-    if (
-      s &&
-      Array.isArray(s.pantry) &&
-      s.pantry.every((id) => ingredientById[id]) &&
-      typeof s.profile?.name === "string" &&
-      Array.isArray(s.profile?.allergies) &&
-      typeof s.profile?.medicalNotes === "string" &&
-      typeof s.profile?.exclusions === "string" &&
-      Array.isArray(s.saved)
-    )
-      return s;
-  } catch {}
-  return null;
-}
-const initial = readSession();
 function Brand({ small = false }) {
   return (
     <div className={`brand ${small ? "small" : ""}`}>
@@ -69,28 +45,50 @@ function Empty({ icon = "book", title, children, action }) {
 }
 
 export default function App() {
+  const [initial, setInitial] = useState(null);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setError("");
+    stateRequest("GET", undefined, controller.signal)
+      .then((state) => {
+        if (!controller.signal.aborted) setInitial(state);
+      })
+      .catch((problem) => {
+        if (!controller.signal.aborted) setError(problem.message);
+      });
+    return () => controller.abort();
+  }, [attempt]);
+  if (!initial)
+    return (
+      <main className="database-loading">
+        <Brand />
+        <h1>{error ? "No pudimos cargar tu cocina" : "Abriendo tu cocina…"}</h1>
+        <p role={error ? "alert" : "status"}>
+          {error || "Cargando tu perfil y tus recetas guardadas."}
+        </p>
+        {error && (
+          <button
+            className="btn primary"
+            onClick={() => setAttempt((n) => n + 1)}
+          >
+            Volver a intentar
+          </button>
+        )}
+      </main>
+    );
+  return <Workspace initial={initial} />;
+}
+
+function Workspace({ initial }) {
+  const ingredients = initial.ingredients;
+  const recipes = initial.recipes;
   const [page, setPage] = useState("home");
-  const [pantry, setPantry] = useState(initial?.pantry || initialPantry);
-  const [profile, setProfile] = useState(initial?.profile || initialProfile);
-  const [saved, setSaved] = useState(initial?.saved || []);
-  const [generated, setGenerated] = useState(() =>
-    (Array.isArray(initial?.generated) ? initial.generated : []).filter(
-      (r) =>
-        r?.source === "gemini" &&
-        typeof r.id === "string" &&
-        typeof r.title === "string" &&
-        typeof r.subtitle === "string" &&
-        Array.isArray(r.ingredients) &&
-        r.ingredients.every((id) => ingredientById[id]) &&
-        Array.isArray(r.amounts) &&
-        r.amounts.length === r.ingredients.length &&
-        r.amounts.every((x) => typeof x === "string") &&
-        Array.isArray(r.steps) &&
-        r.steps.every((x) => typeof x === "string") &&
-        Array.isArray(r.allergens) &&
-        Number.isFinite(r.time),
-    ),
-  );
+  const [pantry, setPantry] = useState(initial.pantry);
+  const [profile, setProfile] = useState(initial.profile);
+  const [saved, setSaved] = useState(initial.saved);
+  const [generated, setGenerated] = useState(initial.generated);
   const [connection, setConnection] = useState("checking");
   const allRecipes = [...generated, ...recipes];
   const [feedback, setFeedback] = useState(initial?.feedback || {});
@@ -115,15 +113,14 @@ export default function App() {
   const resetDialog = useRef(null);
   const pending = useRef(null);
   const end = useRef(null);
-  const ready = recommend(pantry, profile, 60);
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(
-        stateKey,
-        JSON.stringify({ pantry, profile, saved, feedback, generated }),
-      );
-    } catch {}
-  }, [pantry, profile, saved, feedback, generated]);
+  const ready = recommend(pantry, profile, 60, recipes);
+  const persistence = usePersistence(initial, {
+    pantry,
+    profile,
+    saved,
+    feedback,
+  });
+  const [resetting, setResetting] = useState(false);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 3200);
@@ -180,8 +177,8 @@ export default function App() {
     setSaved((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
     setToast(
       saved.includes(id)
-        ? "Receta quitada de tus guardadas"
-        : "Receta guardada para otro día",
+        ? "Receta quitada; comprobando guardado…"
+        : "Receta seleccionada; comprobando guardado…",
     );
   }
   function toggleIngredient(id) {
@@ -198,9 +195,10 @@ export default function App() {
     pending.current = id;
     setMessages((m) => [...m, { role: "user", text, id }]);
     try {
+      const revision = await persistence.flush();
+      if (controller.signal.aborted) return;
       const result = await requestRecipe({
-        pantry,
-        profile,
+        revision,
         maxTime,
         message: text,
         signal: controller.signal,
@@ -233,20 +231,31 @@ export default function App() {
       }
     }
   }
-  function reset() {
+  async function reset() {
+    if (resetting) return;
+    setResetting(true);
     request.current?.abort();
     request.current = null;
     setBusy(false);
-    setPantry(initialPantry);
-    setProfile(initialProfile);
-    setSaved([]);
-    setGenerated([]);
-    setFeedback({});
-    setMessages([]);
-    setMaxTime(30);
-    setConfirmReset(false);
-    go("home");
-    setToast("Demostración restaurada");
+    try {
+      const revision = await persistence.flush();
+      const state = await stateRequest("DELETE", { revision });
+      persistence.acceptReset(state);
+      setPantry(state.pantry);
+      setProfile(state.profile);
+      setSaved(state.saved);
+      setGenerated(state.generated);
+      setFeedback(state.feedback);
+      setMessages([]);
+      setMaxTime(30);
+      setConfirmReset(false);
+      go("home");
+      setToast("Datos locales borrados y cocina restaurada");
+    } catch (problem) {
+      setToast(problem.message);
+    } finally {
+      setResetting(false);
+    }
   }
   const button = (text, fn, icon = "arrow", kind = "primary") => (
     <button className={`btn ${kind}`} onClick={fn}>
@@ -403,6 +412,28 @@ export default function App() {
               </button>
             </div>
           </header>
+          <div
+            className={`storage-status ${persistence.status}`}
+            role={persistence.error ? "alert" : "status"}
+          >
+            <span>
+              {persistence.error
+                ? persistence.error.message
+                : persistence.status === "saving"
+                  ? "Guardando cambios…"
+                  : "Cambios guardados en esta PC"}
+            </span>
+            {persistence.error &&
+              (persistence.error.code === "STATE_CONFLICT" ? (
+                <button onClick={persistence.discardAndReload}>
+                  Descartar cambios pendientes y recargar
+                </button>
+              ) : (
+                <button onClick={() => persistence.flush().catch(() => {})}>
+                  Reintentar guardado
+                </button>
+              ))}
+          </div>
           <main>
             {page === "home" && (
               <div className="page-enter">
@@ -957,7 +988,7 @@ export default function App() {
                   profile={profile}
                   onSave={(p) => {
                     setProfile(p);
-                    setToast("Perfil actualizado para esta sesión");
+                    setToast("Perfil actualizado; comprobando guardado…");
                   }}
                 />
                 <section className="privacy-panel">
@@ -965,8 +996,9 @@ export default function App() {
                   <div>
                     <h3>Tú decides qué compartir</h3>
                     <p>
-                      El perfil y las recetas se guardan en esta sesión del
-                      navegador. Al generar, se envían a Google tu mensaje, los
+                      El perfil, la despensa y las recetas se guardan en la base
+                      de datos de esta PC y permanecen al cerrar el navegador.
+                      Al generar, se envían a Google tu mensaje, los
                       ingredientes y los filtros alimentarios. Nombre, peso,
                       estatura e indicaciones escritas no se envían a Google.
                       Usa datos ficticios en las pruebas.
@@ -976,7 +1008,7 @@ export default function App() {
                       onClick={() => setConfirmReset(true)}
                     >
                       <Icon name="reset" size={16} />
-                      Restaurar demostración y borrar cambios
+                      Borrar datos locales y restaurar
                     </button>
                   </div>
                 </section>
@@ -1182,7 +1214,7 @@ export default function App() {
                       ...f,
                       [selected.id]: !f[selected.id],
                     }));
-                    setToast("Opinión guardada en esta sesión");
+                    setToast("Opinión actualizada; comprobando guardado…");
                   }}
                 >
                   <Icon name="thumbs" size={17} />
@@ -1207,7 +1239,8 @@ export default function App() {
         <h2 id="reset-title">¿Volvemos al inicio?</h2>
         <p>
           Se borrarán el perfil, las recetas guardadas, el chat y los cambios de
-          esta demostración.
+          esta instalación, también para otras pestañas de esta PC. Las copias
+          de seguridad no se borran.
         </p>
         <div className="actions">
           <button
@@ -1216,8 +1249,8 @@ export default function App() {
           >
             Conservar cambios
           </button>
-          <button className="btn primary" onClick={reset}>
-            Restaurar demo
+          <button className="btn primary" onClick={reset} disabled={resetting}>
+            {resetting ? "Borrando…" : "Borrar y restaurar"}
           </button>
         </div>
       </dialog>
@@ -1310,8 +1343,8 @@ function ProfileForm({ profile, onSave }) {
             </label>
           </div>
           <p className="microcopy">
-            Estos datos muestran el futuro flujo del perfil. El simulacro no
-            calcula necesidades calóricas.
+            Estos datos se guardan en tu perfil local. Nutribot no calcula
+            necesidades calóricas ni prescribe dietas.
           </p>
           <label>
             Mi objetivo
@@ -1403,7 +1436,7 @@ function ProfileForm({ profile, onSave }) {
       <div className="form-actions">
         <span>
           <Icon name="shield" size={16} />
-          Guardado solo en esta sesión
+          Se conserva en esta PC al cerrar el navegador
         </span>
         <button type="submit" className="btn primary">
           Guardar mi perfil

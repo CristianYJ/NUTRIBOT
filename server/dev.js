@@ -1,7 +1,10 @@
 import { createServer } from "vite";
 import { createAppServer } from "./app.js";
 import { config } from "./config.js";
-const api = createAppServer(config);
+import { openDatabase } from "./database.js";
+const store = openDatabase();
+const api = createAppServer({ ...config, store });
+api.on("close", () => store.close());
 api.on("error", () => {
   console.error("No se pudo abrir el servidor local en el puerto 8787.");
   process.exit(1);
@@ -24,8 +27,10 @@ console.log(
 vite.printUrls();
 async function stop() {
   await vite.close();
-  api.close();
-  api.closeAllConnections();
+  await new Promise((resolve) => {
+    api.close(resolve);
+    api.closeAllConnections();
+  });
   process.exit(0);
 }
 process.on("SIGINT", stop);

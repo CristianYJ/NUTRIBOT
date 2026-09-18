@@ -1,5 +1,16 @@
 # Verificación del prototipo
 
+## SQLite + Gemini (17 de septiembre de 2026)
+
+- 27 pruebas automáticas aprobadas. Las 5 nuevas cubren persistencia tras reabrir, migración sin duplicados, relaciones entre tablas, validación/rollback, consultas parametrizadas, conflictos de revisión, borrado y generación desde el estado almacenado.
+- Compilación de producción aprobada con Node 22.19 y Vite 7.3.6.
+- Prueba en navegador: cambio de nombre ficticio y favorito recuperados después de recargar; nombre de demostración restaurado al terminar.
+- Una generación real de Gemini produjo «Arroz con Frijoles». Receta, favorito y opinión persistieron tras detener el servidor de desarrollo e iniciar el servidor de producción. La receta quedó visible en Guardadas.
+- Copia realizada con `npm run db:backup`; archivo de copia abierto por SQLite con `PRAGMA integrity_check = ok` y receta generada presente.
+- Descarga de `.env`, base y WAL bloqueada por Vite (403); rutas privadas ausentes del servidor de producción (404).
+- No se accedió a datos de otras bases instaladas. Se creó exclusivamente `data/nutribot.sqlite` para este proyecto.
+- Esta etapa usa un perfil por instalación y no incluye autenticación, sincronización entre PCs ni una base nutricional validada.
+
 ## Preparación para colaboración en GitHub
 
 - Exportación limpia del contenido preparado para Git, sin `.env` ni `node_modules` originales.

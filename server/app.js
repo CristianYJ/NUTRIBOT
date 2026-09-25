@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AppError, parseInput, preflight } from "./recipes.js";
 import { generateWithGemini } from "./gemini.js";
+import { analyzePantry } from "./pantry.js";
+import { profileRestrictions } from "../src/profile-rules.js";
 import { validateRevision } from "./state-validation.js";
 
 const dist = path.resolve(
@@ -30,6 +32,7 @@ export function createAppServer({
   apiKey,
   model = "gemini-3.5-flash-lite",
   generate = generateWithGemini,
+  analyze = analyzePantry,
   serveStatic = false,
   store,
 } = {}) {
@@ -80,6 +83,27 @@ export function createAppServer({
           return json(res, 200, await store.saveState(raw));
         return json(res, 200, await store.reset(raw.revision));
       }
+      if (["/api/pantry/analyze", "/api/pantry/add"].includes(url.pathname)) {
+        if (req.method !== "POST") throw new AppError("METHOD_NOT_ALLOWED", "Utiliza POST para agregar ingredientes.", 405);
+        if (url.pathname.endsWith("/add")) {
+          if (!store?.addPantry) throw new AppError("DATABASE_UNAVAILABLE", "Reinicia Nutribot para habilitar la nueva despensa.", 503);
+          return json(res, 200, await store.addPantry(await readJson(req, 30000)));
+        }
+        const raw = await readJson(req, 4300000);
+        const now = Date.now(), key = "pantry:" + req.socket.remoteAddress;
+        const recent = (requests.get(key) || []).filter(t => now-t < 60000);
+        if (recent.length >= 6 || active >= 2) throw new AppError("LOCAL_RATE_LIMIT", "Espera un momento antes de analizar otra lista o foto.", 429);
+        requests.set(key, [...recent, now]);
+        active++;
+        const controller = new AbortController();
+        const cancel = () => { if (!res.writableEnded) controller.abort(); };
+        res.on("close", cancel);
+        try {
+          const result = await analyze(raw, { apiKey, model, signal: controller.signal });
+          if (!res.destroyed) json(res, 200, result);
+        } finally { active--; res.off("close", cancel); }
+        return;
+      }
       if (url.pathname === "/api/recipes/suggest") {
         if (req.method !== "POST")
           return json(res, 405, {
@@ -103,14 +127,12 @@ export function createAppServer({
             profile: {
               diet: state.profile.diet,
               allergies: state.profile.allergies,
-              needsReview: Boolean(
-                state.profile.exclusions.trim() ||
-                  state.profile.medicalNotes.trim(),
-              ),
+              exclusions: state.profile.exclusions,
+              needsReview: profileRestrictions(state.profile, state.ingredients).needsReview,
             },
           };
         }
-        const input = parseInput(raw);
+        const input = parseInput(raw, state?.ingredients);
         const stopped = preflight(input);
         if (stopped) return json(res, 200, stopped);
         const now = Date.now(),

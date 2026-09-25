@@ -9,7 +9,6 @@ export const goals = [
   "Aumentar de peso",
 ];
 export const diets = ["Sin preferencia", "Vegetariana", "Vegana"];
-const ids = new Set(ingredients.map((i) => i.id));
 const string = (s, max) => typeof s === "string" && s.length <= max;
 const measurement = (s, min, max) =>
   string(s, 12) &&
@@ -30,7 +29,8 @@ export function validateRevision(revision) {
       "La versión de los datos no es válida.",
     );
 }
-export function validateState(raw) {
+export function validateState(raw, catalog = ingredients) {
+  const ids = new Set(catalog.map((item) => item.id));
   const p = raw?.profile;
   validateRevision(raw?.revision);
   if (

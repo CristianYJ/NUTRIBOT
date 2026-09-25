@@ -12,3 +12,4 @@ data/
 *.db
 *.db-*
 *.dump
+postgres-admin.env

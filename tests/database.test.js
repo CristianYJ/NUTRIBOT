@@ -190,6 +190,28 @@ async function withApi(run, generator = generated) {
   }
 }
 
+test("stored food exclusions reach generation and cannot be overridden by the client", () =>
+  withApi(async (send, store, calls) => {
+    const initial = store.getState();
+    const state = store.saveState({
+      ...writable(initial),
+      profile: { ...initial.profile, allergies: ["Maní", "Trigo / gluten"], exclusions: "pan blanco, huevo" },
+    });
+    const response = await send("/api/recipes/suggest", "POST", {
+      revision: state.revision, maxTime: 30,
+      message: "Quiero comer, tengo huevo, queso y aguacate en la nevera",
+      profile: { exclusions: "", needsReview: false },
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).type, "success");
+    assert.equal(calls(), 1);
+  }, (input) => {
+    assert.equal(input.profile.exclusions, "pan blanco, huevo");
+    assert.equal(input.profile.needsReview, false);
+    assert.deepEqual(input.profile.allergies, ["Maní", "Trigo / gluten"]);
+    return generated(input);
+  }));
+
 test("HTTP state saves and generation uses stored restrictions, with history persisted on server", () =>
   withApi(async (send, store, calls) => {
     const initial = await (await send("/api/state", "GET")).json();

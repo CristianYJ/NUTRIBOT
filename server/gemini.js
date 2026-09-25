@@ -7,8 +7,8 @@ import {
   validateOutput,
 } from "./recipes.js";
 
-export async function generateWithGemini(
-  input,
+export async function generateStructured(
+  { parts, instruction, schema },
   { apiKey, model = "gemini-3.5-flash-lite", fetchImpl = fetch, signal } = {},
 ) {
   if (!apiKey)
@@ -37,13 +37,13 @@ export async function generateWithGemini(
           ? AbortSignal.any([signal, AbortSignal.timeout(45000)])
           : AbortSignal.timeout(45000),
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-          contents: [{ role: "user", parts: [{ text: buildPrompt(input) }] }],
+          systemInstruction: { parts: [{ text: instruction }] },
+          contents: [{ role: "user", parts }],
           generationConfig: {
             temperature: 0.5,
             maxOutputTokens: 3000,
             responseMimeType: "application/json",
-            responseJsonSchema: responseSchema(allowedIngredients(input)),
+            responseJsonSchema: schema,
           },
         }),
       },
@@ -116,6 +116,29 @@ export async function generateWithGemini(
       "Gemini devolvió un formato inesperado. Vuelve a intentarlo.",
       502,
     );
+  }
+  return { output, model };
+}
+
+export async function generateWithGemini(input, config = {}) {
+  // Keep schema enum values short; database UUIDs can exceed the provider's
+  // structured-output grammar budget when repeated in a nested recipe array.
+  const wireIds = new Map(allowedIngredients(input).map((id, index) =>
+    [id, id.startsWith("food-") ? `custom${index}` : id]));
+  const databaseIds = new Map([...wireIds].map(([id, wire]) => [wire, id]));
+  const prompt = JSON.parse(buildPrompt(input));
+  prompt.ingredientesPermitidos = prompt.ingredientesPermitidos.map(item =>
+    ({ ...item, id: wireIds.get(item.id) }));
+  const { output, model } = await generateStructured({
+    parts: [{ text: JSON.stringify(prompt) }],
+    instruction: SYSTEM_INSTRUCTION + " Todos los elementos de ingredientesPermitidos están disponibles. Los identificadores customN corresponden a alimentos agregados por el usuario: interpreta su nombre y úsalos normalmente en las recetas. En cantidades y pasos conserva el nombre completo cuando distingue una variedad o estado (por ejemplo, arroz cocido).",
+    schema: responseSchema([...wireIds.values()]),
+  }, config);
+  if (Array.isArray(output?.recipes)) {
+    for (const recipe of output.recipes) {
+      if (Array.isArray(recipe?.ingredients))
+        recipe.ingredients = recipe.ingredients.map(id => databaseIds.get(id) || id);
+    }
   }
   return validateOutput(output, input, model);
 }

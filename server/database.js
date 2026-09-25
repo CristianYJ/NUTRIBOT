@@ -1,4 +1,7 @@
 import pg from "pg";
+import { randomUUID } from "node:crypto";
+import { validatePantryItems } from "./pantry.js";
+import { findIngredient } from "../src/ingredient-utils.js";
 import { readFileSync } from "node:fs";
 import {
   ingredients,
@@ -179,6 +182,11 @@ export async function openDatabase(options = {}) {
     }
     return [...map.values()];
   }
+  async function readIngredients(c) {
+    const items = (await c.query("SELECT id,name,category,unit,emoji,animal,meat FROM ingredients ORDER BY position")).rows;
+    const allergens = (await c.query("SELECT ingredient_id,allergen FROM ingredient_allergens ORDER BY allergen")).rows;
+    return items.map(item => ({ ...item, allergens: allergens.filter(a => a.ingredient_id === item.id).map(a => a.allergen) }));
+  }
   async function readState(c) {
     const p = (await c.query("SELECT * FROM profiles WHERE id=1")).rows[0];
     const all = await readRecipes(c);
@@ -217,11 +225,7 @@ export async function openDatabase(options = {}) {
       ),
       generated: all.filter((r) => r.source === "gemini"),
       recipes: all.filter((r) => r.source === "catalog"),
-      ingredients: (
-        await c.query(
-          "SELECT id,name,category,unit,emoji FROM ingredients ORDER BY position",
-        )
-      ).rows,
+      ingredients: await readIngredients(c),
     };
   }
   async function writeState(c, s) {
@@ -328,15 +332,42 @@ export async function openDatabase(options = {}) {
     },
     getState: () => transaction(readState, true),
     async saveState(raw) {
-      const s = validateState(raw);
       return transaction(async (c) => {
-        await checkRevision(c, s.revision);
+        await checkRevision(c, raw?.revision);
+        const s = validateState(raw, await readIngredients(c));
         await writeState(c, s);
         return (
           await c.query(
             "UPDATE profiles SET revision=revision+1 WHERE id=1 RETURNING revision",
           )
         ).rows[0];
+      });
+    },
+    async addPantry(raw) {
+      validateRevision(raw?.revision);
+      if (raw.confirmed !== true) throw new AppError("REVIEW_REQUIRED", "Revisa los ingredientes antes de agregarlos.");
+      const items = validatePantryItems(raw.items);
+      return transaction(async c => {
+        await checkRevision(c, raw.revision);
+        const catalog = await readIngredients(c);
+        const current = (await c.query("SELECT ingredient_id FROM pantry_items WHERE profile_id=1 ORDER BY position")).rows.map(r => r.ingredient_id);
+        let position = Number((await c.query("SELECT COALESCE(MAX(position),-1)+1 AS n FROM ingredients")).rows[0].n);
+        for (const item of items) {
+          let existing = findIngredient(item.name, catalog);
+          if (!existing) {
+            if (catalog.length >= 200) throw new AppError("STORAGE_LIMIT", "El catálogo admite hasta 200 ingredientes.", 409);
+            await c.query("INSERT INTO ingredient_categories VALUES($1) ON CONFLICT DO NOTHING", [item.category]);
+            existing = { ...item, id: "food-" + randomUUID(), unit: "unidad", emoji: "🥗" };
+            await c.query("INSERT INTO ingredients VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+              [existing.id, existing.name, existing.category, existing.unit, existing.emoji, existing.animal, existing.meat, position++]);
+            for (const a of existing.allergens) await c.query("INSERT INTO ingredient_allergens VALUES($1,$2)", [existing.id, a]);
+            catalog.push(existing);
+          }
+          if (!current.includes(existing.id)) current.push(existing.id);
+        }
+        await writePantry(c, current);
+        await c.query("UPDATE profiles SET revision=revision+1 WHERE id=1");
+        return readState(c);
       });
     },
     saveGenerated(result, expected) {
@@ -377,6 +408,7 @@ export async function openDatabase(options = {}) {
         );
         await writeProfile(c, initialProfile);
         await writePantry(c, initialPantry);
+        await c.query("DELETE FROM ingredients WHERE id LIKE 'food-%'");
         await c.query("UPDATE profiles SET revision=revision+1 WHERE id=1");
         return readState(c);
       });

@@ -5,7 +5,7 @@ import pg from "pg";
 import { openDatabase } from "../server/database.js";
 import { postgresOptions } from "../server/postgres-config.js";
 import { createAppServer } from "../server/app.js";
-import { validateOutput } from "../server/recipes.js";
+import { validateOutput, parseInput, allowedIngredients } from "../server/recipes.js";
 
 const database = process.env.PGTESTDATABASE;
 if (
@@ -111,6 +111,30 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
     6,
   );
+});
+
+test("custom pantry persists, deduplicates, filters recipes and resets atomically", async (t) => {
+  const f = await fixture(t);
+  const item = { name: "Cebolla", category: "Vegetales", animal: false, meat: false, allergens: [] };
+  await assert.rejects(f.store.addPantry({ revision: 0, items: [item] }), { code: "REVIEW_REQUIRED" });
+  let state = await f.store.addPantry({ revision: 0, confirmed: true, items: [item, { ...item, name: "Yogur", category: "Lácteos", animal: true, allergens: ["Leche"] }] });
+  const onion = state.ingredients.find(i => i.name === "Cebolla");
+  assert(onion.id.startsWith("food-")); assert(state.pantry.includes(onion.id));
+  assert.equal(state.ingredients.length, 16);
+  state = await f.store.addPantry({ revision: state.revision, confirmed: true, items: [{ ...item, name: "CEBOLLAS" }] });
+  assert.equal(state.ingredients.length, 16);
+  await assert.rejects(f.store.addPantry({ revision: 0, confirmed: true, items: [item] }), { code: "STATE_CONFLICT" });
+  const other = await f.reopen();
+  assert.deepEqual((await other.getState()).ingredients, state.ingredients);
+  await f.store.saveState({ ...writable(state), profile: { ...state.profile, allergies: ["Leche"] } });
+  state = await f.store.getState();
+  const input = parseInput({ pantry: state.pantry, maxTime: 30, message: "Dame una receta", profile: { ...state.profile, needsReview: false } }, state.ingredients);
+  assert(!allowedIngredients(input).includes(state.ingredients.find(i => i.name === "Yogur").id));
+  const recipe = validateOutput({ intent: "recipe", recipes: [{ title: "Cebolla cocida", subtitle: "Prueba", time: 15, category: "Cena", ingredients: [onion.id], amounts: ["1 cebolla"], steps: ["Cocina la cebolla en agua potable."] }] }, input, "test");
+  await f.store.saveGenerated(recipe, state.revision);
+  assert.equal((await f.store.getState()).generated[0].ingredients[0], onion.id);
+  const reset = await f.store.reset(state.revision);
+  assert.equal(reset.ingredients.length, 14); assert.equal(reset.generated.length, 0);
 });
 test("PostgreSQL enforces foreign keys and check constraints even outside the API", async (t) => {
   const f = await fixture(t);

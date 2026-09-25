@@ -1,9 +1,12 @@
 import { recipes } from "./data.js";
-export function requiresReview(profile) {
-  return Boolean(profile.medicalNotes.trim() || profile.exclusions.trim());
+import { profileRestrictions } from "./profile-rules.js";
+export function requiresReview(profile, catalog) {
+  return profileRestrictions(profile, catalog).needsReview;
 }
-export function matchesProfile(recipe, profile) {
-  if (requiresReview(profile)) return false;
+export function matchesProfile(recipe, profile, catalog) {
+  const restriction = profileRestrictions(profile, catalog);
+  if (restriction.needsReview) return false;
+  if (recipe.ingredients.some((id) => restriction.excludedIngredients.includes(id))) return false;
   if (recipe.allergens.some((a) => profile.allergies.includes(a))) return false;
   if (profile.diet === "Vegana" && !recipe.vegan) return false;
   if (profile.diet === "Vegetariana" && !recipe.vegan && !recipe.vegetarian)

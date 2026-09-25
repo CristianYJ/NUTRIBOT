@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
-import { requestRecipe, stateRequest } from "./api.js";
+import PantryImport from "./PantryImport.jsx";
+import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
 import { readNavigation, navigationUrl } from "./navigation.js";
 import { readChat, writeChat } from "./chat-session.js";
-import { ingredients, allergyOptions } from "./data.js";
+import { profileRestrictions } from "./profile-rules.js";
+import { allergyOptions } from "./data.js";
 import {
   availability,
   matchesProfile,
@@ -18,7 +20,6 @@ const pages = [
   { id: "recipes", label: "Mis recetas", icon: "book" },
   { id: "profile", label: "Mi perfil", icon: "user" },
 ];
-const ingredientById = Object.fromEntries(ingredients.map((i) => [i.id, i]));
 function Brand({ small = false }) {
   return (
     <div className={`brand ${small ? "small" : ""}`}>
@@ -83,7 +84,8 @@ export default function App() {
 }
 
 function Workspace({ initial }) {
-  const ingredients = initial.ingredients;
+  const [ingredients, setIngredients] = useState(initial.ingredients);
+  const ingredientById = Object.fromEntries(ingredients.map(i => [i.id, i]));
   const recipes = initial.recipes;
   const [navigation, setNavigation] = useState(() => readNavigation(new URL(location.href)));
   const { page, mobile } = navigation;
@@ -205,6 +207,14 @@ function Workspace({ initial }) {
   function toggleIngredient(id) {
     setPantry((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   }
+  async function addPantry(items) {
+    const revision = await persistence.flush();
+    const state = await pantryRequest("add", { revision, confirmed: true, items });
+    persistence.acceptReset(state);
+    setIngredients(state.ingredients);
+    setPantry(state.pantry);
+    setToast("Ingredientes guardados en tu despensa");
+  }
   async function generate(text = "¿Qué puedo cocinar con lo que tengo?") {
     if (request.current) return;
     go("assistant");
@@ -262,6 +272,7 @@ function Workspace({ initial }) {
       const revision = await persistence.flush();
       const state = await stateRequest("DELETE", { revision });
       persistence.acceptReset(state);
+      setIngredients(state.ingredients);
       setPantry(state.pantry);
       setProfile(state.profile);
       setSaved(state.saved);
@@ -477,6 +488,7 @@ function Workspace({ initial }) {
                   </div>
                   {button("Buscar recetas", () => generate(), "spark")}
                 </div>
+                <PantryImport catalog={ingredients} onSave={addPantry} />
                 <div className="search-box">
                   <Icon name="search" />
                   <input
@@ -502,6 +514,7 @@ function Workspace({ initial }) {
                     "Granos",
                     "Proteínas",
                     "Lácteos",
+                    "Otros",
                   ].map((c) => (
                     <button
                       className={category === c ? "selected" : ""}
@@ -537,8 +550,7 @@ function Workspace({ initial }) {
                     icon="search"
                     title="Ese ingrediente aún no está en el catálogo"
                   >
-                    La demostración incluye 14 ingredientes. Prueba con arroz,
-                    tomate o aguacate.
+                    Agrégalo por texto, foto o manualmente usando las opciones de arriba.
                   </Empty>
                 )}
                 <div className="tip-card">
@@ -575,7 +587,7 @@ function Workspace({ initial }) {
                   </button>
                   <button onClick={() => go("profile")}>
                     <Icon name="shield" size={17} />
-                    {requiresReview(profile)
+                    {requiresReview(profile, ingredients)
                       ? "Revisión pendiente"
                       : profile.allergies.length + " filtros de alergias"}
                   </button>
@@ -647,7 +659,7 @@ function Workspace({ initial }) {
                               {m.recipes
                                 .filter(
                                   (r) =>
-                                    matchesProfile(r, profile) &&
+                                    matchesProfile(r, profile, ingredients) &&
                                     !availability(r, pantry).missing.length &&
                                     r.time <= maxTime,
                                 )
@@ -775,7 +787,7 @@ function Workspace({ initial }) {
                     </button>
                   ))}
                 </div>
-                {requiresReview(profile) ? (
+                {requiresReview(profile, ingredients) ? (
                   <Empty
                     icon="shield"
                     title="Sugerencias en pausa"
@@ -790,7 +802,7 @@ function Workspace({ initial }) {
                       {allRecipes
                         .filter(
                           (r) =>
-                            matchesProfile(r, profile) &&
+                            matchesProfile(r, profile, ingredients) &&
                             (recipeTab !== "Guardadas" ||
                               saved.includes(r.id)) &&
                             (meal === "Todas" || r.category === meal),
@@ -801,7 +813,7 @@ function Workspace({ initial }) {
                     </div>
                     {!allRecipes.some(
                       (r) =>
-                        matchesProfile(r, profile) &&
+                        matchesProfile(r, profile, ingredients) &&
                         (recipeTab !== "Guardadas" || saved.includes(r.id)) &&
                         (meal === "Todas" || r.category === meal),
                     ) && (
@@ -840,6 +852,7 @@ function Workspace({ initial }) {
                   </p>
                 </div>
                 <ProfileForm
+                  catalog={ingredients}
                   profile={profile}
                   onSave={(p) => {
                     setProfile(p);
@@ -958,7 +971,7 @@ function Workspace({ initial }) {
                   {selected.vegan ? "Vegetal" : "Casera"}
                 </span>
               </div>
-              {!matchesProfile(selected, profile) && (
+              {!matchesProfile(selected, profile, ingredients) && (
                 <div className="review-note">
                   Esta receta ya no coincide con tu perfil actual. La
                   preparación está deshabilitada.
@@ -1039,7 +1052,7 @@ function Workspace({ initial }) {
                     key={step}
                     className={checked.includes(i) ? "done" : ""}
                     aria-pressed={checked.includes(i)}
-                    disabled={!matchesProfile(selected, profile)}
+                    disabled={!matchesProfile(selected, profile, ingredients)}
                     onClick={() =>
                       setChecked((c) =>
                         c.includes(i) ? c.filter((n) => n !== i) : [...c, i],
@@ -1119,7 +1132,7 @@ function Workspace({ initial }) {
   );
 }
 
-function ProfileForm({ profile, onSave }) {
+function ProfileForm({ profile, onSave, catalog }) {
   const [draft, setDraft] = useState(profile);
   function field(key, value) {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -1237,8 +1250,8 @@ function ProfileForm({ profile, onSave }) {
           </div>
           <label>Alergias y restricciones</label>
           <p className="microcopy">
-            Selecciona las que correspondan. Si necesitas indicar algo más,
-            escríbelo abajo para revisión.
+            Selecciona las que correspondan. También puedes excluir alimentos
+            por nombre en el campo de abajo.
           </p>
           <div className="allergy-options">
             {allergyOptions.map((a) => (
@@ -1262,7 +1275,7 @@ function ProfileForm({ profile, onSave }) {
             <textarea
               rows={2}
               maxLength={400}
-              placeholder="Escribe aquí una restricción adicional…"
+              placeholder="Por ejemplo: huevo, queso, pan blanco"
               value={draft.exclusions}
               onChange={(e) => field("exclusions", e.target.value)}
             />
@@ -1281,9 +1294,8 @@ function ProfileForm({ profile, onSave }) {
           <div className="review-note">
             <Icon name="info" size={18} />
             <p>
-              Las indicaciones escritas ponen las sugerencias en pausa: el
-              asistente no interpreta recetas médicas ni valida restricciones
-              clínicas.
+              {profileRestrictions(draft, catalog).reason ||
+                "Los alimentos reconocidos se excluyen de las recetas. Separa sus nombres con comas. Las indicaciones médicas o los alimentos que no podamos reconocer ponen las sugerencias en pausa."}
             </p>
           </div>
         </section>

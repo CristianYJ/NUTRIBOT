@@ -59,3 +59,21 @@ export async function stateRequest(method = "GET", body, signal) {
   }
   return data;
 }
+
+export async function pantryRequest(action, body, signal) {
+  let response;
+  try {
+    response = await fetch("/api/pantry/" + action, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(55000)]) : AbortSignal.timeout(15000),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new Error("No se pudo completar la solicitud. Comprueba la conexión. Si estabas guardando, recarga para verificar tu despensa antes de repetir.");
+  }
+  let data;
+  try { data = await response.json(); }
+  catch { throw new Error("No se pudo leer la respuesta. Reinicia el servidor de Nutribot y vuelve a intentar."); }
+  if (!response.ok) throw new Error(data.text || "No se pudo actualizar la despensa.");
+  return data;
+}

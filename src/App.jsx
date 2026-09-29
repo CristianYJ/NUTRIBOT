@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import PantryImport from "./PantryImport.jsx";
+import CulinaryHeader from "./CulinaryHeader.jsx";
+import AssistantWorkspace from "./AssistantWorkspace.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
 import { readNavigation, navigationUrl } from "./navigation.js";
@@ -25,7 +27,7 @@ function Brand({ small = false }) {
     <div className={`brand ${small ? "small" : ""}`}>
       <img src="/icon.svg" alt="" />
       <span>
-        nutribot<span className="brand-dot">.</span>
+        NutriBot<span className="brand-dot">.</span>
       </span>
     </div>
   );
@@ -126,6 +128,8 @@ function Workspace({ initial }) {
   const [maxTime, setMaxTime] = useState(chat.maxTime);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
+  const [pantryImportRequest, setPantryImportRequest] = useState(null);
+  const openPantryImport = mode => setPantryImportRequest({ mode, id: crypto.randomUUID() });
   const [confirmReset, setConfirmReset] = useState(false);
   const request = useRef(null);
   const dialog = useRef(null);
@@ -172,8 +176,10 @@ function Workspace({ initial }) {
     else resetDialog.current?.close();
   }, [confirmReset]);
   useEffect(() => {
-    if (messages.length)
-      end.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (messages.length && end.current?.parentElement) {
+      const conversation = end.current.parentElement;
+      conversation.scrollTo({ top: conversation.scrollHeight, behavior: "smooth" });
+    }
   }, [messages, busy]);
   useEffect(() => {
     if (request.current) {
@@ -207,13 +213,20 @@ function Workspace({ initial }) {
   function toggleIngredient(id) {
     setPantry((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   }
-  async function addPantry(items) {
+  async function addPantry(items, context = {}) {
     const revision = await persistence.flush();
     const state = await pantryRequest("add", { revision, confirmed: true, items });
     persistence.acceptReset(state);
     setIngredients(state.ingredients);
     setPantry(state.pantry);
     setToast("Ingredientes guardados en tu despensa");
+    if (page === "assistant") {
+      const createdAt = new Date().toISOString();
+      setMessages(previous => [...previous,
+        { id: crypto.randomUUID(), role: "user", createdAt, text: context.preview ? "Agregué ingredientes desde una foto." : "Agregué ingredientes a mi despensa.", photo: context.preview },
+        { id: crypto.randomUUID(), role: "bot", createdAt, source: "local", type: "notice", text: "Tu despensa está actualizada. Ya puedes pedirme una receta con estos ingredientes.", ingredientNames: items.map(item => item.name), recipes: [] },
+      ]);
+    }
   }
   async function generate(text = "¿Qué puedo cocinar con lo que tengo?") {
     if (request.current) return;
@@ -224,7 +237,7 @@ function Workspace({ initial }) {
     const controller = new AbortController();
     request.current = controller;
     pending.current = id;
-    setMessages((m) => [...m, { role: "user", text, id }]);
+    setMessages((m) => [...m, { role: "user", text, id, createdAt: new Date().toISOString() }]);
     try {
       const revision = await persistence.flush();
       if (controller.signal.aborted) return;
@@ -239,7 +252,7 @@ function Workspace({ initial }) {
       if (result.recipes.length) setGenerated((g) => [...result.recipes, ...g]);
       setMessages((m) => [
         ...m,
-        { role: "bot", ...result, id: crypto.randomUUID() },
+        { role: "bot", ...result, id: crypto.randomUUID(), createdAt: new Date().toISOString() },
       ]);
     } catch (error) {
       if (controller.signal.aborted || request.current !== controller) return;
@@ -358,69 +371,14 @@ function Workspace({ initial }) {
   );
   return (
     <>
-      <div className="preview-bar">
-        <span>
-          Nutribot · Recetas con tus ingredientes
-        </span>
-        <button onClick={() => navigate({ ...navigation, mobile: !mobile }, true)}>
-          <Icon name={mobile ? "monitor" : "phone"} size={15} />
-          {mobile ? "Vista amplia" : "Vista móvil"}
-        </button>
-      </div>
-      <div className={`app-shell ${mobile ? "mobile-preview" : ""}`}>
-        <aside className="sidebar">
-          <Brand />
-          <div className="nav-eyebrow">TU COCINA, MÁS SIMPLE</div>
-          <nav aria-label="Navegación principal">
-            {pages.map((p) => (
-              <button
-                key={p.id}
-                className={page === p.id ? "active" : ""}
-                aria-current={page === p.id ? "page" : undefined}
-                onClick={() => go(p.id)}
-              >
-                <Icon name={p.icon} />
-                <span>{p.label}</span>
-                {p.id === "assistant" && <span className="tiny-ai">IA</span>}
-              </button>
-            ))}
-          </nav>
-          <button className="sidebar-user" onClick={() => go("profile")}>
-            <span className="avatar">{profile.name.charAt(0) || "T"}</span>
-            <span>
-              <strong>{profile.name || "Tu perfil"}</strong>
-              <small>Mi espacio personal</small>
-            </span>
-            <Icon name="chevron" size={16} />
-          </button>
-        </aside>
+      <div className={`app-shell culinary-shell ${mobile ? "mobile-preview" : ""}`}>
+        <CulinaryHeader brand={<Brand />} page={page} profile={profile} ingredients={ingredients}
+          recipes={allRecipes.filter(recipe => matchesProfile(recipe, profile, ingredients))}
+          onNavigate={go} onOpenRecipe={openRecipe} mobile={mobile}
+          onToggleMobile={() => navigate({ ...navigation, mobile: !mobile }, true)}
+          onFavorites={() => { go("recipes"); setRecipeTab("Guardadas"); setMeal("Todas"); }}
+          onSearchIngredient={query => { go("pantry"); setCategory("Todos"); setSearch(query); }} />
         <div className="main-area">
-          <header className="topbar">
-            <div className="desktop-breadcrumb">
-              Mi espacio <span>/</span>{" "}
-              <strong>{pages.find((p) => p.id === page).label}</strong>
-            </div>
-            <div className="mobile-brand">
-              <Brand small />
-            </div>
-            <div className="topbar-right">
-              <span className="demo-pill">
-                <span />
-                {connection === "configured"
-                  ? "IA habilitada"
-                  : connection === "checking"
-                    ? "Comprobando IA"
-                    : "IA sin conexión"}
-              </span>
-              <button
-                className="avatar"
-                aria-label="Abrir mi perfil"
-                onClick={() => go("profile")}
-              >
-                {profile.name.charAt(0) || "T"}
-              </button>
-            </div>
-          </header>
           <div
             className={`storage-status ${persistence.status}`}
             role={persistence.error ? "alert" : "status"}
@@ -488,7 +446,13 @@ function Workspace({ initial }) {
                   </div>
                   {button("Buscar recetas", () => generate(), "spark")}
                 </div>
-                <PantryImport catalog={ingredients} onSave={addPantry} />
+                <section className="panel pantry-import-intro">
+                  <div><h2>Agrega lo que tienes</h2><p>Escribe tu lista o toma una foto. Revisa los ingredientes antes de guardarlos.</p></div>
+                  <div className="pantry-import-actions">
+                    <button className="btn primary" onClick={() => openPantryImport("text")}><Icon name="plus" size={18} />Agregar por texto</button>
+                    <button className="btn secondary" onClick={() => openPantryImport("image")}><Icon name="camera" size={18} />Agregar por foto</button>
+                  </div>
+                </section>
                 <div className="search-box">
                   <Icon name="search" />
                   <input
@@ -565,195 +529,12 @@ function Workspace({ initial }) {
                 </div>
               </div>
             )}
-            {page === "assistant" && (
-              <div className="page-enter assistant-page">
-                <div className="assistant-heading">
-                  <span className="bot-logo">
-                    <Icon name="spark" size={29} />
-                  </span>
-                  <div>
-                    <h1>Nutribot IA</h1>
-                    <p>
-                      Nutribot · Asistente IA{" "}
-                      <span className="inline-demo">Gemini · Google</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="context-bar">
-                  <button onClick={() => go("pantry")}>
-                    <Icon name="pantry" size={17} />
-                    {pantry.length} ingredientes
-                    <Icon name="chevron" size={14} />
-                  </button>
-                  <button onClick={() => go("profile")}>
-                    <Icon name="shield" size={17} />
-                    {requiresReview(profile, ingredients)
-                      ? "Revisión pendiente"
-                      : profile.allergies.length + " filtros de alergias"}
-                  </button>
-                  <button className="text-btn" disabled={busy || (!messages.length && !message)} onClick={() => { setMessages([]); setMessage(""); }}>
-                    Limpiar chat
-                  </button>
-                  <label>
-                    <Icon name="clock" size={17} />
-                    <select
-                      aria-label="Tiempo máximo"
-                      value={maxTime}
-                      onChange={(e) => setMaxTime(Number(e.target.value))}
-                    >
-                      <option value={15}>Hasta 15 min</option>
-                      <option value={30}>Hasta 30 min</option>
-                      <option value={60}>Hasta 60 min</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="conversation" aria-live="polite">
-                  {messages.length === 0 ? (
-                    <div className="chat-welcome">
-                      <div className="chat-welcome-art">
-                        <Icon name="chef" size={60} />
-                        <span>✦</span>
-                      </div>
-                      <Tag>UN POCO DE AYUDA. MUCHAS IDEAS.</Tag>
-                      <h2>¿Qué cocinamos hoy?</h2>
-                      <p>
-                        Comencemos con tu despensa y las preferencias de tu
-                        perfil. Elige una idea o escribe tu pedido.
-                      </p>
-                      <div className="suggestion-grid">
-                        {[
-                          "¿Qué puedo cocinar con lo que tengo?",
-                          "Busquemos algo rápido",
-                          "Quiero aprovechar mis vegetales",
-                        ].map((t, i) => (
-                          <button onClick={() => generate(t)} key={t}>
-                            <Icon name={["pantry", "clock", "leaf"][i]} />
-                            <span>{t}</span>
-                            <Icon name="arrow" size={17} />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    messages.map((m) => (
-                      <div className={`message ${m.role}`} key={m.id}>
-                        {m.role === "bot" && (
-                          <span className="message-avatar">
-                            <Icon name="spark" size={18} />
-                          </span>
-                        )}
-                        <div className="message-content">
-                          {m.role === "bot" && (
-                            <strong className="message-author">
-                              Nutribot{" "}
-                              <span>
-                                {m.source === "gemini"
-                                  ? "· Generado con Gemini"
-                                  : "· Aviso de Nutribot"}
-                              </span>
-                            </strong>
-                          )}
-                          <p>{m.text}</p>
-                          {m.recipes?.length > 0 && (
-                            <div className="chat-recipes">
-                              {m.recipes
-                                .filter(
-                                  (r) =>
-                                    matchesProfile(r, profile, ingredients) &&
-                                    !availability(r, pantry).missing.length &&
-                                    r.time <= maxTime,
-                                )
-                                .map((r) => (
-                                  <button
-                                    onClick={() => openRecipe(r)}
-                                    className="chat-recipe"
-                                    key={r.id}
-                                  >
-                                    <span className="chat-recipe-art">
-                                      {r.emoji}
-                                    </span>
-                                    <span>
-                                      <strong>{r.title}</strong>
-                                      <small>
-                                        {r.time} min · Ver cantidades y
-                                        preparación
-                                      </small>
-                                    </span>
-                                    <Icon name="arrow" size={18} />
-                                  </button>
-                                ))}
-                            </div>
-                          )}
-                          {m.type === "review" &&
-                            button(
-                              "Revisar mi perfil",
-                              () => go("profile"),
-                              "arrow",
-                              "secondary",
-                            )}
-                          {m.type === "error" &&
-                            button(
-                              "Reintentar",
-                              () => generate(m.retryText),
-                              "reset",
-                              "secondary",
-                            )}
-                          {m.type === "empty" &&
-                            button(
-                              "Actualizar despensa",
-                              () => go("pantry"),
-                              "plus",
-                              "secondary",
-                            )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  {busy && (
-                    <div className="message bot">
-                      <span className="message-avatar">
-                        <Icon name="spark" size={18} />
-                      </span>
-                      <div className="typing">
-                        <span />
-                        <span />
-                        <span />
-                        <small>Gemini está preparando tu receta…</small>
-                      </div>
-                    </div>
-                  )}
-                  <div ref={end} />
-                </div>
-                <form
-                  className="chat-compose"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (message.trim()) generate(message.trim());
-                  }}
-                >
-                  <input
-                    aria-label="Mensaje para Nutribot"
-                    placeholder="Cuéntame qué te gustaría cocinar…"
-                    value={message}
-                    maxLength={500}
-                    onChange={(e) => setMessage(e.target.value)}
-                    disabled={busy}
-                  />
-                  <button
-                    type="submit"
-                    aria-label="Enviar mensaje"
-                    disabled={!message.trim() || busy}
-                  >
-                    <Icon name="send" size={20} />
-                  </button>
-                </form>
-                <p className="chat-disclaimer">
-                  Al generar, se envían a Google tu mensaje, los ingredientes y
-                  los filtros alimentarios. No incluyas datos personales en el
-                  mensaje. Registra las restricciones en tu perfil.
-                </p>
-              </div>
-            )}
+            {page === "assistant" && <AssistantWorkspace
+              profile={profile} pantry={pantry} ingredients={ingredients} messages={messages}
+              message={message} setMessage={setMessage} maxTime={maxTime} setMaxTime={setMaxTime}
+              busy={busy} connection={connection} saved={saved} generated={generated} generate={generate}
+              onClear={() => { setMessages([]); setMessage(""); }} onNavigate={go} onImport={openPantryImport}
+              onOpenRecipe={openRecipe} onSave={toggleSave} endRef={end} />}
             {page === "recipes" && (
               <div className="page-enter">
                 <div className="page-title">
@@ -913,6 +694,7 @@ function Workspace({ initial }) {
           ))}
         </nav>
       </div>
+      <PantryImport catalog={ingredients} onSave={addPantry} openRequest={pantryImportRequest} hideIntro />
       <dialog
         className="recipe-dialog"
         aria-labelledby="recipe-title"

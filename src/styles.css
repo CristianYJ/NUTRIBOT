@@ -1,6 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Manrope:wght@400;500;600;650;700;750;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
 :root {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
   color: #29352a;
   background: #f1f0eb;
   font-synthesis: none;
@@ -69,7 +69,7 @@ p {
 h1,
 h2,
 h3 {
-  font-family: "Manrope", sans-serif;
+  font-family: "Space Grotesk", sans-serif;
 }
 h1 {
   font-size: 34px;
@@ -165,7 +165,7 @@ button:active {
   gap: 9px;
   align-items: center;
   font:
-    800 30px "Manrope",
+    800 30px "Space Grotesk",
     sans-serif;
   letter-spacing: -1.4px;
 }
@@ -1681,7 +1681,7 @@ main {
 }
 .nutrition-grid strong {
   font:
-    650 22px "Manrope",
+    650 22px "Space Grotesk",
     sans-serif;
   display: block;
 }

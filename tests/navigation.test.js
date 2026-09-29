@@ -32,3 +32,17 @@ test("interrupted requests show a local notice and unavailable or corrupt sessio
   assert.deepEqual(readChat({ getItem: () => "broken" }, []).messages, []);
   assert.equal(writeChat({ setItem: () => { throw Error("quota"); } }, { messages: [] }), false);
 });
+
+test("pantry photo stays in memory while ingredient confirmations survive a reload", () => {
+  let raw;
+  const storage = { getItem: () => raw, setItem: (_, value) => { raw = value; } };
+  writeChat(storage, { messages: [
+    { id: "photo", role: "user", text: "Agregué ingredientes", photo: "data:image/jpeg;base64,PRIVATE_PHOTO" },
+    { id: "confirmation", role: "bot", text: "Despensa actualizada", ingredientNames: ["Tomate"] },
+  ], draft: "", maxTime: 30, busy: false });
+  assert(!raw.includes("PRIVATE_PHOTO"));
+  assert(!raw.includes('"photo":'));
+  const restored = readChat(storage, []);
+  assert.equal(restored.messages[0].photo, undefined);
+  assert.deepEqual(restored.messages[1].ingredientNames, ["Tomate"]);
+});

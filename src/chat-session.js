@@ -1,5 +1,6 @@
 const key = "nutribot.chat.v1";
 
+// Photos stay in memory; never serialize image data into browser storage.
 // Only this tab's session stores conversation text. Recipe details come from PostgreSQL.
 export function readChat(storage, recipes) {
   const empty = { messages: [], draft: "", maxTime: 30 };
@@ -24,7 +25,7 @@ export function readChat(storage, recipes) {
 export function writeChat(storage, { messages, draft, maxTime, busy }) {
   try {
     storage.setItem(key, JSON.stringify({
-      messages: messages.slice(-40).map(({ recipes, ...message }) => ({
+      messages: messages.slice(-40).map(({ recipes, photo, ...message }) => ({
         ...message, recipeIds: recipes?.map((r) => r.id) || [],
       })), draft, maxTime, busy,
     }));

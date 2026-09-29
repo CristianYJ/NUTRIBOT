@@ -28,7 +28,7 @@ export async function preparePhoto(file) {
   } finally { bitmap.close(); }
 }
 
-export default function PantryImport({ catalog, onSave }) {
+export default function PantryImport({ catalog, onSave, openRequest, hideIntro = false }) {
   const dialog = useRef(null), request = useRef(null), photoVersion = useRef(0);
   const [mode, setMode] = useState("text"), [text, setText] = useState("");
   const [photo, setPhoto] = useState(null), [items, setItems] = useState([]);
@@ -45,6 +45,9 @@ export default function PantryImport({ catalog, onSave }) {
     setMode(next); setItems([]); setText(""); setPhoto(null); setError(""); setConfirmed(false); setResultReady(false);
     dialog.current.showModal();
   }
+  useEffect(() => {
+    if (openRequest) open(openRequest.mode);
+  }, [openRequest]);
   async function selectPhoto(event) {
     const file = event.target.files?.[0]; event.target.value = "";
     if (!file) return;
@@ -75,18 +78,18 @@ export default function PantryImport({ catalog, onSave }) {
   async function save(event) {
     event.preventDefault(); setStatus("saving"); setError("");
     try {
-      await onSave(items); setItems([]); setPhoto(null); setText(""); dialog.current.close();
+      await onSave(items, { mode, preview: photo?.preview }); setItems([]); setPhoto(null); setText(""); dialog.current.close();
     } catch (e) { setError(e.message); }
     finally { setStatus(""); }
   }
   return <>
-    <section className="panel pantry-import-intro">
+    {!hideIntro && <section className="panel pantry-import-intro">
       <div><h2>Agrega lo que tienes</h2><p>Escribe tu lista o toma una foto. Revisa los ingredientes antes de guardarlos.</p></div>
       <div className="pantry-import-actions">
         <button className="btn primary" onClick={() => open("text")}>Agregar por texto</button>
         <button className="btn secondary" onClick={() => open("image")}>Agregar por foto</button>
       </div>
-    </section>
+    </section>}
     <dialog ref={dialog} className="pantry-import-dialog" aria-labelledby="pantry-import-title" onCancel={e => { e.preventDefault(); close(); }}>
       <div className="pantry-import-heading"><h2 id="pantry-import-title">{mode === "text" ? "Escribe tu despensa" : "Una foto de tu despensa"}</h2><button type="button" className="text-btn" disabled={status === "saving"} onClick={close}>Cerrar</button></div>
       <fieldset disabled={busy} className="pantry-import-source">

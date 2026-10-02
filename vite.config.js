@@ -9,6 +9,8 @@ export default defineConfig({
     fs: {
       deny: [
         "**/.env",
+        "**/*.env",
+        "**/*.{key,pfx}",
         "**/.env.*",
         "**/*.{crt,pem}",
         "**/.git/**",

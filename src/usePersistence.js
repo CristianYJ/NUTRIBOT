@@ -76,6 +76,7 @@ export function usePersistence(initial, snapshot) {
     acceptReset(state) {
       const value = JSON.stringify({
         pantry: state.pantry,
+        pantryDates: state.pantryDates || {},
         profile: state.profile,
         saved: state.saved,
         feedback: state.feedback,

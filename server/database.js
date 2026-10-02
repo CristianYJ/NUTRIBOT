@@ -1,4 +1,8 @@
 import pg from "pg";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createAuthStore } from "./auth-store.js";
+import { conversationStore } from "./conversations.js";
+import { ageFromBirthDate } from "../src/date-utils.js";
 import { randomUUID } from "node:crypto";
 import { validatePantryItems } from "./pantry.js";
 import { findIngredient } from "../src/ingredient-utils.js";
@@ -29,6 +33,8 @@ export async function openDatabase(options = {}) {
       options: `-c search_path=${schema},public`,
     }),
   );
+  const accountScope = new AsyncLocalStorage();
+  const profileId = () => accountScope.getStore() ?? 1;
   pool.on("error", () => {}); // Idle-client errors are surfaced by the next request, without secrets.
   async function transaction(work, readOnly = false) {
     const client = await pool.connect();
@@ -49,7 +55,9 @@ export async function openDatabase(options = {}) {
   async function checkRevision(c, expected) {
     validateRevision(expected);
     const row = (
-      await c.query("SELECT revision FROM profiles WHERE id=1 FOR UPDATE")
+      await c.query(
+        `SELECT revision FROM profiles WHERE id=${profileId()} FOR UPDATE`,
+      )
     ).rows[0];
     if (!row || row.revision !== expected)
       throw new AppError(
@@ -60,7 +68,7 @@ export async function openDatabase(options = {}) {
   }
   async function writeProfile(c, p) {
     await c.query(
-      "UPDATE profiles SET name=$1,weight_kg=$2,height_cm=$3,goal=$4,diet=$5,exclusions=$6,medical_notes=$7,updated_at=now() WHERE id=1",
+      `UPDATE profiles SET name=$1,weight_kg=$2,height_cm=$3,goal=$4,diet=$5,exclusions=$6,medical_notes=$7,birth_date=$8,updated_at=now() WHERE id=${profileId()}`,
       [
         p.name,
         p.weight === "" ? null : Number(p.weight),
@@ -69,16 +77,24 @@ export async function openDatabase(options = {}) {
         p.diet,
         p.exclusions,
         p.medicalNotes,
+        p.birthDate || null,
       ],
     );
-    await c.query("DELETE FROM profile_allergies WHERE profile_id=1");
+    await c.query(
+      `DELETE FROM profile_allergies WHERE profile_id=${profileId()}`,
+    );
     for (const a of p.allergies)
-      await c.query("INSERT INTO profile_allergies VALUES(1,$1)", [a]);
+      await c.query(`INSERT INTO profile_allergies VALUES(${profileId()},$1)`, [
+        a,
+      ]);
   }
   async function writePantry(c, pantry) {
-    await c.query("DELETE FROM pantry_items WHERE profile_id=1");
+    await c.query(`DELETE FROM pantry_items WHERE profile_id=${profileId()} AND NOT (ingredient_id=ANY($1::varchar[]))`,[pantry]);
     for (const [pos, id] of pantry.entries())
-      await c.query("INSERT INTO pantry_items VALUES(1,$1,$2)", [id, pos]);
+      await c.query(`INSERT INTO pantry_items(profile_id,ingredient_id,position) VALUES(${profileId()},$1,$2) ON CONFLICT(profile_id,ingredient_id) DO UPDATE SET position=EXCLUDED.position`, [
+        id,
+        pos,
+      ]);
   }
   async function insertRecipe(c, r, source) {
     await c.query(
@@ -86,7 +102,7 @@ export async function openDatabase(options = {}) {
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
         r.id,
-        source === "gemini" ? 1 : null,
+        source === "gemini" ? profileId() : null,
         source,
         r.title,
         r.subtitle,
@@ -124,7 +140,7 @@ export async function openDatabase(options = {}) {
   async function readRecipes(c) {
     const rows = (
       await c.query(
-        "SELECT * FROM recipes WHERE source='catalog' OR profile_id=1 ORDER BY created_at DESC,id",
+        `SELECT * FROM recipes WHERE source='catalog' OR profile_id=${profileId()} ORDER BY created_at DESC,id`,
       )
     ).rows;
     const map = new Map(
@@ -183,16 +199,37 @@ export async function openDatabase(options = {}) {
     return [...map.values()];
   }
   async function readIngredients(c) {
-    const items = (await c.query("SELECT id,name,category,unit,emoji,animal,meat FROM ingredients ORDER BY position")).rows;
-    const allergens = (await c.query("SELECT ingredient_id,allergen FROM ingredient_allergens ORDER BY allergen")).rows;
-    return items.map(item => ({ ...item, allergens: allergens.filter(a => a.ingredient_id === item.id).map(a => a.allergen) }));
+    const items = (
+      await c.query(
+        `SELECT id,name,category,unit,emoji,animal,meat FROM ingredients WHERE profile_id IS NULL OR profile_id=${profileId()} ORDER BY position`,
+      )
+    ).rows;
+    const allergens = (
+      await c.query(
+        "SELECT ingredient_id,allergen FROM ingredient_allergens ORDER BY allergen",
+      )
+    ).rows;
+    return items.map((item) => ({
+      ...item,
+      allergens: allergens
+        .filter((a) => a.ingredient_id === item.id)
+        .map((a) => a.allergen),
+    }));
   }
   async function readState(c) {
-    const p = (await c.query("SELECT * FROM profiles WHERE id=1")).rows[0];
+    const p = (
+      await c.query(
+        `SELECT id,name,weight_kg,height_cm,goal,diet,exclusions,medical_notes,revision,email,to_char(birth_date,'YYYY-MM-DD') AS birth_date FROM profiles WHERE id=${profileId()}`,
+      )
+    ).rows[0];
     const all = await readRecipes(c);
     return {
       revision: p.revision,
       profile: {
+        id: Number(p.id),
+        email: p.email || "",
+        birthDate: p.birth_date || "",
+        age: ageFromBirthDate(p.birth_date),
         name: p.name,
         weight: p.weight_kg === null ? "" : String(Number(p.weight_kg)),
         height: p.height_cm === null ? "" : String(Number(p.height_cm)),
@@ -202,30 +239,31 @@ export async function openDatabase(options = {}) {
         medicalNotes: p.medical_notes,
         allergies: (
           await c.query(
-            "SELECT allergen FROM profile_allergies WHERE profile_id=1 ORDER BY allergen",
+            `SELECT allergen FROM profile_allergies WHERE profile_id=${profileId()} ORDER BY allergen`,
           )
         ).rows.map((r) => r.allergen),
       },
       pantry: (
         await c.query(
-          "SELECT ingredient_id FROM pantry_items WHERE profile_id=1 ORDER BY position",
+          `SELECT ingredient_id FROM pantry_items WHERE profile_id=${profileId()} ORDER BY position`,
         )
       ).rows.map((r) => r.ingredient_id),
       saved: (
         await c.query(
-          "SELECT recipe_id FROM favorites WHERE profile_id=1 ORDER BY recipe_id",
+          `SELECT recipe_id FROM favorites WHERE profile_id=${profileId()} ORDER BY recipe_id`,
         )
       ).rows.map((r) => r.recipe_id),
       feedback: Object.fromEntries(
         (
           await c.query(
-            "SELECT recipe_id,liked FROM recipe_feedback WHERE profile_id=1",
+            `SELECT recipe_id,liked FROM recipe_feedback WHERE profile_id=${profileId()}`,
           )
         ).rows.map((r) => [r.recipe_id, r.liked]),
       ),
       generated: all.filter((r) => r.source === "gemini"),
       recipes: all.filter((r) => r.source === "catalog"),
       ingredients: await readIngredients(c),
+      pantryDates: Object.fromEntries((await c.query("SELECT ingredient_id,to_char(start_date,'YYYY-MM-DD') AS start_date,estimate_rule,custom_days,to_char(label_date,'YYYY-MM-DD') AS label_date FROM pantry_dates WHERE profile_id=$1",[profileId()])).rows.map(row=>[row.ingredient_id,{startDate:row.start_date||'',rule:row.estimate_rule,customDays:row.custom_days,labelDate:row.label_date||''}])),
     };
   }
   async function writeState(c, s) {
@@ -233,7 +271,7 @@ export async function openDatabase(options = {}) {
       if (
         !(
           await c.query(
-            "SELECT id FROM recipes WHERE id=$1 AND (source='catalog' OR profile_id=1)",
+            `SELECT id FROM recipes WHERE id=$1 AND (source='catalog' OR profile_id=${profileId()})`,
             [id],
           )
         ).rowCount
@@ -245,16 +283,22 @@ export async function openDatabase(options = {}) {
     }
     await writeProfile(c, s.profile);
     await writePantry(c, s.pantry);
-    await c.query("DELETE FROM favorites WHERE profile_id=1");
-    await c.query("DELETE FROM recipe_feedback WHERE profile_id=1");
+    if(s.pantryDates!==undefined){
+      await c.query('DELETE FROM pantry_dates WHERE profile_id=$1',[profileId()]);
+      for(const [id,date] of Object.entries(s.pantryDates))await c.query('INSERT INTO pantry_dates(profile_id,ingredient_id,start_date,estimate_rule,custom_days,label_date) VALUES($1,$2,$3,$4,$5,$6)',[profileId(),id,date.startDate||null,date.rule,date.customDays,date.labelDate||null]);
+    }
+    await c.query(`DELETE FROM favorites WHERE profile_id=${profileId()}`);
+    await c.query(
+      `DELETE FROM recipe_feedback WHERE profile_id=${profileId()}`,
+    );
     for (const id of s.saved)
       await c.query(
-        "INSERT INTO favorites(profile_id,recipe_id) VALUES(1,$1)",
+        `INSERT INTO favorites(profile_id,recipe_id) VALUES(${profileId()},$1)`,
         [id],
       );
     for (const [id, liked] of Object.entries(s.feedback))
       await c.query(
-        "INSERT INTO recipe_feedback(profile_id,recipe_id,liked) VALUES(1,$1,$2)",
+        `INSERT INTO recipe_feedback(profile_id,recipe_id,liked) VALUES(${profileId()},$1,$2)`,
         [id, liked],
       );
   }
@@ -270,7 +314,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 1) throw new Error("Esquema de una versión posterior");
+      if (version > 3) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -289,7 +333,7 @@ export async function openDatabase(options = {}) {
         for (const unit of new Set(ingredients.map((i) => i.unit)))
           await c.query("INSERT INTO units VALUES($1)", [unit]);
         await c.query(
-          "INSERT INTO profiles(id,name,goal,diet) VALUES(1,$1,$2,$3)",
+          `INSERT INTO profiles(id,name,goal,diet) VALUES(${profileId()},$1,$2,$3)`,
           [initialProfile.name, initialProfile.goal, initialProfile.diet],
         );
         await c.query(
@@ -319,12 +363,27 @@ export async function openDatabase(options = {}) {
         for (const r of recipes) await insertRecipe(c, r, "catalog");
         await c.query("INSERT INTO schema_migrations(version) VALUES(1)");
       }
+      if (version < 2) {
+        await c.query(
+          readFileSync(
+            new URL("./postgres/002_accounts.sql", import.meta.url),
+            "utf8",
+          ),
+        );
+        await c.query("INSERT INTO schema_migrations(version) VALUES(2)");
+      }
+      if(version<3){
+        await c.query(readFileSync(new URL('./postgres/003_chat_history_pantry_dates.sql',import.meta.url),'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(3)');
+      }
     });
   } catch (error) {
     await pool.end();
     throw error;
   }
   const store = {
+    auth: createAuthStore(pool, transaction),
+    ...conversationStore(transaction,profileId,readRecipes),
     provider: "postgresql",
     async health() {
       await pool.query("SELECT 1");
@@ -338,35 +397,81 @@ export async function openDatabase(options = {}) {
         await writeState(c, s);
         return (
           await c.query(
-            "UPDATE profiles SET revision=revision+1 WHERE id=1 RETURNING revision",
+            `UPDATE profiles SET revision=revision+1 WHERE id=${profileId()} RETURNING revision`,
           )
         ).rows[0];
       });
     },
     async addPantry(raw) {
       validateRevision(raw?.revision);
-      if (raw.confirmed !== true) throw new AppError("REVIEW_REQUIRED", "Revisa los ingredientes antes de agregarlos.");
+      if (raw.confirmed !== true)
+        throw new AppError(
+          "REVIEW_REQUIRED",
+          "Revisa los ingredientes antes de agregarlos.",
+        );
       const items = validatePantryItems(raw.items);
-      return transaction(async c => {
+      return transaction(async (c) => {
         await checkRevision(c, raw.revision);
         const catalog = await readIngredients(c);
-        const current = (await c.query("SELECT ingredient_id FROM pantry_items WHERE profile_id=1 ORDER BY position")).rows.map(r => r.ingredient_id);
-        let position = Number((await c.query("SELECT COALESCE(MAX(position),-1)+1 AS n FROM ingredients")).rows[0].n);
+        const current = (
+          await c.query(
+            `SELECT ingredient_id FROM pantry_items WHERE profile_id=${profileId()} ORDER BY position`,
+          )
+        ).rows.map((r) => r.ingredient_id);
+        await c.query("SELECT pg_advisory_xact_lock(72461902)");
+        let position = Number(
+          (
+            await c.query(
+              "SELECT COALESCE(MAX(position),-1)+1 AS n FROM ingredients",
+            )
+          ).rows[0].n,
+        );
         for (const item of items) {
           let existing = findIngredient(item.name, catalog);
           if (!existing) {
-            if (catalog.length >= 200) throw new AppError("STORAGE_LIMIT", "El catálogo admite hasta 200 ingredientes.", 409);
-            await c.query("INSERT INTO ingredient_categories VALUES($1) ON CONFLICT DO NOTHING", [item.category]);
-            existing = { ...item, id: "food-" + randomUUID(), unit: "unidad", emoji: "🥗" };
-            await c.query("INSERT INTO ingredients VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
-              [existing.id, existing.name, existing.category, existing.unit, existing.emoji, existing.animal, existing.meat, position++]);
-            for (const a of existing.allergens) await c.query("INSERT INTO ingredient_allergens VALUES($1,$2)", [existing.id, a]);
+            if (catalog.length >= 200)
+              throw new AppError(
+                "STORAGE_LIMIT",
+                "El catálogo admite hasta 200 ingredientes.",
+                409,
+              );
+            await c.query(
+              "INSERT INTO ingredient_categories VALUES($1) ON CONFLICT DO NOTHING",
+              [item.category],
+            );
+            existing = {
+              ...item,
+              id: "food-" + randomUUID(),
+              unit: "unidad",
+              emoji: "🥗",
+            };
+            await c.query(
+              "INSERT INTO ingredients(id,name,category,unit,emoji,animal,meat,position,profile_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+              [
+                existing.id,
+                existing.name,
+                existing.category,
+                existing.unit,
+                existing.emoji,
+                existing.animal,
+                existing.meat,
+                position++,
+                profileId(),
+              ],
+            );
+            for (const a of existing.allergens)
+              await c.query("INSERT INTO ingredient_allergens VALUES($1,$2)", [
+                existing.id,
+                a,
+              ]);
             catalog.push(existing);
           }
           if (!current.includes(existing.id)) current.push(existing.id);
         }
         await writePantry(c, current);
-        await c.query("UPDATE profiles SET revision=revision+1 WHERE id=1");
+        await c.query(
+          `UPDATE profiles SET revision=revision+1 WHERE id=${profileId()}`,
+        );
         return readState(c);
       });
     },
@@ -376,7 +481,7 @@ export async function openDatabase(options = {}) {
         const count = Number(
           (
             await c.query(
-              "SELECT count(*) AS n FROM recipes WHERE profile_id=1 AND source='gemini'",
+              `SELECT count(*) AS n FROM recipes WHERE profile_id=${profileId()} AND source='gemini'`,
             )
           ).rows[0].n,
         );
@@ -388,7 +493,7 @@ export async function openDatabase(options = {}) {
           );
         for (const r of result.recipes) await insertRecipe(c, r, "gemini");
         await c.query(
-          "INSERT INTO generation_events(profile_id,model,outcome,recipe_count) VALUES(1,$1,$2,$3)",
+          `INSERT INTO generation_events(profile_id,model,outcome,recipe_count) VALUES(${profileId()},$1,$2,$3)`,
           [result.model || "unknown", result.type, result.recipes.length],
         );
       });
@@ -402,20 +507,41 @@ export async function openDatabase(options = {}) {
           "recipe_feedback",
           "generation_events",
         ])
-          await c.query(`DELETE FROM ${table} WHERE profile_id=1`);
+          await c.query(`DELETE FROM ${table} WHERE profile_id=${profileId()}`);
         await c.query(
-          "DELETE FROM recipes WHERE profile_id=1 AND source='gemini'",
+          `DELETE FROM recipes WHERE profile_id=${profileId()} AND source='gemini'`,
         );
-        await writeProfile(c, initialProfile);
+        const current = await readState(c);
+        await writeProfile(
+          c,
+          current.profile.email
+            ? {
+                ...initialProfile,
+                name: current.profile.name,
+                birthDate: current.profile.birthDate,
+              }
+            : initialProfile,
+        );
+        await c.query('DELETE FROM pantry_dates WHERE profile_id=$1',[profileId()]);
         await writePantry(c, initialPantry);
-        await c.query("DELETE FROM ingredients WHERE id LIKE 'food-%'");
-        await c.query("UPDATE profiles SET revision=revision+1 WHERE id=1");
+        await c.query("DELETE FROM ingredients WHERE profile_id=$1", [
+          profileId(),
+        ]);
+        await c.query(
+          "DELETE FROM conversations WHERE profile_id=$1",
+          [profileId()],
+        );
+        await c.query(
+          `UPDATE profiles SET revision=revision+1 WHERE id=${profileId()}`,
+        );
         return readState(c);
       });
     },
     importSqlite(legacy) {
       return transaction(async (c) => {
-        await c.query("SELECT revision FROM profiles WHERE id=1 FOR UPDATE");
+        await c.query(
+          `SELECT revision FROM profiles WHERE id=${profileId()} FOR UPDATE`,
+        );
         if (
           (await c.query("SELECT 1 FROM data_imports WHERE source='sqlite-v1'"))
             .rowCount
@@ -460,7 +586,7 @@ export async function openDatabase(options = {}) {
             feedback: legacy.feedback,
           }),
         );
-        await c.query("UPDATE profiles SET revision=1 WHERE id=1");
+        await c.query(`UPDATE profiles SET revision=1 WHERE id=${profileId()}`);
         await c.query(
           "INSERT INTO data_imports(source,recipe_count) VALUES('sqlite-v1',$1)",
           [legacy.generated.length],
@@ -472,7 +598,7 @@ export async function openDatabase(options = {}) {
       transaction(
         async (c) => ({
           provider: "postgresql",
-          schemaVersion: 1,
+          schemaVersion: 3,
           ingredients: Number(
             (await c.query("SELECT count(*) AS n FROM ingredients")).rows[0].n,
           ),
@@ -486,28 +612,28 @@ export async function openDatabase(options = {}) {
           generated: Number(
             (
               await c.query(
-                "SELECT count(*) AS n FROM recipes WHERE profile_id=1 AND source='gemini'",
+                `SELECT count(*) AS n FROM recipes WHERE profile_id=${profileId()} AND source='gemini'`,
               )
             ).rows[0].n,
           ),
           favorites: Number(
             (
               await c.query(
-                "SELECT count(*) AS n FROM favorites WHERE profile_id=1",
+                `SELECT count(*) AS n FROM favorites WHERE profile_id=${profileId()}`,
               )
             ).rows[0].n,
           ),
           plannedMeals: Number(
             (
               await c.query(
-                "SELECT count(*) AS n FROM meal_plans WHERE profile_id=1",
+                `SELECT count(*) AS n FROM meal_plans WHERE profile_id=${profileId()}`,
               )
             ).rows[0].n,
           ),
           generations: Number(
             (
               await c.query(
-                "SELECT count(*) AS n FROM generation_events WHERE profile_id=1",
+                `SELECT count(*) AS n FROM generation_events WHERE profile_id=${profileId()}`,
               )
             ).rows[0].n,
           ),
@@ -515,6 +641,29 @@ export async function openDatabase(options = {}) {
         true,
       ),
     close: () => pool.end(),
+  };
+  store.forProfile = (id) => {
+    if (!Number.isSafeInteger(id) || id < 1)
+      throw new AppError(
+        "UNAUTHORIZED",
+        "Inicia sesión para acceder a tu cocina.",
+        401,
+      );
+    const scoped = { provider: store.provider };
+    for (const name of [
+      "health",
+      "getState",
+      "saveState",
+      "addPantry",
+      "saveGenerated",
+      "reset",
+      "listChats",
+      "getChat",
+      "saveChat",
+    ])
+      scoped[name] = (...args) =>
+        accountScope.run(id, () => store[name](...args));
+    return scoped;
   };
   return store;
 }

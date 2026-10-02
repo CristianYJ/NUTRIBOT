@@ -21,7 +21,8 @@ try {
     saved: [],
     feedback: {},
   });
-  server = createAppServer({ ...config, store });
+  // This disposable database fixture tests Gemini; account security has its own integration suite.
+  server = createAppServer({ ...config, store, authentication: false });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const response = await fetch(
     `http://127.0.0.1:${server.address().port}/api/recipes/suggest`,

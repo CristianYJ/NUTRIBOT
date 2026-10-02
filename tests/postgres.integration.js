@@ -105,7 +105,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    1,
+    3,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -257,7 +257,7 @@ test("reset clears personal recipes but keeps catalogue; stale AI cannot resurre
 test("HTTP uses PostgreSQL restrictions, persists asynchronous results, and rejects foreign origins", async (t) => {
   const f = await fixture(t);
   let calls = 0;
-  const server = createAppServer({
+  const server = createAppServer({ authentication: false,
     store: f.store,
     generate: async () => {
       calls++;
@@ -316,7 +316,7 @@ test("HTTP uses PostgreSQL restrictions, persists asynchronous results, and reje
   assert.equal((await f.store.summary()).generated, 1);
 });
 test("HTTP reports unavailable PostgreSQL without leaking database error details", async (t) => {
-  const server = createAppServer({
+  const server = createAppServer({ authentication: false,
     store: {
       provider: "postgresql",
       health: async () => {

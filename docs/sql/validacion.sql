@@ -2,6 +2,23 @@
 SELECT current_database() AS base_actual, current_user AS usuario_actual;
 SELECT version, applied_at FROM nutribot.schema_migrations;
 SELECT tablename FROM pg_tables WHERE schemaname='nutribot' ORDER BY tablename;
+-- Esquema v3: 24 tablas y 3 vistas. No muestra datos personales.
+SELECT table_type, count(*) AS cantidad
+FROM information_schema.tables WHERE table_schema='nutribot' GROUP BY table_type;
+SELECT table_name FROM information_schema.views
+WHERE table_schema='nutribot' ORDER BY table_name;
+SELECT table_name,column_name,data_type,is_nullable
+FROM information_schema.columns
+WHERE table_schema='nutribot'
+  AND table_name IN ('profiles','ingredients','auth_sessions','conversations','pantry_dates','profile_summary')
+ORDER BY table_name,ordinal_position;
+SELECT c.relname AS tabla,k.conname AS restriccion,pg_get_constraintdef(k.oid) AS definicion
+FROM pg_constraint k
+JOIN pg_class c ON c.oid=k.conrelid
+JOIN pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname='nutribot' AND k.contype IN ('p','f')
+  AND c.relname IN ('auth_sessions','conversations','pantry_dates')
+ORDER BY c.relname,k.conname;
 SELECT source, count(*) AS total FROM nutribot.recipes GROUP BY source;
 SELECT * FROM nutribot.recipe_summary ORDER BY created_at DESC;
 SELECT r.title, i.name, ri.amount, ri.position

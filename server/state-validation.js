@@ -1,3 +1,5 @@
+import { validatePantryDates } from "./pantry-dates.js";
+import { ageFromBirthDate } from "../src/date-utils.js";
 import { ingredients, allergyOptions } from "../src/data.js";
 import { AppError } from "./recipes.js";
 
@@ -37,6 +39,7 @@ export function validateState(raw, catalog = ingredients) {
     !p ||
     !string(p.name, 35) ||
     !p.name.trim() ||
+    (p.birthDate !== undefined && p.birthDate !== "" && ageFromBirthDate(p.birthDate) === null) ||
     !measurement(p.weight, 20, 400) ||
     !measurement(p.height, 80, 250) ||
     !goals.includes(p.goal) ||
@@ -67,6 +70,7 @@ export function validateState(raw, catalog = ingredients) {
     revision: raw.revision,
     profile: {
       name: p.name.trim(),
+      ...(p.birthDate !== undefined ? { birthDate: p.birthDate } : {}),
       weight: p.weight,
       height: p.height,
       goal: p.goal,
@@ -76,6 +80,7 @@ export function validateState(raw, catalog = ingredients) {
       medicalNotes: p.medicalNotes.trim(),
     },
     pantry: [...raw.pantry],
+    ...(raw.pantryDates===undefined?{}:{pantryDates:validatePantryDates(raw.pantryDates,raw.pantry)}),
     saved: [...raw.saved],
     feedback: { ...raw.feedback },
   };

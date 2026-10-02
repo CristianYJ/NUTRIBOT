@@ -1,7 +1,8 @@
+import { authenticatedFetch } from "./auth-api.js";
 export async function requestRecipe({ maxTime, message, signal, revision }) {
   let response;
   try {
-    response = await fetch("/api/recipes/suggest", {
+    response = await authenticatedFetch("/api/recipes/suggest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: AbortSignal.any([signal, AbortSignal.timeout(55000)]),
@@ -38,7 +39,7 @@ export async function requestRecipe({ maxTime, message, signal, revision }) {
 export async function stateRequest(method = "GET", body, signal) {
   let response;
   try {
-    response = await fetch("/api/state", {
+    response = await authenticatedFetch("/api/state", {
       method,
       headers: body ? { "Content-Type": "application/json" } : undefined,
       body: body ? JSON.stringify(body) : undefined,
@@ -63,7 +64,7 @@ export async function stateRequest(method = "GET", body, signal) {
 export async function pantryRequest(action, body, signal) {
   let response;
   try {
-    response = await fetch("/api/pantry/" + action, {
+    response = await authenticatedFetch("/api/pantry/" + action, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(55000)]) : AbortSignal.timeout(15000),
     });

@@ -87,7 +87,7 @@ try {
         const summary = await store.summary();
         const valid =
           Object.values(results).every((n) => n === 0) &&
-          summary.ingredients === 14 &&
+          summary.ingredients >= 14 &&
           summary.examples === 6 &&
           !role.rolsuper &&
           !role.rolcreatedb &&

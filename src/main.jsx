@@ -3,8 +3,11 @@ import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
 import "./styles.css";
 import "./template-theme.css";
+import "./account.css";
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
 );
+
+import "./pantry-chat.css";

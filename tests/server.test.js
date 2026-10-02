@@ -204,7 +204,7 @@ test("provider request keeps credentials in header and limits context", async ()
 });
 async function withServer(run) {
   let calls = 0;
-  const server = createAppServer({
+  const server = createAppServer({ authentication: false,
     apiKey: "private-server-key",
     generate: async (i) => {
       calls++;

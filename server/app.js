@@ -1,4 +1,6 @@
 import { createServer } from "node:http";
+import { createServer as createSecureServer } from "node:https";
+import { createAuthentication, requestContext } from "./auth.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,28 +36,65 @@ export function createAppServer({
   generate = generateWithGemini,
   analyze = analyzePantry,
   serveStatic = false,
-  store,
+  store: rootStore,
+  authentication = true,
+  network = {},
+  tls,
 } = {}) {
+  if (authentication && (!rootStore?.auth || !rootStore?.forProfile))
+    throw new Error("La autenticación requiere PostgreSQL actualizado.");
+  const auth = authentication ? createAuthentication(rootStore) : null;
   const requests = new Map();
   let active = 0;
-  return createServer(async (req, res) => {
+  const handler = async (req, res) => {
+    let store = rootStore;
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "same-origin");
     try {
-      const host = req.headers.host || "";
-      if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host))
-        throw new AppError("FORBIDDEN", "Host no autorizado.", 403);
-      const origin = req.headers.origin;
+      const context = requestContext(req, network);
+      const url = new URL(req.url, context.origin);
+      if (auth && (await auth.route(req, res, url, context, readJson, json)))
+        return;
       if (
-        origin &&
-        ![
-          "http://127.0.0.1:5173",
-          "http://localhost:5173",
-          `http://${host}`,
-        ].includes(origin)
-      )
-        throw new AppError("FORBIDDEN", "Origen no autorizado.", 403);
-      if (req.headers["sec-fetch-site"] === "cross-site")
-        throw new AppError("FORBIDDEN", "Origen no autorizado.", 403);
-      const url = new URL(req.url, `http://${host}`);
+        auth &&
+        url.pathname.startsWith("/api/") &&
+        url.pathname !== "/api/health"
+      ) {
+        const session = await auth.session(req);
+        if (!session)
+          throw new AppError(
+            "UNAUTHORIZED",
+            "Tu sesión terminó. Inicia sesión para continuar.",
+            401,
+          );
+        if (
+          req.headers["x-nutribot-account"] &&
+          req.headers["x-nutribot-account"] !== String(session.profileId)
+        )
+          throw new AppError(
+            "ACCOUNT_CHANGED",
+            "La cuenta cambió en otra pestaña. Inicia sesión de nuevo.",
+            401,
+          );
+        if (!["GET", "HEAD"].includes(req.method))
+          auth.requireCsrf(req, session);
+        store = rootStore.forProfile(session.profileId);
+      }
+      if (url.pathname === "/api/connection" && req.method === "GET")
+        return json(res, 200, {
+          urls: network.urls || [],
+          qrCodes: network.qrCodes || [],
+          secure: Boolean(network.secure),
+        });
+      if(url.pathname==='/api/chats'&&req.method==='GET')return json(res,200,await store.listChats(Number(url.searchParams.get('offset')||0)));
+      const chatRoute=url.pathname.match(/^\/api\/chats\/([^/]+)$/);
+      if(chatRoute){
+        if(req.method==='GET')return json(res,200,await store.getChat(chatRoute[1]));
+        if(req.method==='PUT')return json(res,200,await store.saveChat({...await readJson(req,6000000),id:chatRoute[1]}));
+        throw new AppError('METHOD_NOT_ALLOWED','Utiliza GET o PUT para el chat.',405);
+      }
       if (req.method === "GET" && url.pathname === "/api/health") {
         if (store?.health) await store.health();
         return json(res, 200, {
@@ -84,24 +123,53 @@ export function createAppServer({
         return json(res, 200, await store.reset(raw.revision));
       }
       if (["/api/pantry/analyze", "/api/pantry/add"].includes(url.pathname)) {
-        if (req.method !== "POST") throw new AppError("METHOD_NOT_ALLOWED", "Utiliza POST para agregar ingredientes.", 405);
+        if (req.method !== "POST")
+          throw new AppError(
+            "METHOD_NOT_ALLOWED",
+            "Utiliza POST para agregar ingredientes.",
+            405,
+          );
         if (url.pathname.endsWith("/add")) {
-          if (!store?.addPantry) throw new AppError("DATABASE_UNAVAILABLE", "Reinicia Nutribot para habilitar la nueva despensa.", 503);
-          return json(res, 200, await store.addPantry(await readJson(req, 30000)));
+          if (!store?.addPantry)
+            throw new AppError(
+              "DATABASE_UNAVAILABLE",
+              "Reinicia Nutribot para habilitar la nueva despensa.",
+              503,
+            );
+          return json(
+            res,
+            200,
+            await store.addPantry(await readJson(req, 30000)),
+          );
         }
         const raw = await readJson(req, 4300000);
-        const now = Date.now(), key = "pantry:" + req.socket.remoteAddress;
-        const recent = (requests.get(key) || []).filter(t => now-t < 60000);
-        if (recent.length >= 6 || active >= 2) throw new AppError("LOCAL_RATE_LIMIT", "Espera un momento antes de analizar otra lista o foto.", 429);
+        const now = Date.now(),
+          key = "pantry:" + req.socket.remoteAddress;
+        const recent = (requests.get(key) || []).filter((t) => now - t < 60000);
+        if (recent.length >= 6 || active >= 2)
+          throw new AppError(
+            "LOCAL_RATE_LIMIT",
+            "Espera un momento antes de analizar otra lista o foto.",
+            429,
+          );
         requests.set(key, [...recent, now]);
         active++;
         const controller = new AbortController();
-        const cancel = () => { if (!res.writableEnded) controller.abort(); };
+        const cancel = () => {
+          if (!res.writableEnded) controller.abort();
+        };
         res.on("close", cancel);
         try {
-          const result = await analyze(raw, { apiKey, model, signal: controller.signal });
+          const result = await analyze(raw, {
+            apiKey,
+            model,
+            signal: controller.signal,
+          });
           if (!res.destroyed) json(res, 200, result);
-        } finally { active--; res.off("close", cancel); }
+        } finally {
+          active--;
+          res.off("close", cancel);
+        }
         return;
       }
       if (url.pathname === "/api/recipes/suggest") {
@@ -128,7 +196,8 @@ export function createAppServer({
               diet: state.profile.diet,
               allergies: state.profile.allergies,
               exclusions: state.profile.exclusions,
-              needsReview: profileRestrictions(state.profile, state.ingredients).needsReview,
+              needsReview: profileRestrictions(state.profile, state.ingredients)
+                .needsReview,
             },
           };
         }
@@ -235,7 +304,8 @@ export function createAppServer({
               : "No se pudo procesar la solicitud.",
         });
     }
-  });
+  };
+  return tls ? createSecureServer(tls, handler) : createServer(handler);
 }
 
 async function readJson(req, limit = 150000) {

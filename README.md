@@ -2,7 +2,7 @@
 
 Nutribot genera recetas con **Gemini de Google** usando los ingredientes de tu despensa y los filtros alimentarios de tu perfil. **PostgreSQL 18** guarda perfil, despensa, recetas, favoritos y opiniones.
 
-El recorrido es sencillo: **Despensa → Perfil → Nutribot IA → Mis recetas**. Inicio explica esos pasos. La sección abierta y la vista móvil/amplia se conservan al recargar; también funcionan Atrás y Adelante. El chat y el borrador se conservan durante la sesión de esa pestaña y se pueden limpiar sin borrar recetas.
+El recorrido es sencillo: **Crear cuenta → Despensa → Perfil → Nutribot IA → Mis recetas**. Cada cuenta tiene datos independientes. La sección abierta y la vista móvil/amplia se conservan al recargar; también funcionan Atrás y Adelante. Cada acceso o recarga abre un chat nuevo. Las conversaciones y sus borradores permanecen en PostgreSQL y se abren desde Historial de chats.
 
 Es una aplicación web local adaptable a móvil y PC. Todavía no es una app Android/iOS instalada ni un servicio publicado en Internet.
 
@@ -11,7 +11,7 @@ Es una aplicación web local adaptable a móvil y PC. Todavía no es una app And
 ### 1. Requisitos
 
 - [Git](https://git-scm.com/downloads).
-- [Node.js 22](https://nodejs.org/en/download), versión 22.19 o posterior de la serie 22, con npm.
+- [Node.js](https://nodejs.org/en/download) 22.19 o posterior de la serie 22, o Node.js 24, con npm.
 - [PostgreSQL 18](https://www.postgresql.org/download/), instalado y en ejecución. Guarda la contraseña del usuario administrador `postgres` que elegiste al instalar.
 - Una clave propia de [Google AI Studio](https://aistudio.google.com/api-keys) para generar recetas.
 - DBeaver es opcional: sirve para consultar PostgreSQL, **no lo sustituye ni lo instala**.
@@ -47,6 +47,8 @@ npm run db:init
 
 El primer comando crea el usuario limitado `nutribot_app`, la base `nutribot_project` y otra separada para pruebas, `nutribot_project_test`. Guarda automáticamente la conexión en `.env`. El segundo crea las tablas y carga el catálogo inicial sin duplicarlo. Si encuentra nombres ocupados por otro propietario, se detiene sin modificarlos.
 
+El esquema actual es la **versión 3: 24 tablas y 3 vistas**, incluidas `auth_sessions` (sesiones), `conversations` (historial de chats) y `pantry_dates` (fechas de despensa). También incluye correo, hash de contraseña y fecha de nacimiento en `profiles`, y la edad calculada en `profile_summary`. `db:init` aplica todas las migraciones pendientes automáticamente. Si ya tienes una instalación, sigue [actualizar una instalación existente](docs/POSTGRESQL.md#actualizar-una-instalación-existente) para conservar los datos.
+
 La app usa su propio usuario, no el administrador. Puedes retirar la contraseña de `.env.postgres-admin` después de preparar las bases. Para una instalación personalizada o un error de conexión, consulta [PostgreSQL y DBeaver](docs/POSTGRESQL.md).
 
 ### 4. Iniciar Nutribot
@@ -55,7 +57,9 @@ La app usa su propio usuario, no el administrador. Puedes retirar la contraseña
 npm run dev
 ```
 
-Abre [Nutribot](http://127.0.0.1:5173/?mobile=1). Mantén abierta la terminal; **Ctrl+C** detiene la app. Reinicia si cambias `.env` o archivos del servidor.
+Abre [Nutribot](http://127.0.0.1:5173) y crea tu cuenta. Si ya tenías datos, registra la primera cuenta desde esa dirección y marca la opción para vincular el perfil existente. Mantén abierta la terminal; **Ctrl+C** detiene la app. Reinicia si cambias `.env` o archivos del servidor.
+
+La terminal genera un **QR para el teléfono**. Conecta ambos dispositivos a la misma red y escanéalo; también está en **menú de perfil → Conectar teléfono**. Inicia sesión con la misma cuenta para abrir sus datos. Consulta [cuentas, QR y HTTPS local](docs/ACCESO_MOVIL.md). La conexión predeterminada es HTTP; la guía explica cómo configurar HTTPS.
 
 En Despensa selecciona ingredientes, revisa Perfil y pide una receta en Nutribot IA. La indicación **Generado con Gemini** identifica una respuesta real. Sin clave o cuota disponible puedes usar el catálogo y guardar datos, pero no generar recetas nuevas.
 
@@ -87,10 +91,12 @@ Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para trabajar en ramas y enviar camb
 
 ## Alcance actual
 
-- Un perfil por instalación, sin cuentas ni sincronización entre PCs.
-- La IA recibe el mensaje culinario, ingredientes y filtros. Nombre, peso, estatura y notas médicas del perfil no se envían a Google. Evita escribir datos personales en el chat.
+- Varias cuentas independientes con correo y contraseña, accesibles desde PC y teléfono en la red local. Los datos permanecen en la PC que ejecuta el servidor. Recarga para ver cambios hechos desde otro dispositivo.
+- Contraseñas guardadas mediante hash scrypt con sal, sesiones revocables y fecha de nacimiento editable. La edad se calcula automáticamente. El cambio de contraseña está visible pero aún deshabilitado.
+- La IA recibe el mensaje culinario, ingredientes y filtros. Correo, contraseña, nombre, fecha de nacimiento, peso, estatura y notas médicas del perfil no se envían a Google. Evita escribir datos personales en el chat.
 - Las indicaciones médicas o exclusiones escritas pausan la generación para revisión. La app no interpreta tratamientos ni garantiza seguridad clínica o ausencia de alérgenos.
 - Los valores nutricionales del catálogo son ejemplos; las recetas de IA no muestran macros inventados.
-- Las recetas permanecen en PostgreSQL. El chat es local a la sesión del navegador y no se envía como historial a Google. Espera la confirmación de guardado antes de cerrar.
+- Las conversaciones permanecen en PostgreSQL, asociadas a la cuenta, con hasta 200 mensajes por conversación. Al llegar al límite se pide abrir un chat nuevo sin borrar los anteriores. El historial no se envía a Google. Espera a que termine el indicador de guardado antes de cerrar.
+- Despensa permite quitar varios ingredientes a la vez y guardar fechas del envase o estimaciones editables según compra y conservación. Consulta [chat y despensa](docs/CHAT_DESPENSA.md).
 
 Documentación: [base de datos](docs/POSTGRESQL.md), [pruebas](docs/VALIDACION.md), [arquitectura](docs/ARQUITECTURA.md), [Gemini](docs/GEMINI.md) y [recursos visuales](docs/ASSETS.md).

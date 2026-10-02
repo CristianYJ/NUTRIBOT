@@ -166,7 +166,7 @@ test("concurrent revisions and late AI results cannot undo a reset", () => {
 async function withApi(run, generator = generated) {
   const store = openDatabase(":memory:");
   let calls = 0;
-  const server = createAppServer({
+  const server = createAppServer({ authentication: false,
     store,
     generate: async (input) => {
       calls++;

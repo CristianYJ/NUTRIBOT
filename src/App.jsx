@@ -1,3 +1,12 @@
+import { MAX_CHAT_MESSAGES } from "./conversation-limits.js";
+import PantryWorkspace from "./PantryWorkspace.jsx";
+import { authenticatedFetch } from "./auth-api.js";
+import AuthPage from "./AuthPage.jsx";
+import PhoneConnection from "./PhoneConnection.jsx";
+import { accountRequest, acceptSession } from "./auth-api.js";
+import { useChatPersistence } from "./useChatPersistence.js";
+import { todayDate, ageFromBirthDate } from "./date-utils.js";
+import { newId } from "./ids.js";
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import PantryImport from "./PantryImport.jsx";
@@ -6,14 +15,10 @@ import AssistantWorkspace from "./AssistantWorkspace.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
 import { readNavigation, navigationUrl } from "./navigation.js";
-import { readChat, writeChat } from "./chat-session.js";
+import { readChat } from "./chat-session.js";
 import { profileRestrictions } from "./profile-rules.js";
 import { allergyOptions } from "./data.js";
-import {
-  availability,
-  matchesProfile,
-  requiresReview,
-} from "./engine.js";
+import { availability, matchesProfile, requiresReview } from "./engine.js";
 
 const pages = [
   { id: "home", label: "Inicio", icon: "home" },
@@ -25,7 +30,7 @@ const pages = [
 function Brand({ small = false }) {
   return (
     <div className={`brand ${small ? "small" : ""}`}>
-      <img src="/icon.svg" alt="" />
+      <img src="/nutribot-logo.png" alt="" />
       <span>
         NutriBot<span className="brand-dot">.</span>
       </span>
@@ -49,47 +54,99 @@ function Empty({ icon = "book", title, children, action }) {
 }
 
 export default function App() {
-  const [initial, setInitial] = useState(null);
-  const [error, setError] = useState("");
-  const [attempt, setAttempt] = useState(0);
+  const [initial, setInitial] = useState(null),
+    [auth, setAuth] = useState(null),
+    [error, setError] = useState(""),
+    [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     setError("");
-    stateRequest("GET", undefined, controller.signal)
-      .then((state) => {
-        if (!controller.signal.aborted) setInitial(state);
-      })
-      .catch((problem) => {
+    (async () => {
+      try {
+        const session = await accountRequest(
+          "session",
+          undefined,
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        setAuth(session);
+        if (session.authenticated) {
+          const state = await stateRequest("GET", undefined, controller.signal);
+          if (!controller.signal.aborted) setInitial(state);
+        } else setInitial(null);
+      } catch (problem) {
         if (!controller.signal.aborted) setError(problem.message);
-      });
+      }
+    })();
     return () => controller.abort();
   }, [attempt]);
+  useEffect(() => {
+    const expired = () => {
+      acceptSession(null);
+      setInitial(null);
+      setAuth({ authenticated: false });
+    };
+    window.addEventListener("nutribot:unauthorized", expired);
+    return () => window.removeEventListener("nutribot:unauthorized", expired);
+  }, []);
+  function signedOut() {
+    acceptSession(null);
+    setInitial(null);
+    setAuth({ authenticated: false });
+    try {
+      sessionStorage.removeItem("nutribot.chat.v1");
+    } catch {
+      /* storage can be disabled */
+    }
+  }
+  if (auth && !auth.authenticated)
+    return (
+      <AuthPage
+        brand={<Brand />}
+        canClaimLegacy={auth.canClaimLegacy}
+        onAuthenticated={(session) => {
+          setAuth(session);
+          setInitial(null);
+          setAttempt((value) => value + 1);
+        }}
+      />
+    );
   if (!initial)
     return (
       <main className="database-loading">
         <Brand />
-        <h1>{error ? "No pudimos cargar tu cocina" : "Abriendo tu cocina…"}</h1>
+        <h1>{error ? "No pudimos abrir tu cocina" : "Abriendo tu cocina…"}</h1>
         <p role={error ? "alert" : "status"}>
-          {error || "Cargando tu perfil y tus recetas guardadas."}
+          {error || "Comprobando tu sesión y cargando tus datos."}
         </p>
         {error && (
           <button
             className="btn primary"
-            onClick={() => setAttempt((n) => n + 1)}
+            onClick={() => setAttempt((value) => value + 1)}
           >
             Volver a intentar
           </button>
         )}
       </main>
     );
-  return <Workspace initial={initial} />;
+  return (
+    <Workspace
+      key={initial.profile.id}
+      initial={initial}
+      onSignedOut={signedOut}
+    />
+  );
 }
 
-function Workspace({ initial }) {
+function Workspace({ initial, onSignedOut }) {
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
   const [ingredients, setIngredients] = useState(initial.ingredients);
-  const ingredientById = Object.fromEntries(ingredients.map(i => [i.id, i]));
+  const ingredientById = Object.fromEntries(ingredients.map((i) => [i.id, i]));
   const recipes = initial.recipes;
-  const [navigation, setNavigation] = useState(() => readNavigation(new URL(location.href)));
+  const [navigation, setNavigation] = useState(() =>
+    readNavigation(new URL(location.href)),
+  );
   const { page, mobile } = navigation;
   useEffect(() => {
     const restore = () => setNavigation(readNavigation(new URL(location.href)));
@@ -102,10 +159,12 @@ function Workspace({ initial }) {
   }, []);
   function navigate(next, replace = false) {
     const url = navigationUrl(location.href, next);
-    if (url.href !== location.href) history[replace ? "replaceState" : "pushState"](null, "", url);
+    if (url.href !== location.href)
+      history[replace ? "replaceState" : "pushState"](null, "", url);
     setNavigation(next);
   }
   const [pantry, setPantry] = useState(initial.pantry);
+  const [pantryDates, setPantryDates] = useState(initial.pantryDates || {});
   const [profile, setProfile] = useState(initial.profile);
   const [saved, setSaved] = useState(initial.saved);
   const [generated, setGenerated] = useState(initial.generated);
@@ -119,17 +178,27 @@ function Workspace({ initial }) {
   const [selected, setSelected] = useState(null);
   const [servings, setServings] = useState(1);
   const [checked, setChecked] = useState([]);
-  const [chat] = useState(() => {
-    try { return readChat(window.sessionStorage, allRecipes); }
-    catch { return { messages: [], draft: "", maxTime: 30 }; }
-  });
+  const [chat] = useState(() => ({
+    id: newId(),
+    revision: 0,
+    messages: [],
+    draft: "",
+    maxTime: 30,
+    busy: false,
+  }));
+  const [chatHistory, setChatHistory] = useState([]),
+    [historyOffset, setHistoryOffset] = useState(null),
+    [historyError, setHistoryError] = useState(""),
+    [historyLoading, setHistoryLoading] = useState(false),
+    [switchingChat, setSwitchingChat] = useState(false);
   const [messages, setMessages] = useState(chat.messages);
   const [message, setMessage] = useState(chat.draft);
   const [maxTime, setMaxTime] = useState(chat.maxTime);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [pantryImportRequest, setPantryImportRequest] = useState(null);
-  const openPantryImport = mode => setPantryImportRequest({ mode, id: crypto.randomUUID() });
+  const openPantryImport = (mode) =>
+    setPantryImportRequest({ mode, id: newId() });
   const [confirmReset, setConfirmReset] = useState(false);
   const request = useRef(null);
   const dialog = useRef(null);
@@ -139,15 +208,133 @@ function Workspace({ initial }) {
 
   const persistence = usePersistence(initial, {
     pantry,
+    pantryDates,
     profile,
     saved,
     feedback,
   });
   const [resetting, setResetting] = useState(false);
+  const chatPersistence = useChatPersistence(chat, {
+    messages,
+    draft: message,
+    maxTime,
+    busy,
+  });
+  async function readConversation(path, signal) {
+    const response = await authenticatedFetch("/api/chats" + path, {
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(12000)])
+        : AbortSignal.timeout(12000),
+    });
+    const result = await response.json();
+    if (!response.ok)
+      throw Error(result.text || "No se pudo abrir el historial.");
+    return result;
+  }
+  async function loadHistory(offset = 0, signal) {
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const result = await readConversation("?offset=" + offset, signal);
+      if (signal?.aborted) return;
+      setChatHistory((previous) =>
+        offset
+          ? [
+              ...previous,
+              ...result.items.filter(
+                (item) => !previous.some((existing) => existing.id === item.id),
+              ),
+            ]
+          : result.items,
+      );
+      setHistoryOffset(result.nextOffset);
+    } catch (problem) {
+      if (!signal?.aborted) setHistoryError(problem.message);
+    } finally {
+      if (!signal?.aborted) setHistoryLoading(false);
+    }
+  }
   useEffect(() => {
-    try { writeChat(window.sessionStorage, { messages, draft: message, maxTime, busy }); }
-    catch { /* Browser storage can be disabled; recipes still persist on the server. */ }
-  }, [messages, message, maxTime, busy]);
+    const controller = new AbortController();
+    loadHistory(0, controller.signal);
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
+    const savedChat = chatPersistence.lastSaved;
+    if (savedChat)
+      setChatHistory((previous) => [
+        savedChat,
+        ...previous.filter((item) => item.id !== savedChat.id),
+      ]);
+  }, [chatPersistence.lastSaved]);
+  function showConversation(next) {
+    const restored = readChat(
+      { getItem: () => JSON.stringify(next) },
+      allRecipes,
+    );
+    chatPersistence.acceptConversation(next, { ...restored, busy: false });
+    setMessages(restored.messages);
+    setMessage(restored.draft);
+    setMaxTime(restored.maxTime);
+  }
+  async function switchChat(id) {
+    if (busy || switchingChat) return false;
+    setSwitchingChat(true);
+    try {
+      await chatPersistence.flush();
+      showConversation(
+        id
+          ? await readConversation("/" + id)
+          : {
+              id: newId(),
+              revision: 0,
+              messages: [],
+              draft: "",
+              maxTime: 30,
+              busy: false,
+            },
+      );
+      return true;
+    } catch (problem) {
+      setToast(problem.message);
+      return false;
+    } finally {
+      setSwitchingChat(false);
+    }
+  }
+  function removeIngredients(ids) {
+    setPantry((previous) => previous.filter((id) => !ids.includes(id)));
+    setPantryDates((previous) =>
+      Object.fromEntries(
+        Object.entries(previous).filter(([id]) => !ids.includes(id)),
+      ),
+    );
+    setToast(ids.length + " ingredientes quitados de la despensa");
+  }
+  function setIngredientDate(id, value) {
+    setPantryDates((previous) => {
+      const next = { ...previous };
+      if (value) next[id] = value;
+      else delete next[id];
+      return next;
+    });
+  }
+  async function logout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    request.current?.abort();
+    request.current = null;
+    setBusy(false);
+    try {
+      await persistence.flush();
+      await chatPersistence.flush();
+      await accountRequest("logout", {});
+      onSignedOut();
+    } catch (problem) {
+      setToast(problem.message);
+      setLoggingOut(false);
+    }
+  }
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 3200);
@@ -178,7 +365,10 @@ function Workspace({ initial }) {
   useEffect(() => {
     if (messages.length && end.current?.parentElement) {
       const conversation = end.current.parentElement;
-      conversation.scrollTo({ top: conversation.scrollHeight, behavior: "smooth" });
+      conversation.scrollTo({
+        top: conversation.scrollHeight,
+        behavior: "smooth",
+      });
     }
   }, [messages, busy]);
   useEffect(() => {
@@ -211,33 +401,66 @@ function Workspace({ initial }) {
     );
   }
   function toggleIngredient(id) {
-    setPantry((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+    if (pantry.includes(id)) removeIngredients([id]);
+    else setPantry((previous) => [...previous, id]);
   }
   async function addPantry(items, context = {}) {
     const revision = await persistence.flush();
-    const state = await pantryRequest("add", { revision, confirmed: true, items });
+    const state = await pantryRequest("add", {
+      revision,
+      confirmed: true,
+      items,
+    });
     persistence.acceptReset(state);
     setIngredients(state.ingredients);
     setPantry(state.pantry);
+    setPantryDates(state.pantryDates || {});
     setToast("Ingredientes guardados en tu despensa");
-    if (page === "assistant") {
+    if (page === "assistant" && messages.length <= MAX_CHAT_MESSAGES - 2) {
       const createdAt = new Date().toISOString();
-      setMessages(previous => [...previous,
-        { id: crypto.randomUUID(), role: "user", createdAt, text: context.preview ? "Agregué ingredientes desde una foto." : "Agregué ingredientes a mi despensa.", photo: context.preview },
-        { id: crypto.randomUUID(), role: "bot", createdAt, source: "local", type: "notice", text: "Tu despensa está actualizada. Ya puedes pedirme una receta con estos ingredientes.", ingredientNames: items.map(item => item.name), recipes: [] },
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: newId(),
+          role: "user",
+          createdAt,
+          text: context.preview
+            ? "Agregué ingredientes desde una foto."
+            : "Agregué ingredientes a mi despensa.",
+          photo: context.preview,
+        },
+        {
+          id: newId(),
+          role: "bot",
+          createdAt,
+          source: "local",
+          type: "notice",
+          text: "Tu despensa está actualizada. Ya puedes pedirme una receta con estos ingredientes.",
+          ingredientNames: items.map((item) => item.name),
+          recipes: [],
+        },
       ]);
     }
   }
   async function generate(text = "¿Qué puedo cocinar con lo que tengo?") {
-    if (request.current) return;
+    if (request.current || switchingChat) return;
+    if (messages.length > MAX_CHAT_MESSAGES - 2) {
+      setToast(
+        "Este chat llegó a 200 mensajes. Abre un nuevo chat para continuar sin perder el historial.",
+      );
+      return;
+    }
     go("assistant");
     setMessage("");
     setBusy(true);
-    const id = crypto.randomUUID();
+    const id = newId();
     const controller = new AbortController();
     request.current = controller;
     pending.current = id;
-    setMessages((m) => [...m, { role: "user", text, id, createdAt: new Date().toISOString() }]);
+    setMessages((m) => [
+      ...m,
+      { role: "user", text, id, createdAt: new Date().toISOString() },
+    ]);
     try {
       const revision = await persistence.flush();
       if (controller.signal.aborted) return;
@@ -252,7 +475,12 @@ function Workspace({ initial }) {
       if (result.recipes.length) setGenerated((g) => [...result.recipes, ...g]);
       setMessages((m) => [
         ...m,
-        { role: "bot", ...result, id: crypto.randomUUID(), createdAt: new Date().toISOString() },
+        {
+          role: "bot",
+          ...result,
+          id: newId(),
+          createdAt: new Date().toISOString(),
+        },
       ]);
     } catch (error) {
       if (controller.signal.aborted || request.current !== controller) return;
@@ -265,7 +493,7 @@ function Workspace({ initial }) {
           text: error.message,
           recipes: [],
           retryText: text,
-          id: crypto.randomUUID(),
+          id: newId(),
         },
       ]);
     } finally {
@@ -283,10 +511,22 @@ function Workspace({ initial }) {
     setBusy(false);
     try {
       const revision = await persistence.flush();
+      await chatPersistence.flush();
       const state = await stateRequest("DELETE", { revision });
       persistence.acceptReset(state);
+      showConversation({
+        id: newId(),
+        revision: 0,
+        messages: [],
+        draft: "",
+        maxTime: 30,
+        busy: false,
+      });
+      setChatHistory([]);
+      setHistoryOffset(null);
       setIngredients(state.ingredients);
       setPantry(state.pantry);
+      setPantryDates(state.pantryDates || {});
       setProfile(state.profile);
       setSaved(state.saved);
       setGenerated(state.generated);
@@ -364,177 +604,175 @@ function Workspace({ initial }) {
       </article>
     );
   }
-  const filteredIngredients = ingredients.filter(
-    (i) =>
-      (category === "Todos" || i.category === category) &&
-      i.name.toLocaleLowerCase("es").includes(search.toLocaleLowerCase("es")),
-  );
   return (
     <>
-      <div className={`app-shell culinary-shell ${mobile ? "mobile-preview" : ""}`}>
-        <CulinaryHeader brand={<Brand />} page={page} profile={profile} ingredients={ingredients}
-          recipes={allRecipes.filter(recipe => matchesProfile(recipe, profile, ingredients))}
-          onNavigate={go} onOpenRecipe={openRecipe} mobile={mobile}
-          onToggleMobile={() => navigate({ ...navigation, mobile: !mobile }, true)}
-          onFavorites={() => { go("recipes"); setRecipeTab("Guardadas"); setMeal("Todas"); }}
-          onSearchIngredient={query => { go("pantry"); setCategory("Todos"); setSearch(query); }} />
+      <div
+        className={`app-shell culinary-shell ${mobile ? "mobile-preview" : ""}`}
+      >
+        <CulinaryHeader
+          brand={<Brand />}
+          page={page}
+          profile={profile}
+          ingredients={ingredients}
+          recipes={allRecipes.filter((recipe) =>
+            matchesProfile(recipe, profile, ingredients),
+          )}
+          onNavigate={go}
+          onOpenRecipe={openRecipe}
+          mobile={mobile}
+          onLogout={logout}
+          loggingOut={loggingOut}
+          onConnect={() => setPhoneOpen(true)}
+          onToggleMobile={() =>
+            navigate({ ...navigation, mobile: !mobile }, true)
+          }
+          onFavorites={() => {
+            go("recipes");
+            setRecipeTab("Guardadas");
+            setMeal("Todas");
+          }}
+          onSearchIngredient={(query) => {
+            go("pantry");
+            setCategory("Todos");
+            setSearch(query);
+          }}
+        />
         <div className="main-area">
-          <div
-            className={`storage-status ${persistence.status}`}
-            role={persistence.error ? "alert" : "status"}
-          >
-            <span>
-              {persistence.error
-                ? persistence.error.message
-                : persistence.status === "saving"
-                  ? "Guardando cambios…"
-                  : "Cambios guardados en esta PC"}
-            </span>
-            {persistence.error &&
-              (persistence.error.code === "STATE_CONFLICT" ? (
-                <button onClick={persistence.discardAndReload}>
-                  Descartar cambios pendientes y recargar
-                </button>
-              ) : (
-                <button onClick={() => persistence.flush().catch(() => {})}>
-                  Reintentar guardado
-                </button>
-              ))}
-          </div>
+          {(persistence.error ||
+            persistence.status === "saving" ||
+            chatPersistence.saving) && (
+            <div
+              className={`storage-status ${persistence.status}`}
+              role={persistence.error ? "alert" : "status"}
+            >
+              <span>
+                {persistence.error
+                  ? persistence.error.message
+                  : persistence.status === "saving"
+                    ? "Guardando cambios…"
+                    : chatPersistence.saving
+                      ? "Guardando conversación…"
+                      : ""}
+              </span>
+              {persistence.error &&
+                (persistence.error.code === "STATE_CONFLICT" ? (
+                  <button onClick={persistence.discardAndReload}>
+                    Descartar cambios pendientes y recargar
+                  </button>
+                ) : (
+                  <button onClick={() => persistence.flush().catch(() => {})}>
+                    Reintentar guardado
+                  </button>
+                ))}
+            </div>
+          )}
+          {chatPersistence.error && (
+            <div className="chat-save-error" role="alert">
+              <span>{chatPersistence.error.message}</span>
+              <button onClick={() => chatPersistence.flush().catch(() => {})}>
+                Reintentar guardar chat
+              </button>
+              <button
+                onClick={() => {
+                  chatPersistence.discardPending();
+                  persistence.discardAndReload();
+                }}
+              >
+                Descartar cambios pendientes y recargar
+              </button>
+            </div>
+          )}
           <main>
             {page === "home" && (
               <div className="page-enter simple-home">
                 <div className="page-title">
                   <h1>¿Qué cocinamos hoy?</h1>
-                  <p>Genera recetas con los ingredientes que tienes y los filtros de tu perfil.</p>
+                  <p>
+                    Genera recetas con los ingredientes que tienes y los filtros
+                    de tu perfil.
+                  </p>
                 </div>
                 <section className="panel start-cooking">
                   <Icon name="chef" size={38} />
                   <h2>Tu cocina, en tres pasos</h2>
                   <ol className="start-steps">
-                    <li><button className="text-btn" onClick={() => go("pantry")}>Elige tus ingredientes</button><span>{pantry.length} en tu despensa</span></li>
-                    <li><button className="text-btn" onClick={() => go("profile")}>Revisa tus preferencias y alergias</button><span>{profile.diet}</span></li>
-                    <li><span>Pide una receta a Nutribot</span><span>La IA usa tu despensa y tus filtros.</span></li>
+                    <li>
+                      <button className="text-btn" onClick={() => go("pantry")}>
+                        Elige tus ingredientes
+                      </button>
+                      <span>{pantry.length} en tu despensa</span>
+                    </li>
+                    <li>
+                      <button
+                        className="text-btn"
+                        onClick={() => go("profile")}
+                      >
+                        Revisa tus preferencias y alergias
+                      </button>
+                      <span>{profile.diet}</span>
+                    </li>
+                    <li>
+                      <span>Pide una receta a Nutribot</span>
+                      <span>La IA usa tu despensa y tus filtros.</span>
+                    </li>
                   </ol>
                   {button("Pedir una receta", () => go("assistant"), "spark")}
                 </section>
-                <button className="text-btn saved-shortcut" onClick={() => go("recipes")}>
-                  <Icon name="book" size={18} /> Ver mis recetas · {generated.length} generadas
+                <button
+                  className="text-btn saved-shortcut"
+                  onClick={() => go("recipes")}
+                >
+                  <Icon name="book" size={18} /> Ver mis recetas ·{" "}
+                  {generated.length} generadas
                 </button>
               </div>
             )}
             {page === "pantry" && (
-              <div className="page-enter">
-                <div className="page-title">
-                  <div className="eyebrow">EL PUNTO DE PARTIDA</div>
-                  <h1>¿Qué hay en tu cocina?</h1>
-                  <p>
-                    Añade los ingredientes que tienes. Nosotros ponemos las
-                    ideas.
-                  </p>
-                </div>
-                <div className="inventory-banner">
-                  <span className="soft-icon">
-                    <Icon name="pantry" size={27} />
-                  </span>
-                  <div>
-                    <strong>{pantry.length} ingredientes en tu despensa</strong>
-                    <p>
-                      Selecciona para añadir o quitar. Comprueba las cantidades
-                      al abrir una receta.
-                    </p>
-                  </div>
-                  {button("Buscar recetas", () => generate(), "spark")}
-                </div>
-                <section className="panel pantry-import-intro">
-                  <div><h2>Agrega lo que tienes</h2><p>Escribe tu lista o toma una foto. Revisa los ingredientes antes de guardarlos.</p></div>
-                  <div className="pantry-import-actions">
-                    <button className="btn primary" onClick={() => openPantryImport("text")}><Icon name="plus" size={18} />Agregar por texto</button>
-                    <button className="btn secondary" onClick={() => openPantryImport("image")}><Icon name="camera" size={18} />Agregar por foto</button>
-                  </div>
-                </section>
-                <div className="search-box">
-                  <Icon name="search" />
-                  <input
-                    aria-label="Buscar ingrediente"
-                    placeholder="Busca un ingrediente: tomate, arroz, frijoles…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                  {search && (
-                    <button
-                      aria-label="Limpiar búsqueda"
-                      onClick={() => setSearch("")}
-                    >
-                      <Icon name="close" size={18} />
-                    </button>
-                  )}
-                </div>
-                <div className="filter-row">
-                  {[
-                    "Todos",
-                    "Vegetales",
-                    "Frutas",
-                    "Granos",
-                    "Proteínas",
-                    "Lácteos",
-                    "Otros",
-                  ].map((c) => (
-                    <button
-                      className={category === c ? "selected" : ""}
-                      onClick={() => setCategory(c)}
-                      key={c}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-                <div className="ingredient-grid">
-                  {filteredIngredients.map((i) => (
-                    <button
-                      key={i.id}
-                      aria-pressed={pantry.includes(i.id)}
-                      className={`ingredient-tile ${pantry.includes(i.id) ? "in-pantry" : ""}`}
-                      onClick={() => toggleIngredient(i.id)}
-                    >
-                      <span className="ingredient-emoji">{i.emoji}</span>
-                      <strong>{i.name}</strong>
-                      <small>{i.category}</small>
-                      <span className="ingredient-toggle">
-                        <Icon
-                          name={pantry.includes(i.id) ? "check" : "plus"}
-                          size={17}
-                        />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                {!filteredIngredients.length && (
-                  <Empty
-                    icon="search"
-                    title="Ese ingrediente aún no está en el catálogo"
-                  >
-                    Agrégalo por texto, foto o manualmente usando las opciones de arriba.
-                  </Empty>
-                )}
-                <div className="tip-card">
-                  <Icon name="leaf" size={24} />
-                  <div>
-                    <strong>Una despensa más consciente</strong>
-                    <p>
-                      Antes de elegir, revisa qué alimentos necesitas aprovechar
-                      primero.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <PantryWorkspace
+                pantry={pantry}
+                dates={pantryDates}
+                ingredients={ingredients}
+                search={search}
+                setSearch={setSearch}
+                category={category}
+                setCategory={setCategory}
+                onToggle={toggleIngredient}
+                onRemove={removeIngredients}
+                onDate={setIngredientDate}
+                onImport={openPantryImport}
+                onGenerate={() => generate()}
+              />
             )}
-            {page === "assistant" && <AssistantWorkspace
-              profile={profile} pantry={pantry} ingredients={ingredients} messages={messages}
-              message={message} setMessage={setMessage} maxTime={maxTime} setMaxTime={setMaxTime}
-              busy={busy} connection={connection} saved={saved} generated={generated} generate={generate}
-              onClear={() => { setMessages([]); setMessage(""); }} onNavigate={go} onImport={openPantryImport}
-              onOpenRecipe={openRecipe} onSave={toggleSave} endRef={end} />}
+            {page === "assistant" && (
+              <AssistantWorkspace
+                profile={profile}
+                pantry={pantry}
+                ingredients={ingredients}
+                messages={messages}
+                message={message}
+                setMessage={setMessage}
+                maxTime={maxTime}
+                setMaxTime={setMaxTime}
+                busy={busy || switchingChat}
+                saved={saved}
+                generated={generated}
+                generate={generate}
+                onNewChat={() => switchChat(null)}
+                chatId={chatPersistence.id}
+                chatHistory={chatHistory}
+                onSelectChat={switchChat}
+                historyLoading={historyLoading}
+                historyError={historyError}
+                onRefreshHistory={() => loadHistory()}
+                hasMoreHistory={historyOffset !== null}
+                onMoreHistory={() => loadHistory(historyOffset)}
+                onNavigate={go}
+                onImport={openPantryImport}
+                onOpenRecipe={openRecipe}
+                onSave={toggleSave}
+                endRef={end}
+              />
+            )}
             {page === "recipes" && (
               <div className="page-enter">
                 <div className="page-title">
@@ -648,19 +886,44 @@ function Workspace({ initial }) {
                       El perfil, la despensa y las recetas se guardan en la base
                       de datos de esta PC y permanecen al cerrar el navegador.
                       Al generar, se envían a Google tu mensaje, los
-                      ingredientes y los filtros alimentarios. Nombre, peso,
-                      estatura e indicaciones escritas no se envían a Google.
-                      Usa datos ficticios en las pruebas.
+                      ingredientes y los filtros alimentarios. Correo,
+                      contraseña, nombre, fecha de nacimiento, peso, estatura e
+                      indicaciones del perfil no se envían a Google. Usa datos
+                      ficticios en las pruebas.
                     </p>
                     <button
                       className="text-btn"
                       onClick={() => setConfirmReset(true)}
                     >
                       <Icon name="reset" size={16} />
-                      Borrar datos locales y restaurar
+                      Restaurar los datos de mi cuenta
                     </button>
                   </div>
                 </section>
+                <section className="profile-account-actions">
+                  <div>
+                    <Icon name="lock" size={21} />
+                    <div>
+                      <h3>Seguridad de tu cuenta</h3>
+                      <p>{profile.email}</p>
+                    </div>
+                  </div>
+                  <button
+                    className="btn secondary"
+                    disabled
+                    title="Disponible próximamente"
+                  >
+                    Cambiar contraseña · Próximamente
+                  </button>
+                </section>
+                <button
+                  className="profile-logout"
+                  disabled={loggingOut}
+                  onClick={logout}
+                >
+                  <Icon name="logout" size={19} />
+                  {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
+                </button>
               </div>
             )}
           </main>
@@ -694,7 +957,13 @@ function Workspace({ initial }) {
           ))}
         </nav>
       </div>
-      <PantryImport catalog={ingredients} onSave={addPantry} openRequest={pantryImportRequest} hideIntro />
+      <PhoneConnection open={phoneOpen} onClose={() => setPhoneOpen(false)} />
+      <PantryImport
+        catalog={ingredients}
+        onSave={addPantry}
+        openRequest={pantryImportRequest}
+        hideIntro
+      />
       <dialog
         className="recipe-dialog"
         aria-labelledby="recipe-title"
@@ -888,9 +1157,10 @@ function Workspace({ initial }) {
         <Icon name="reset" size={30} />
         <h2 id="reset-title">¿Volvemos al inicio?</h2>
         <p>
-          Se borrarán el perfil, las recetas guardadas, el chat y los cambios de
-          esta instalación, también para otras pestañas de esta PC. Las copias
-          de seguridad no se borran.
+          Se restaurarán las preferencias y la despensa de tu cuenta, y se
+          borrarán sus recetas guardadas y su chat. El cambio también se verá en
+          tus otros dispositivos. Conservarás tu acceso, nombre y fecha de
+          nacimiento.
         </p>
         <div className="actions">
           <button
@@ -958,6 +1228,22 @@ function ProfileForm({ profile, onSave, catalog }) {
               placeholder="Tu nombre"
             />
           </label>
+          <label>
+            Fecha de nacimiento <span className="optional">opcional</span>
+            <input
+              type="date"
+              autoComplete="bday"
+              max={todayDate()}
+              min="1900-01-01"
+              value={draft.birthDate || ""}
+              onChange={(event) => field("birthDate", event.target.value)}
+            />
+          </label>
+          {ageFromBirthDate(draft.birthDate) !== null && (
+            <p className="profile-age">
+              Edad: {ageFromBirthDate(draft.birthDate)} años
+            </p>
+          )}
           <div className="field-row">
             <label>
               Peso <span className="optional">opcional</span>
@@ -1085,7 +1371,7 @@ function ProfileForm({ profile, onSave, catalog }) {
       <div className="form-actions">
         <span>
           <Icon name="shield" size={16} />
-          Se conserva en esta PC al cerrar el navegador
+          Se conserva en la PC de Nutribot al cerrar el navegador
         </span>
         <button type="submit" className="btn primary">
           Guardar mi perfil

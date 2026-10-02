@@ -45,7 +45,7 @@ test("custom ingredients enter prompts and recipes, with dietary and exclusion f
 });
 test("pantry API is POST-only, origin protected and analyzes without saving", async () => {
   let analyses = 0, writes = 0;
-  const server = createAppServer({ analyze: async raw => { pantryParts(raw); analyses++; return { items: [item] }; }, store: { addPantry: async () => { writes++; return {}; } } });
+  const server = createAppServer({ authentication: false, analyze: async raw => { pantryParts(raw); analyses++; return { items: [item] }; }, store: { addPantry: async () => { writes++; return {}; } } });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   try {

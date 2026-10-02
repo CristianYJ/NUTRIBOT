@@ -14,23 +14,33 @@ La integración usa esquemas temporales únicamente en `PGTESTDATABASE`, una bas
 
 ## 2. Recorrido manual
 
-Inicia con `npm run dev` y abre http://127.0.0.1:5173/?mobile=1.
+Inicia con `npm run dev`, abre http://127.0.0.1:5173 y registra una cuenta de prueba.
 
 | Prueba | Resultado esperado |
 | --- | --- |
+| Crear dos cuentas | Despensas, recetas generadas y chats independientes |
+| Registrar desde localhost y vincular los datos anteriores | Conserva el perfil previo; la opción solo se puede usar una vez |
+| Abrir el QR desde otro dispositivo en la misma red | Pide iniciar sesión y recupera los datos de esa cuenta |
+| Pasar el mouse o pulsar el avatar | Muestra Mi perfil, Conectar teléfono y Cerrar sesión |
+| Cambiar fecha de nacimiento y guardar | Persiste al recargar; la edad se calcula según el cumpleaños |
+| Pulsar Cerrar sesión desde el menú o Mi perfil | Vuelve al acceso e invalida la sesión del dispositivo |
+| Revisar Cambiar contraseña | Visible y deshabilitado |
 | Abrir Despensa y recargar | Continúa en Despensa |
 | Abrir Nutribot IA, cambiar a vista amplia y recargar | Conserva sección y vista amplia |
 | Ir a Perfil y usar Atrás/Adelante del navegador | Recorre las secciones visitadas |
-| Escribir un borrador en Nutribot IA y recargar | El borrador permanece en esa pestaña |
+| Escribir un borrador, esperar guardado y recargar | Abre un chat nuevo; el borrador anterior está en Historial de chats |
 | Añadir un ingrediente y esperar confirmación de guardado | Permanece al recargar |
 | Guardar preferencias en Perfil | Se recuperan al volver a abrir la página |
 | Generar con Gemini | Aparece una receta nueva identificada como Gemini; consume cuota |
 | Guardar con el corazón y recargar | Aparece en Mis recetas → Guardadas |
-| Recargar después de recibir una respuesta | La conversación y las tarjetas siguen disponibles en esa sesión |
-| Limpiar chat | Se vacía la conversación; las recetas permanecen en Mis recetas |
-| Recargar mientras se genera | Aparece un aviso local; revisar Mis recetas antes de repetir el pedido |
+| Recargar después de recibir una respuesta | Abre un chat nuevo; conversación y tarjetas anteriores accesibles desde Historial de chats |
+| Pulsar Nuevo chat y abrir Historial de chats | Conserva y permite recuperar la conversación anterior |
+| Seleccionar varios ingredientes y quitarlos | Solo desaparecen los seleccionados; persiste al recargar |
+| Guardar una fecha del envase o una estimación | Muestra la fecha y el plazo; permanece al añadir otros ingredientes |
+| Abrir otra cuenta | No puede acceder a conversaciones ni fechas de la primera |
+| Recargar mientras se genera | Abre un chat nuevo; al abrir el anterior aparece un aviso local. Revisar Mis recetas antes de repetir el pedido |
 
-Usa datos ficticios para la presentación. Cada pedido a Gemini es independiente: el historial visible no se envía como contexto al proveedor. El almacenamiento de sesión requiere que el navegador lo permita; las recetas se guardan por separado en PostgreSQL.
+Usa datos ficticios para la presentación. Cada pedido a Gemini es independiente: el historial visible no se envía como contexto al proveedor. El chat y las recetas se guardan por separado en PostgreSQL. El navegador debe permitir la cookie de sesión de Nutribot.
 
 ## 3. Ver los datos en DBeaver
 
@@ -61,7 +71,7 @@ npm run db:backup
 npm run db:verify-backup
 ```
 
-La segunda orden debe mostrar `restored: true` y `verifiedTables: 21`. Restaura en la base de pruebas y compara recuentos; conserva el origen. Si el esquema destino ya existe, se detiene sin sobrescribirlo. Las copias contienen información privada y no se suben a GitHub.
+La segunda orden debe mostrar `restored: true` y `verifiedTables: 24`. Restaura en la base de pruebas y compara recuentos; conserva el origen. Si el esquema destino ya existe, se detiene sin sobrescribirlo. Las copias contienen información privada y no se suben a GitHub.
 
 ## Si algo falla
 

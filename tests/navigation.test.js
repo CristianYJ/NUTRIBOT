@@ -2,23 +2,80 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readNavigation, navigationUrl } from "../src/navigation.js";
 import { readChat, writeChat } from "../src/chat-session.js";
+import { validateChat } from "../server/chat.js";
+
+test("long conversations retain early messages and enforce an explicit limit", () => {
+  const messages = Array.from({ length: 200 }, (_, i) => ({
+    id: String(i),
+    role: "user",
+    text: `Mensaje ${i}`,
+  }));
+  let raw;
+  const storage = {
+    getItem: () => raw,
+    setItem: (_, value) => {
+      raw = value;
+    },
+  };
+  writeChat(storage, { messages, draft: "", maxTime: 30, busy: false });
+  const restored = readChat(storage, []);
+  assert.equal(restored.messages.length, 200);
+  assert.equal(restored.messages[0].text, "Mensaje 0");
+  assert.equal(validateChat({ ...restored, revision: 0, busy: false }).messages.length, 200);
+  assert.throws(() =>
+    validateChat({
+      ...restored,
+      revision: 0,
+      busy: false,
+      messages: [...messages, { id: "201", role: "user", text: "Otro mensaje" }],
+    }),
+  );
+});
 
 test("navigation survives reload and changing layout without dropping the page or other query parameters", () => {
   const current = new URL("http://localhost:5173/?mobile=1&test=yes#assistant");
-  assert.deepEqual(readNavigation(current), { page: "assistant", mobile: true });
+  assert.deepEqual(readNavigation(current), {
+    page: "assistant",
+    mobile: true,
+  });
   const wide = navigationUrl(current, { page: "assistant", mobile: false });
   assert.deepEqual(readNavigation(wide), { page: "assistant", mobile: false });
   assert.equal(wide.searchParams.get("test"), "yes");
-  assert.equal(navigationUrl(wide, { page: "profile", mobile: true }).hash, "#profile");
-  assert.deepEqual(readNavigation(new URL("http://localhost/?mobile=0#planner")), { page: "home", mobile: false });
+  assert.equal(
+    navigationUrl(wide, { page: "profile", mobile: true }).hash,
+    "#profile",
+  );
+  assert.deepEqual(
+    readNavigation(new URL("http://localhost/?mobile=0#planner")),
+    { page: "home", mobile: false },
+  );
 });
 
 test("chat reload resolves recipes from the database and preserves the draft; removed recipes stay removed", () => {
   let raw;
-  const storage = { getItem: () => raw, setItem: (_, value) => { raw = value; } };
-  writeChat(storage, { messages: [{ id: "1", role: "bot", text: "Lista", recipes: [{ id: "recipe", title: "old" }] }], draft: "Arroz", maxTime: 15, busy: false });
+  const storage = {
+    getItem: () => raw,
+    setItem: (_, value) => {
+      raw = value;
+    },
+  };
+  writeChat(storage, {
+    messages: [
+      {
+        id: "1",
+        role: "bot",
+        text: "Lista",
+        recipes: [{ id: "recipe", title: "old" }],
+      },
+    ],
+    draft: "Arroz",
+    maxTime: 15,
+    busy: false,
+  });
   assert(!raw.includes('"title"'));
-  const restored = readChat(storage, [{ id: "recipe", title: "from database" }]);
+  const restored = readChat(storage, [
+    { id: "recipe", title: "from database" },
+  ]);
   assert.equal(restored.draft, "Arroz");
   assert.equal(restored.maxTime, 15);
   assert.equal(restored.messages[0].recipes[0].title, "from database");
@@ -26,20 +83,53 @@ test("chat reload resolves recipes from the database and preserves the draft; re
 });
 
 test("interrupted requests show a local notice and unavailable or corrupt session storage does not crash", () => {
-  const interrupted = readChat({ getItem: () => JSON.stringify({ messages: [], busy: true }) }, []);
+  const interrupted = readChat(
+    { getItem: () => JSON.stringify({ messages: [], busy: true }) },
+    [],
+  );
   assert.equal(interrupted.messages[0].source, "local");
   assert.match(interrupted.messages[0].text, /recargó/);
   assert.deepEqual(readChat({ getItem: () => "broken" }, []).messages, []);
-  assert.equal(writeChat({ setItem: () => { throw Error("quota"); } }, { messages: [] }), false);
+  assert.equal(
+    writeChat(
+      {
+        setItem: () => {
+          throw Error("quota");
+        },
+      },
+      { messages: [] },
+    ),
+    false,
+  );
 });
 
 test("pantry photo stays in memory while ingredient confirmations survive a reload", () => {
   let raw;
-  const storage = { getItem: () => raw, setItem: (_, value) => { raw = value; } };
-  writeChat(storage, { messages: [
-    { id: "photo", role: "user", text: "Agregué ingredientes", photo: "data:image/jpeg;base64,PRIVATE_PHOTO" },
-    { id: "confirmation", role: "bot", text: "Despensa actualizada", ingredientNames: ["Tomate"] },
-  ], draft: "", maxTime: 30, busy: false });
+  const storage = {
+    getItem: () => raw,
+    setItem: (_, value) => {
+      raw = value;
+    },
+  };
+  writeChat(storage, {
+    messages: [
+      {
+        id: "photo",
+        role: "user",
+        text: "Agregué ingredientes",
+        photo: "data:image/jpeg;base64,PRIVATE_PHOTO",
+      },
+      {
+        id: "confirmation",
+        role: "bot",
+        text: "Despensa actualizada",
+        ingredientNames: ["Tomate"],
+      },
+    ],
+    draft: "",
+    maxTime: 30,
+    busy: false,
+  });
   assert(!raw.includes("PRIVATE_PHOTO"));
   assert(!raw.includes('"photo":'));
   const restored = readChat(storage, []);

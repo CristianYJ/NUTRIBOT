@@ -1,8 +1,54 @@
 const paths = {
-  bot: <><rect x="4" y="7" width="16" height="14" rx="4" /><path d="M12 7V3m-2 0h4M1 12v5m22-5v5M8 16h8" /><circle cx="8.5" cy="12" r=".8" /><circle cx="15.5" cy="12" r=".8" /></>,
-  chat: <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-2 2V11.5a9.5 9.5 0 0 1 19 0Z" />,
-  camera: <><path d="M8 5 9 3h6l1 2h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" /><circle cx="12" cy="13" r="4" /></>,
-  history: <><path d="M3 10a9 9 0 1 1 1 7M3 3v7h7M12 7v5l3 2" /></>,
+  lock: (
+    <>
+      <rect x="4" y="10" width="16" height="11" rx="2" />
+      <path d="M8 10V6a4 4 0 0 1 8 0v4M12 14v3" />
+    </>
+  ),
+  mail: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 6 9 7 9-7" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  logout: (
+    <>
+      <path d="M9 4H4v16h5M10 12h11m-4-4 4 4-4 4" />
+    </>
+  ),
+  qr: (
+    <>
+      <path d="M3 3h6v6H3Zm12 0h6v6h-6ZM3 15h6v6H3Zm12 0h3v3h3v3h-6v-3m6-6v2M3 12h3m6-9v3m0 6h3m-3 6v3" />
+    </>
+  ),
+  bot: (
+    <>
+      <rect x="4" y="7" width="16" height="14" rx="4" />
+      <path d="M12 7V3m-2 0h4M1 12v5m22-5v5M8 16h8" />
+      <circle cx="8.5" cy="12" r=".8" />
+      <circle cx="15.5" cy="12" r=".8" />
+    </>
+  ),
+  chat: (
+    <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-2 2V11.5a9.5 9.5 0 0 1 19 0Z" />
+  ),
+  camera: (
+    <>
+      <path d="M8 5 9 3h6l1 2h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" />
+      <circle cx="12" cy="13" r="4" />
+    </>
+  ),
+  history: (
+    <>
+      <path d="M3 10a9 9 0 1 1 1 7M3 3v7h7M12 7v5l3 2" />
+    </>
+  ),
   play: <path d="m8 4 12 8-12 8Z" />,
   calendar: (
     <>

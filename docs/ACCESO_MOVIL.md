@@ -10,7 +10,7 @@ El QR contiene únicamente la dirección de la aplicación; no contiene una cont
 
 ## Crear cuentas independientes
 
-1. Escribe tu correo y pulsa **Continuar con correo → Crear cuenta**.
+1. Desde la landing pulsa **Comenzar gratis** o **Iniciar sesión**. Escribe tu correo y pulsa **Continuar con correo**. El sistema consulta PostgreSQL: si el correo existe, muestra la contraseña para iniciar sesión; si no existe, abre automáticamente el registro. **Cambiar** permite corregir el correo.
 2. Completa tu nombre y una contraseña de entre 15 y 128 caracteres. La fecha de nacimiento es opcional. El correo identifica la cuenta local: no se envía un correo de verificación.
 3. Si ya tenías datos antes de esta actualización, haz el primer registro desde `127.0.0.1` o `localhost` en la PC y deja marcada **Vincular a esta cuenta el perfil, la despensa y las recetas que ya están en esta PC**. Conserva el nombre y los datos anteriores; después puedes editar el nombre en Mi perfil. Esta opción solo está disponible una vez y desde la PC anfitriona.
 4. Las cuentas nuevas tienen una despensa vacía y comparten únicamente el catálogo inicial de ejemplo. Cada cuenta mantiene sus propios ingredientes añadidos, restricciones, recetas generadas, favoritos, opiniones y chat.

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import { availability, matchesProfile, requiresReview } from "./engine.js";
 
@@ -130,11 +130,22 @@ export default function AssistantWorkspace({
   const guide = () =>
     lastRecipe ? onOpenRecipe(lastRecipe) : onNavigate("recipes");
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [pantryExpanded] = useState(
-    () => window.matchMedia("(min-width: 1001px)").matches,
-  );
+  const layout = useRef(null);
+  const [pantryExpanded, setPantryExpanded] = useState(false);
+  useEffect(() => {
+    let compact;
+    const observer = new ResizeObserver(([entry]) => {
+      const nextCompact = entry.contentRect.width <= 1000;
+      if (compact !== nextCompact) {
+        compact = nextCompact;
+        setPantryExpanded(!nextCompact);
+      }
+    });
+    observer.observe(layout.current);
+    return () => observer.disconnect();
+  }, []);
   return (
-    <div className="page-enter culinary-assistant">
+    <div className="page-enter culinary-assistant" ref={layout}>
       <h1 className="visually-hidden">Tu chat de cocina</h1>
       <div className="culinary-assistant-grid">
         <section
@@ -504,7 +515,13 @@ export default function AssistantWorkspace({
                 )}
               </div>
             ) : (
-              <details className="context-pantry-details" open={pantryExpanded}>
+              <details
+                className="context-pantry-details"
+                open={pantryExpanded}
+                onToggle={(event) =>
+                  setPantryExpanded(event.currentTarget.open)
+                }
+              >
                 <summary>
                   <span>
                     <Icon name="pantry" size={20} />

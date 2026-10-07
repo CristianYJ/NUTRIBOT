@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Icon from "./Icons.jsx";
 import { accountRequest } from "./auth-api.js";
 import { todayDate } from "./date-utils.js";
 
 export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, []);
   const [step, setStep] = useState("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,16 +28,20 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
   async function submit(event) {
     event.preventDefault();
     setError("");
-    if (step === "email") {
-      setStep("login");
-      return;
-    }
     if (step === "register" && password !== confirm) {
       setError("Las contraseñas no coinciden.");
       return;
     }
     setBusy(true);
     try {
+      if (step === "email") {
+        const result = await accountRequest("lookup", { email });
+        if (!["login", "register"].includes(result.nextStep))
+          throw Error("No se pudo comprobar el correo. Inténtalo de nuevo.");
+        setEmail(email.trim().toLowerCase());
+        changeStep(result.nextStep);
+        return;
+      }
       const session = await accountRequest(step, {
         email,
         password,
@@ -55,7 +62,11 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
   }
   return (
     <div className="auth-page">
-      <header className="auth-brand">{brand}</header>
+      <header className="auth-brand">
+        <a href="#welcome" aria-label="Volver al inicio de NutriBot">
+          {brand}
+        </a>
+      </header>
       <main className="auth-main">
         <section className="auth-card" aria-labelledby="auth-title">
           <div className="auth-card-heading">
@@ -255,21 +266,9 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
               </button>
             </fieldset>
           </form>
-          {step !== "email" && (
-            <p className="auth-switch">
-              {step === "login"
-                ? "¿Es tu primera vez?"
-                : "¿Ya tienes una cuenta?"}{" "}
-              <button
-                disabled={busy}
-                onClick={() =>
-                  changeStep(step === "login" ? "register" : "login")
-                }
-              >
-                {step === "login" ? "Crear cuenta" : "Iniciar sesión"}
-              </button>
-            </p>
-          )}
+          <p className="auth-switch">
+            <a href="#welcome">Volver al inicio</a>
+          </p>
           {canClaimLegacy && step !== "register" && (
             <p className="auth-existing">
               <Icon name="shield" size={16} />

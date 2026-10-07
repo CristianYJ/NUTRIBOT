@@ -40,6 +40,6 @@ export async function accountRequest(action, body, signal) {
   const result = await response.json();
   if (!response.ok)
     throw new Error(result.text || "No se pudo completar el acceso.");
-  acceptSession(result);
+  if (Object.hasOwn(result, "authenticated")) acceptSession(result);
   return result;
 }

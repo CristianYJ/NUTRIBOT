@@ -17,6 +17,13 @@ export function normalizeEmail(value) {
 }
 export function createAuthStore(pool, transaction) {
   return {
+    async accountExists(value) {
+      const email = normalizeEmail(value);
+      const result = await pool.query("SELECT 1 FROM profiles WHERE email=$1", [
+        email,
+      ]);
+      return result.rowCount > 0;
+    },
     async hasLegacyProfile() {
       return Boolean(
         (

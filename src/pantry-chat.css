@@ -117,6 +117,7 @@
   margin-bottom: 30px;
 }
 .pantry-heading .page-title {
+  min-width: 0;
   margin: 0;
   flex: 1;
 }
@@ -408,7 +409,7 @@
 .expiry-actions .btn {
   font-size: 12px;
 }
-@media (max-width: 1100px) {
+@container app (max-width: 1100px) {
   .pantry-heading {
     align-items: flex-start;
     gap: 20px;
@@ -427,7 +428,7 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-@media (max-width: 1000px) {
+@container app (max-width: 1000px) {
   .culinary-assistant-grid {
     grid-template-columns: 1fr;
   }
@@ -453,7 +454,7 @@
     max-height: 250px;
   }
 }
-@media (max-width: 720px) {
+@container app (max-width: 720px) {
   .pantry-heading {
     flex-direction: column;
     align-items: stretch;
@@ -465,7 +466,23 @@
     width: 100%;
   }
   .pantry-compact-banner > div:first-child {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+  }
+  .pantry-heading h1 {
+    font-size: clamp(26px, 7cqi, 32px);
+  }
+  .pantry-compact-banner .btn {
+    min-width: 0;
+    white-space: normal;
+    padding-inline: 9px;
+  }
+  .pantry-view-tabs {
+    min-width: 0;
+  }
+  .pantry-view-tabs button {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding-inline: 8px;
   }
   .pantry-workspace .ingredient-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

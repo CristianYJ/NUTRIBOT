@@ -2,7 +2,7 @@
 
 Nutribot genera recetas con **Gemini de Google** usando los ingredientes de tu despensa y los filtros alimentarios de tu perfil. **PostgreSQL 18** guarda perfil, despensa, recetas, favoritos y opiniones.
 
-El recorrido es sencillo: **Crear cuenta → Despensa → Perfil → Nutribot IA → Mis recetas**. Cada cuenta tiene datos independientes. La sección abierta y la vista móvil/amplia se conservan al recargar; también funcionan Atrás y Adelante. Cada acceso o recarga abre un chat nuevo. Las conversaciones y sus borradores permanecen en PostgreSQL y se abren desde Historial de chats.
+El recorrido es sencillo: **Landing → Correo electrónico → Registro o inicio de sesión → Despensa → Perfil → Nutribot IA → Mis recetas**. Cada cuenta tiene datos independientes. La sección abierta y la vista móvil/amplia se conservan al recargar; también funcionan Atrás y Adelante. Cada acceso o recarga abre un chat nuevo. Las conversaciones y sus borradores permanecen en PostgreSQL y se abren desde Historial de chats.
 
 Es una aplicación web local adaptable a móvil y PC. Todavía no es una app Android/iOS instalada ni un servicio publicado en Internet.
 

@@ -2,6 +2,8 @@ import { MAX_CHAT_MESSAGES } from "./conversation-limits.js";
 import PantryWorkspace from "./PantryWorkspace.jsx";
 import { authenticatedFetch } from "./auth-api.js";
 import AuthPage from "./AuthPage.jsx";
+import LandingPage from "./LandingPage.jsx";
+import { publicPage } from "./public-navigation.js";
 import PhoneConnection from "./PhoneConnection.jsx";
 import { accountRequest, acceptSession } from "./auth-api.js";
 import { useChatPersistence } from "./useChatPersistence.js";
@@ -54,6 +56,16 @@ function Empty({ icon = "book", title, children, action }) {
 }
 
 export default function App() {
+  const [entryPage, setEntryPage] = useState(() => publicPage(location.hash));
+  useEffect(() => {
+    const restore = () => setEntryPage(publicPage(location.hash));
+    window.addEventListener("hashchange", restore);
+    window.addEventListener("popstate", restore);
+    return () => {
+      window.removeEventListener("hashchange", restore);
+      window.removeEventListener("popstate", restore);
+    };
+  }, []);
   const [initial, setInitial] = useState(null),
     [auth, setAuth] = useState(null),
     [error, setError] = useState(""),
@@ -90,6 +102,7 @@ export default function App() {
     return () => window.removeEventListener("nutribot:unauthorized", expired);
   }, []);
   function signedOut() {
+    location.hash = "auth";
     acceptSession(null);
     setInitial(null);
     setAuth({ authenticated: false });
@@ -99,12 +112,19 @@ export default function App() {
       /* storage can be disabled */
     }
   }
+  if (entryPage === "landing" && !auth?.authenticated)
+    return <LandingPage brand={<Brand />} />;
   if (auth && !auth.authenticated)
     return (
       <AuthPage
         brand={<Brand />}
         canClaimLegacy={auth.canClaimLegacy}
         onAuthenticated={(session) => {
+          if (
+            publicPage(location.hash) === "landing" ||
+            location.hash === "#auth"
+          )
+            history.replaceState(null, "", "#home");
           setAuth(session);
           setInitial(null);
           setAttempt((value) => value + 1);

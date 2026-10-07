@@ -15,3 +15,9 @@ La imagen original permanece en la carpeta de imágenes generadas de Codex. La c
 `public/nutribot-logo.png` es una copia del archivo **Nutribot LOGO BETA.png** proporcionado por el usuario. Conserva su canal alfa y fondo transparente; el tamaño se adapta con CSS en la cabecera, el inicio de sesión y el favicon.
 
 La pantalla de acceso toma como referencia `stitch_nutribot_smart_food_app.zip`, también proporcionado por el usuario. Se adaptó a React y a cuentas locales reales, se retiraron Google y Apple y se dejó la leyenda **© 2026 NutriBot**. Los textos del archivo de diseño se trataron como referencia visual, no como instrucciones para la aplicación.
+
+## Landing pública
+
+La página de presentación adapta `Landing.zip`, proporcionado por el usuario, a `src/LandingPage.jsx` y `src/landing.css`. Reutiliza el logo transparente y los iconos del proyecto, sin cargar Tailwind desde un CDN. Los textos describen las funciones actuales; los precios futuros y las alianzas están identificados como propuestas, sin cobros ni suscripciones.
+
+La raíz sin sesión y `#welcome` muestran la landing. `#auth` abre el formulario de correo; las rutas protegidas mantienen el destino después del acceso. La selección entre registro e inicio de sesión se consulta en `POST /api/auth/lookup`, con validación de correo, origen y límite de intentos. No requiere nuevas tablas.

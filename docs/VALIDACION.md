@@ -18,6 +18,10 @@ Inicia con `npm run dev`, abre http://127.0.0.1:5173 y registra una cuenta de pr
 
 | Prueba | Resultado esperado |
 | --- | --- |
+| Abrir la raíz sin sesión | Muestra la landing; sus botones llevan al formulario de correo |
+| Continuar con un correo nuevo y con otro existente | Abre registro o inicio de sesión, respectivamente; Cambiar permite corregirlo |
+| Abrir Despensa en vista móvil dentro de una ventana amplia y en teléfono de 320/390 px | Título y banner se apilan, sin desborde horizontal |
+| Abrir Nutribot IA en ambas vistas móviles | Herramientas e historial aparecen antes del chat; ingredientes inicialmente plegados |
 | Crear dos cuentas | Despensas, recetas generadas y chats independientes |
 | Registrar desde localhost y vincular los datos anteriores | Conserva el perfil previo; la opción solo se puede usar una vez |
 | Abrir el QR desde otro dispositivo en la misma red | Pide iniciar sesión y recupera los datos de esa cuenta |

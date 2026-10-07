@@ -24,6 +24,71 @@ const writable = (s) => ({
   saved: s.saved,
   feedback: s.feedback,
 });
+
+test("email lookup routes existing accounts to login and new emails to registration without authenticating", async (t) => {
+  const f = await fixture(t);
+  await f.store.auth.register(credentials("existing@example.test"), false);
+  const server = createAppServer({ store: f.store });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        server.close(resolve);
+        server.closeAllConnections();
+      }),
+  );
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const lookup = (body) =>
+    fetch(base + "/api/auth/lookup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Nutribot-Request": "1",
+      },
+      body: JSON.stringify(body),
+    });
+  for (const [email, nextStep] of [
+    [" EXISTING@Example.Test ", "login"],
+    ["new@example.test", "register"],
+  ]) {
+    const response = await lookup({ email });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("set-cookie"), null);
+    assert.deepEqual(await response.json(), { nextStep });
+  }
+  assert.equal((await lookup({ email: "invalid" })).status, 400);
+  assert.equal((await lookup({ email: 123 })).status, 400);
+  assert.equal((await fetch(base + "/api/auth/lookup")).status, 405);
+  assert.equal(
+    (
+      await fetch(base + "/api/auth/lookup", {
+        method: "POST",
+        body: JSON.stringify({ email: "existing@example.test" }),
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await fetch(base + "/api/auth/lookup", {
+        method: "POST",
+        headers: { origin: "https://evil.test", "X-Nutribot-Request": "1" },
+        body: JSON.stringify({ email: "existing@example.test" }),
+      })
+    ).status,
+    403,
+  );
+  assert.equal((await fetch(base + "/api/state")).status, 401);
+  assert.equal(
+    (await f.sql.query("SELECT count(*)::int AS n FROM auth_sessions")).rows[0]
+      .n,
+    0,
+  );
+  let last;
+  for (let n = 0; n < 13; n++)
+    last = await lookup({ email: "new@example.test" });
+  assert.equal(last.status, 429);
+});
 async function fixture(t) {
   const schema = "nutribot_test_" + randomBytes(8).toString("hex");
   const store = await openDatabase({ database, schema });

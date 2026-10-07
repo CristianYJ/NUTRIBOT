@@ -11,3 +11,4 @@ createRoot(document.getElementById("root")).render(
 );
 
 import "./pantry-chat.css";
+import "./landing.css";

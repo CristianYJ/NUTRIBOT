@@ -156,7 +156,11 @@ export function createAuthentication(store) {
         json(res, 200, { authenticated: false });
         return true;
       }
-      if (!["/api/auth/login", "/api/auth/register"].includes(url.pathname))
+      if (
+        !["/api/auth/login", "/api/auth/register", "/api/auth/lookup"].includes(
+          url.pathname,
+        )
+      )
         throw new AppError("NOT_FOUND", "Ruta no encontrada.", 404);
       throttle(context.ip);
       running++;
@@ -167,6 +171,14 @@ export function createAuthentication(store) {
             "INVALID_REQUEST",
             "Revisa los datos del formulario.",
           );
+        if (url.pathname === "/api/auth/lookup") {
+          json(res, 200, {
+            nextStep: (await store.auth.accountExists(raw.email))
+              ? "login"
+              : "register",
+          });
+          return true;
+        }
         const id = url.pathname.endsWith("/register")
           ? await store.auth.register(raw, context.local)
           : await store.auth.login(raw);

@@ -28,6 +28,9 @@
   gap: 6px;
   color: #163b2b;
 }
+.auth-brand > a {
+  text-decoration: none;
+}
 .auth-brand .brand img {
   width: 34px;
   height: 58px;

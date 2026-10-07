@@ -18,8 +18,8 @@ function MessageStamp({ message, name }) {
       {message.role === "user"
         ? name
         : message.source === "gemini"
-          ? "Generado con Gemini"
-          : "NutriBot Sous-Chef"}
+          ? "Generado por Nutribot"
+          : "Nutribot"}
     </small>
   );
 }
@@ -164,7 +164,7 @@ export default function AssistantWorkspace({
               <div className="culinary-message-body">
                 <div className="culinary-bubble">
                   <p>
-                    ¡Hola, {profile.name.split(" ")[0] || "chef"}! 🥑 ¿Qué se te
+                    ¡Hola, {profile.name.split(" ")[0] || "chef"}! ¿Qué se te
                     antoja preparar hoy? Puedes escribirme o{" "}
                     <button
                       className="inline-action"
@@ -178,28 +178,18 @@ export default function AssistantWorkspace({
                   </p>
                 </div>
                 <small className="culinary-message-stamp">
-                  NutriBot Sous-Chef · Tu inspiración en la cocina
+                  NutriBot
                 </small>
               </div>
             </div>
             {!messages.length && (
               <div className="culinary-starter">
                 <div aria-hidden="true">
-                  {pantry.length ? (
-                    pantry
-                      .slice(0, 4)
-                      .map((id) => (
-                        <span key={id}>{byId.get(id)?.emoji || "🥗"}</span>
-                      ))
-                  ) : (
-                    <span>🥑</span>
-                  )}
                 </div>
-                <h2>Tu próxima idea empieza aquí</h2>
+                <h2>Elige una sugerencia o cuéntame qué te gustaría cocinar</h2>
                 <p>
-                  Elige una sugerencia o cuéntame qué te gustaría cocinar.
+                  Nuestros Chefsitos están para ayudarte con tu próxima idea.
                   <br />
-                  Yo pongo la inspiración; tú, el toque especial.
                 </p>
               </div>
             )}
@@ -396,9 +386,7 @@ export default function AssistantWorkspace({
             </form>
             <p className="culinary-privacy">
               <Icon name="shield" size={13} />
-              Al generar, se envían a Gemini tu mensaje, ingredientes y filtros
-              alimentarios. Tu nombre e indicaciones personales se guardan en la
-              PC de Nutribot.
+              Las consultas se envian a nuestros socios para generar recetas mas ricas y variadas para ti.
             </p>
           </div>
         </section>

@@ -639,13 +639,9 @@ function Workspace({ initial, onSignedOut }) {
           )}
           onNavigate={go}
           onOpenRecipe={openRecipe}
-          mobile={mobile}
           onLogout={logout}
           loggingOut={loggingOut}
           onConnect={() => setPhoneOpen(true)}
-          onToggleMobile={() =>
-            navigate({ ...navigation, mobile: !mobile }, true)
-          }
           onFavorites={() => {
             go("recipes");
             setRecipeTab("Guardadas");

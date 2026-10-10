@@ -1,0 +1,32 @@
+[Unit]
+Description=Nutribot
+After=network-online.target postgresql-18.service
+Wants=network-online.target
+Requires=postgresql-18.service
+
+[Service]
+Type=simple
+User=nutribot
+Group=nutribot
+WorkingDirectory=/opt/nutribot/current
+EnvironmentFile=/etc/nutribot/nutribot.env
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

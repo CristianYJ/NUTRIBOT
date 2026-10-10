@@ -1,0 +1,14 @@
+[Unit]
+Description=Deploy verified Nutribot releases from GitHub
+After=network-online.target postgresql-18.service caddy.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/nutribot-deploy/pull-release.py
+TimeoutStartSec=15min
+UMask=0077
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+NoNewPrivileges=true

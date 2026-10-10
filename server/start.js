@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { createAppServer } from "./app.js";
 import { config } from "./config.js";
 import { openDatabase } from "./database.js";
-import { connectionInfo, printConnection } from "./network.js";
+import { connectionInfo, printConnection, publicDeployment } from "./network.js";
 
 export async function startNutribot(development = false) {
   let store, api, vite;
@@ -16,12 +16,14 @@ export async function startNutribot(development = false) {
     if (store) await store.close();
   }
   try {
+    const deployment = publicDeployment(process.env, development);
     const network = await connectionInfo(
       development ? 5173 : 8787,
+      deployment,
     );
     network.proxySecret = development
       ? randomBytes(32).toString("hex")
-      : undefined;
+      : deployment?.proxySecret;
     store = await openDatabase();
     api = createAppServer({
       ...config,
@@ -31,7 +33,7 @@ export async function startNutribot(development = false) {
     });
     await new Promise((resolve, reject) => {
       api.once("error", reject);
-      api.listen(8787, development ? "127.0.0.1" : "0.0.0.0", resolve);
+      api.listen(8787, development || deployment ? "127.0.0.1" : "0.0.0.0", resolve);
     });
     if (development) {
       const { createServer } = await import("vite");
@@ -68,6 +70,7 @@ export async function startNutribot(development = false) {
   } catch (error) {
     await stop();
     console.error(
+      error.code === "INVALID_PUBLIC_CONFIG" ? error.message :
       error.code === "EADDRINUSE" || /Port 5173 is already in use/.test(error.message)
         ? "Nutribot ya está abierto o sus puertos están ocupados. Detén la instancia anterior con Ctrl+C antes de ejecutar npm run dev o npm start."
         : "No se pudo iniciar Nutribot. Comprueba que PostgreSQL esté disponible.",

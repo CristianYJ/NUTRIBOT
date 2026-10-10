@@ -1,0 +1,12 @@
+nutribot.facheritossv.com {
+    tls /etc/caddy/certs/nutribot.crt /etc/caddy/certs/nutribot.key
+    encode zstd gzip
+    request_body {
+        max_size 6MB
+    }
+    reverse_proxy 127.0.0.1:8787 {
+        header_up X-Nutribot-Proxy {$NUTRIBOT_PROXY_SECRET}
+        header_up X-Nutribot-Client {http.request.remote.host}
+        header_up X-Nutribot-Protocol https
+    }
+}

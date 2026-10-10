@@ -5,6 +5,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { AppError } from "./recipes.js";
+import { isIP } from "node:net";
 const cookieName = "nutribot_session";
 const digest = (token) => createHash("sha256").update(token).digest("hex");
 const csrf = (token) =>
@@ -29,6 +30,8 @@ export function requestContext(req, network = {}) {
     req.socket.encrypted ||
       (proxied && req.headers["x-nutribot-protocol"] === "https"),
   );
+  if (network.public && (!proxied || !secure || typeof ip !== "string" || !isIP(ip)))
+    throw new AppError("FORBIDDEN", "Proxy no autorizado.", 403);
   const host = req.headers.host || "";
   let parsed;
   try {
@@ -40,26 +43,30 @@ export function requestContext(req, network = {}) {
     !parsed ||
     parsed.host !== host ||
     parsed.username ||
-    !["localhost", "127.0.0.1", "[::1]", ...(network.hosts || [])].includes(
+    !(network.public ? network.hosts || [] : ["localhost", "127.0.0.1", "[::1]", ...(network.hosts || [])]).includes(
       parsed.hostname,
-    )
+    ) ||
+    (network.public && parsed.origin !== network.origins?.[0])
   )
     throw new AppError("FORBIDDEN", "Host no autorizado.", 403);
-  const origins = [
+  const origins = network.public ? [network.origins[0]] : [
     parsed.origin,
     ...(network.origins || []),
     "http://127.0.0.1:5173",
     "http://localhost:5173",
   ];
+  const publicNavigation = network.public && req.method === "GET" &&
+    req.headers["sec-fetch-mode"] === "navigate" &&
+    req.headers["sec-fetch-dest"] === "document";
   if (
     (req.headers.origin && !origins.includes(req.headers.origin)) ||
-    req.headers["sec-fetch-site"] === "cross-site"
+    (req.headers["sec-fetch-site"] === "cross-site" && !publicNavigation)
   )
     throw new AppError("FORBIDDEN", "Origen no autorizado.", 403);
   return {
     ip: ip || "unknown",
     secure,
-    local: isLoopback(ip),
+    local: !network.public && isLoopback(ip),
     origin: parsed.origin,
   };
 }

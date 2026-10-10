@@ -1,5 +1,28 @@
 import { networkInterfaces } from "node:os";
 import QRCode from "qrcode";
+export function publicDeployment(env = process.env, development = false) {
+  const origin = env.PUBLIC_ORIGIN?.trim();
+  const proxySecret = env.NUTRIBOT_PROXY_SECRET;
+  if (!origin && !proxySecret) return null;
+  let url;
+  try {
+    url = new URL(origin);
+  } catch {
+    // A partially configured public deployment must not fall back to LAN mode.
+  }
+  if (
+    development || !url || url.protocol !== "https:" ||
+    url.username || url.password || url.pathname !== "/" ||
+    url.search || url.hash || url.port ||
+    !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/i.test(url.hostname) ||
+    !/^[a-f0-9]{64}$/.test(proxySecret || "")
+  ) {
+    const error = new Error("Configura PUBLIC_ORIGIN con el dominio HTTPS y NUTRIBOT_PROXY_SECRET con 64 caracteres hexadecimales. El modo público requiere npm start.");
+    error.code = "INVALID_PUBLIC_CONFIG";
+    throw error;
+  }
+  return { origin: url.origin, hostname: url.hostname, proxySecret };
+}
 export function isPrivateIpv4(address) {
   const parts = address.split(".").map(Number);
   if (
@@ -33,16 +56,18 @@ export function localAddresses(interfaces = networkInterfaces()) {
     ),
   ];
 }
-export async function connectionInfo(port) {
-  const hosts = localAddresses();
-  const urls = hosts.map(
+export async function connectionInfo(port, deployment = null) {
+  const hosts = deployment ? [deployment.hostname] : localAddresses();
+  const urls = deployment ? [deployment.origin] : hosts.map(
     (host) => `http://${host}:${port}`,
   );
   return {
     hosts,
     origins: urls,
     urls,
-    secure: false,
+    secure: Boolean(deployment),
+    public: Boolean(deployment),
+    proxySecret: deployment?.proxySecret,
     qrCodes: await Promise.all(
       urls.map(async (url) => ({
         url,
@@ -56,6 +81,10 @@ export async function connectionInfo(port) {
   };
 }
 export async function printConnection(info, port) {
+  if (info.public) {
+    console.log(`\nNutribot: ${info.urls[0]}\n`);
+    return;
+  }
   console.log(
     `\nNutribot en esta PC: http://localhost:${port}`,
   );

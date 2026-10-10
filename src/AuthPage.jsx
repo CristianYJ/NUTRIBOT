@@ -267,7 +267,11 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
             </fieldset>
           </form>
           <p className="auth-switch">
-            <a href="#welcome">Volver al inicio</a>
+            <a className="auth-back-home" href="#welcome">
+              <span className="auth-back-icon"><Icon name="home" size={18} /></span>
+              <span>Volver al inicio</span>
+              <span className="auth-back-arrow" aria-hidden="true">←</span>
+            </a>
           </p>
           {canClaimLegacy && step !== "register" && (
             <p className="auth-existing">
@@ -277,8 +281,8 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
             </p>
           )}
           <p className="auth-storage">
-            Cada cuenta tiene su propia despensa. Tus datos se guardan en la PC
-            que ejecuta Nutribot.
+            Cada cuenta tiene su propia despensa. Tus datos se guardan en el
+            servidor de Nutribot.
           </p>
         </section>
         <div className="auth-footer-note">

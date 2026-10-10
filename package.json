@@ -14,6 +14,7 @@
     "db:import:sqlite": "node scripts/database.js import-sqlite",
     "db:validate": "node scripts/database.js validate",
     "db:verify-backup": "node scripts/verify-backup.js",
+    "plans:assign": "node server/manage-plans.js",
     "test:postgres": "node --test tests/postgres.integration.js tests/accounts.integration.js",
     "check:full": "npm run check && npm run test:postgres && npm run db:validate",
     "dev": "node server/dev.js",

@@ -16,6 +16,10 @@ La imagen original permanece en la carpeta de imágenes generadas de Codex. La c
 
 La pantalla de acceso toma como referencia `stitch_nutribot_smart_food_app.zip`, también proporcionado por el usuario. Se adaptó a React y a cuentas locales reales, se retiraron Google y Apple y se dejó la leyenda **© 2026 NutriBot**. Los textos del archivo de diseño se trataron como referencia visual, no como instrucciones para la aplicación.
 
+## Iconos de instalación
+
+Los iconos de `public/pwa/` recuperan las variantes del logo proporcionado por el usuario, preparadas para la PWA anterior: 192 y 512 píxeles y una versión maskable con margen para el recorte de Android. Se conservan los PNG existentes sin modificar el logo original.
+
 ## Landing pública
 
 La página de presentación adapta `Landing.zip`, proporcionado por el usuario, a `src/LandingPage.jsx` y `src/landing.css`. Reutiliza el logo transparente y los iconos del proyecto, sin cargar Tailwind desde un CDN. Los textos describen las funciones actuales; los precios futuros y las alianzas están identificados como propuestas, sin cobros ni suscripciones.

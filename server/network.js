@@ -61,6 +61,7 @@ export async function connectionInfo(port, deployment = null) {
   const urls = deployment ? [deployment.origin] : hosts.map(
     (host) => `http://${host}:${port}`,
   );
+  const installUrl = `${deployment?.origin || "https://nutribot.facheritossv.com"}/?install=1`;
   return {
     hosts,
     origins: urls,
@@ -68,16 +69,14 @@ export async function connectionInfo(port, deployment = null) {
     secure: Boolean(deployment),
     public: Boolean(deployment),
     proxySecret: deployment?.proxySecret,
-    qrCodes: await Promise.all(
-      urls.map(async (url) => ({
-        url,
-        image: await QRCode.toDataURL(url, {
-          width: 280,
-          margin: 2,
-          errorCorrectionLevel: "M",
-        }),
-      })),
-    ),
+    qrCodes: [{
+      url: installUrl,
+      image: await QRCode.toDataURL(installUrl, {
+        width: 280,
+        margin: 2,
+        errorCorrectionLevel: "M",
+      }),
+    }],
   };
 }
 export async function printConnection(info, port) {
@@ -103,6 +102,6 @@ export async function printConnection(info, port) {
   if (info.urls.length > 1)
     console.log("Otras direcciones de esta PC:", info.urls.slice(1).join(", "));
   console.log(
-    "El QR también está en el menú de perfil → Conectar teléfono. Mantén esta PC y Nutribot encendidos.\n",
+    "Este QR abre la versión local. Para instalar la versión publicada, usa el menú de perfil → Instalar en mi teléfono.\n",
   );
 }

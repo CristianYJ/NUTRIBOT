@@ -7,6 +7,7 @@ import { openDatabase } from "../server/database.js";
 import { postgresOptions } from "../server/postgres-config.js";
 import { createAppServer } from "../server/app.js";
 import { validateOutput } from "../server/recipes.js";
+import { assignPlan } from "../server/plans.js";
 const database = process.env.PGTESTDATABASE;
 if (!database?.endsWith("_test") || database === process.env.PGDATABASE)
   throw Error("Usa una base de pruebas independiente terminada en _test.");
@@ -23,6 +24,44 @@ const writable = (s) => ({
   pantryDates: s.pantryDates,
   saved: s.saved,
   feedback: s.feedback,
+});
+
+test("plans default to Basic, audit administrative changes, isolate users and survive profile resets", async (t) => {
+  const f = await fixture(t);
+  const id = await f.store.auth.register({ ...credentials("plan@example.test"),
+    plan: "nutripro_plus", plan_code: "nutripro_plus" }, false);
+  const account = f.store.forProfile(id);
+  assert.deepEqual((await account.getState()).profile.plan, { code: "basico", name: "Básico" });
+  assert.deepEqual((await f.store.getState()).profile.plan, { code: "basico", name: "Básico" });
+  const catalog = (await f.sql.query("SELECT name FROM plans ORDER BY code")).rows.map(row => row.name);
+  assert.deepEqual(catalog, ["Básico", "NutriPro", "NutriPro+"]);
+  const countHistory = async () => Number((await f.sql.query("SELECT count(*) AS n FROM profile_plan_history WHERE profile_id=$1", [id])).rows[0].n);
+  assert.equal(await countHistory(), 1);
+  const change = { email: "plan@example.test", plan: "nutripro", reason: "Asignación de prueba" };
+  assert.equal((await assignPlan(f.sql, change)).applied, false);
+  assert.equal((await account.getState()).profile.plan.code, "basico");
+  assert.equal(await countHistory(), 1);
+  assert.equal((await assignPlan(f.sql, { ...change, apply: true })).applied, true);
+  assert.equal(await countHistory(), 2);
+  assert.equal((await account.getState()).profile.plan.code, "nutripro");
+  assert.equal((await assignPlan(f.sql, { ...change, apply: true })).applied, false);
+  assert.equal(await countHistory(), 2);
+  await assignPlan(f.sql, { ...change, plan: "nutripro_plus", apply: true });
+  const current = await account.getState();
+  await account.saveState({ ...writable(current), profile: { ...current.profile,
+    plan: { code: "basico" }, plan_code: "basico" } });
+  const reset = await account.reset(current.revision + 1);
+  assert.deepEqual(reset.profile.plan, { code: "nutripro_plus", name: "NutriPro+" });
+  assert.equal((await f.store.getState()).profile.plan.code, "basico");
+  assert.equal((await (await f.reopen()).forProfile(id).getState()).profile.plan.code, "nutripro_plus");
+  await assert.rejects(assignPlan(f.sql, { ...change, plan: "admin", apply: true }), { code: "INVALID_PLAN" });
+  await assert.rejects(assignPlan(f.sql, { ...change, reason: "", apply: true }), { code: "INVALID_REASON" });
+  await assert.rejects(assignPlan(f.sql, { ...change, email: "missing@example.test", apply: true }), { code: "ACCOUNT_NOT_FOUND" });
+  await assert.rejects(f.sql.query("UPDATE profiles SET plan_code='invalid' WHERE id=$1", [id]), { code: "23503" });
+  await assert.rejects(f.sql.query("INSERT INTO plans VALUES('admin','Admin')"), { code: "23514" });
+  const history = (await f.sql.query("SELECT from_plan,to_plan,reason FROM profile_plan_history WHERE profile_id=$1 ORDER BY id", [id])).rows;
+  assert.deepEqual(history.map(row => [row.from_plan,row.to_plan]), [[null,"basico"],["basico","nutripro"],["nutripro","nutripro_plus"]]);
+  assert.equal(history[1].reason, change.reason);
 });
 
 test("email lookup routes existing accounts to login and new emails to registration without authenticating", async (t) => {
@@ -369,6 +408,8 @@ test("authenticated HTTP blocks anonymous reads, enforces CSRF, persists session
             birthDate: "1990-05-16",
             password_hash: "malicious",
             email: "other@example.test",
+            plan: { code: "nutripro_plus", name: "NutriPro+" },
+            plan_code: "nutripro_plus",
           },
         }),
       })
@@ -379,6 +420,8 @@ test("authenticated HTTP blocks anonymous reads, enforces CSRF, persists session
     (await f.store.forProfile(account.profileId).getState()).profile.email,
     "http@example.test",
   );
+  assert.deepEqual((await f.store.forProfile(account.profileId).getState()).profile.plan,
+    { code: "basico", name: "Básico" });
   const token = cookie.split(";")[0].split("=")[1],
     hash = createHash("sha256").update(token).digest("hex");
   assert(
@@ -649,4 +692,6 @@ test("version 2 upgrade preserves previous account conversations and pantry rows
   assert.deepEqual((await store.forProfile(1).getState()).pantry, ["tomate"]);
   assert.deepEqual((await store.forProfile(1).getState()).pantryDates, {});
   assert.equal((await store.forProfile(2).listChats()).items.length, 0);
+  assert.deepEqual((await store.forProfile(1).getState()).profile.plan, { code: "basico", name: "Básico" });
+  assert.equal((await sql.query("SELECT count(*)::int AS n FROM profile_plan_history")).rows[0].n, 2);
 });

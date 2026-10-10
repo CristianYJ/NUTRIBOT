@@ -1,0 +1,70 @@
+name: Nutribot Oracle
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: ./.github/workflows/check.yml
+
+  verify:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s deploy/oracle/tests -v
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci && npm run build
+      - run: python3 deploy/oracle/package-release.py "$GITHUB_SHA" /tmp/nutribot.tar.gz
+      - name: Publish immutable commit release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="oracle-$GITHUB_SHA"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            if [ "$(gh release view "$tag" --json isDraft --jq .isDraft)" = true ]; then
+              gh release upload "$tag" /tmp/nutribot.tar.gz --clobber
+              gh release edit "$tag" --draft=false
+            fi
+          else
+            # Upload all assets before publication locks the release.
+            gh release create "$tag" /tmp/nutribot.tar.gz --draft \
+              --target "$GITHUB_SHA" --title "Oracle ${GITHUB_SHA:0:12}" \
+              --notes "Verified production package for commit $GITHUB_SHA." --latest=false
+            gh release edit "$tag" --draft=false
+          fi
+          test "$(gh api "repos/$GH_REPO/releases/tags/$tag" --jq .immutable)" = true || {
+            echo 'Owner must enable Settings > Releases > Enable release immutability before publishing a NEW commit.'
+            exit 1
+          }

@@ -13,3 +13,5 @@ data/
 *.db-*
 *.dump
 postgres-admin.env
+__pycache__/
+*.pyc

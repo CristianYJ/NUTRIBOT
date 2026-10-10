@@ -50,8 +50,9 @@ export default function PhoneConnection({ open, onClose }) {
       </span>
       <h2 id="phone-title">Tu cocina, también en el teléfono</h2>
       <p>
-        Conecta el teléfono y esta PC a la misma red Wi-Fi. Escanea el código e
-        inicia sesión con tu cuenta.
+        {data?.public
+          ? "Escanea el código para abrir Nutribot e inicia sesión con tu cuenta. Puedes usar Wi-Fi o datos móviles."
+          : "Conecta el teléfono y esta PC a la misma red Wi-Fi. Escanea el código e inicia sesión con tu cuenta."}
       </p>
       {!data && !error && <p role="status">Preparando el código QR…</p>}
       {error && (
@@ -85,7 +86,7 @@ export default function PhoneConnection({ open, onClose }) {
             </label>
           )}
           <p className="phone-network-note">
-            Conexión HTTP en la red local. El QR abre la aplicación; inicia sesión con tu cuenta.
+            {data.public ? "El QR abre Nutribot mediante una conexión segura HTTPS." : "Conexión HTTP en la red local. El QR abre la aplicación; inicia sesión con tu cuenta."}
           </p>
         </>
       ) : (
@@ -99,8 +100,9 @@ export default function PhoneConnection({ open, onClose }) {
       <div className="phone-save-note">
         <Icon name="shield" size={19} />
         <span>
-          Los cambios se guardan en tu cuenta, en la base de datos de esta PC.
-          Mantén la PC y Nutribot encendidos.
+          {data?.public
+            ? "Los cambios se guardan en tu cuenta y estarán disponibles cuando inicies sesión en otro dispositivo."
+            : "Los cambios se guardan en tu cuenta, en la base de datos de esta PC. Mantén la PC y Nutribot encendidos."}
         </span>
       </div>
     </dialog>

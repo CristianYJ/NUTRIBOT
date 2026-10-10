@@ -50,6 +50,10 @@ export function createAppServer({
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "same-origin");
+    if (network.public) {
+      res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+      res.setHeader("Strict-Transport-Security", "max-age=31536000");
+    }
     try {
       const context = requestContext(req, network);
       const url = new URL(req.url, context.origin);
@@ -85,6 +89,7 @@ export function createAppServer({
           urls: network.urls || [],
           qrCodes: network.qrCodes || [],
           secure: Boolean(network.secure),
+          public: Boolean(network.public),
         });
       if(url.pathname==='/api/chats'&&req.method==='GET')return json(res,200,await store.listChats(Number(url.searchParams.get('offset')||0)));
       const chatRoute=url.pathname.match(/^\/api\/chats\/([^/]+)$/);
@@ -142,7 +147,9 @@ export function createAppServer({
         }
         const raw = await readJson(req, 4300000);
         const now = Date.now(),
-          key = "pantry:" + req.socket.remoteAddress;
+          key = "pantry:" + context.ip;
+        for (const [key, times] of requests)
+          if (!times.some((t) => now - t < 60000)) requests.delete(key);
         const recent = (requests.get(key) || []).filter((t) => now - t < 60000);
         if (recent.length >= 6 || active >= 2)
           throw new AppError(
@@ -203,7 +210,7 @@ export function createAppServer({
         const stopped = preflight(input);
         if (stopped) return json(res, 200, stopped);
         const now = Date.now(),
-          ip = req.socket.remoteAddress;
+          ip = context.ip;
         for (const [key, times] of requests)
           if (!times.some((t) => now - t < 60000)) requests.delete(key);
         const recent = (requests.get(ip) || []).filter((t) => now - t < 60000);
@@ -254,7 +261,7 @@ export function createAppServer({
           "." + (pathname === "/" ? "/index.html" : pathname),
         );
         const relative = path.relative(dist, target);
-        if (relative.startsWith("..") || path.isAbsolute(relative))
+        if (relative.startsWith("..") || path.isAbsolute(relative) || !mime[path.extname(target)])
           throw new AppError("NOT_FOUND", "No encontrado.", 404);
         let content;
         try {
@@ -303,7 +310,7 @@ export function createAppServer({
         });
     }
   };
-  return createServer(handler);
+  return createServer({ headersTimeout: 15000, requestTimeout: 30000, maxHeaderSize: 16384 }, handler);
 }
 
 async function readJson(req, limit = 150000) {

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { createAppServer } from "./app.js";
 import { config } from "./config.js";
 import { openDatabase } from "./database.js";
-import { connectionInfo, printConnection, localTls } from "./network.js";
+import { connectionInfo, printConnection } from "./network.js";
 
 export async function startNutribot(development = false) {
   let store, api, vite;
@@ -16,10 +16,8 @@ export async function startNutribot(development = false) {
     if (store) await store.close();
   }
   try {
-    const tls = localTls();
     const network = await connectionInfo(
       development ? 5173 : 8787,
-      Boolean(tls),
     );
     network.proxySecret = development
       ? randomBytes(32).toString("hex")
@@ -30,7 +28,6 @@ export async function startNutribot(development = false) {
       store,
       network,
       serveStatic: !development,
-      tls: development ? undefined : tls,
     });
     await new Promise((resolve, reject) => {
       api.once("error", reject);
@@ -42,7 +39,6 @@ export async function startNutribot(development = false) {
         configLoader: "native",
         server: {
           host: "0.0.0.0",
-          https: tls || undefined,
           proxy: {
             "/api": {
               target: "http://127.0.0.1:8787",
@@ -55,7 +51,7 @@ export async function startNutribot(development = false) {
                   );
                   request.setHeader(
                     "x-nutribot-protocol",
-                    tls ? "https" : "http",
+                    "http",
                   );
                 });
               },
@@ -74,7 +70,7 @@ export async function startNutribot(development = false) {
     console.error(
       error.code === "EADDRINUSE" || /Port 5173 is already in use/.test(error.message)
         ? "Nutribot ya está abierto o sus puertos están ocupados. Detén la instancia anterior con Ctrl+C antes de ejecutar npm run dev o npm start."
-        : "No se pudo iniciar Nutribot. Comprueba PostgreSQL y, si configuraste HTTPS, los archivos del certificado.",
+        : "No se pudo iniciar Nutribot. Comprueba que PostgreSQL esté disponible.",
     );
     process.exitCode = 1;
     return;

@@ -167,7 +167,7 @@ function Workspace({ initial, onSignedOut }) {
   const [navigation, setNavigation] = useState(() =>
     readNavigation(new URL(location.href)),
   );
-  const { page, mobile } = navigation;
+  const { page } = navigation;
   useEffect(() => {
     const restore = () => setNavigation(readNavigation(new URL(location.href)));
     window.addEventListener("popstate", restore);
@@ -626,9 +626,7 @@ function Workspace({ initial, onSignedOut }) {
   }
   return (
     <>
-      <div
-        className={`app-shell culinary-shell ${mobile ? "mobile-preview" : ""}`}
-      >
+      <div className="app-shell culinary-shell">
         <CulinaryHeader
           brand={<Brand />}
           page={page}
@@ -639,13 +637,9 @@ function Workspace({ initial, onSignedOut }) {
           )}
           onNavigate={go}
           onOpenRecipe={openRecipe}
-          mobile={mobile}
           onLogout={logout}
           loggingOut={loggingOut}
           onConnect={() => setPhoneOpen(true)}
-          onToggleMobile={() =>
-            navigate({ ...navigation, mobile: !mobile }, true)
-          }
           onFavorites={() => {
             go("recipes");
             setRecipeTab("Guardadas");

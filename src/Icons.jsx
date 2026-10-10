@@ -127,18 +127,6 @@ const paths = {
     </>
   ),
   back: <path d="M20 12H4m6-6-6 6 6 6" />,
-  phone: (
-    <>
-      <rect x="6" y="2" width="12" height="20" rx="3" />
-      <path d="M10 18h4" />
-    </>
-  ),
-  monitor: (
-    <>
-      <rect x="2" y="3" width="20" height="14" rx="2" />
-      <path d="M12 17v4m-5 0h10" />
-    </>
-  ),
   info: (
     <>
       <circle cx="12" cy="12" r="9" />

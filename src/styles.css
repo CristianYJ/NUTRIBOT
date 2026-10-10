@@ -102,43 +102,11 @@ button {
 button:active {
   transform: translateY(1px);
 }
-.preview-bar {
-  height: 39px;
-  background: #293d29;
-  color: #e1e9d6;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 30px;
-  font-size: 10px;
-  letter-spacing: 1.6px;
-}
-.preview-bar > span {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
 .status-dot {
   width: 5px;
   height: 5px;
   background: #c4d499;
   border-radius: 50%;
-}
-.preview-version {
-  opacity: 0.55;
-  margin-left: 14px;
-  letter-spacing: 1px;
-}
-.preview-bar button {
-  color: #ecf0e4;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11px;
-  letter-spacing: 0.1px;
-  background: #ffffff0d;
-  padding: 5px 10px;
-  border-radius: 5px;
 }
 .app-shell {
   display: flex;
@@ -1807,38 +1775,10 @@ main {
     transform: translateY(0);
   }
 }
-/* Container queries keep the preview and a real phone on the same layout. */
+/* Container queries adapt the layout to the available space. */
 .main-area {
   container-type: inline-size;
   container-name: app;
-}
-.app-shell.mobile-preview {
-  width: 430px;
-  min-height: 850px;
-  display: block;
-  position: relative;
-  margin: 30px auto;
-  border: 8px solid #33422f;
-  border-radius: 38px;
-  overflow: clip;
-  box-shadow: 0 20px 65px #263c2925;
-}
-.mobile-preview .sidebar {
-  display: none;
-}
-.mobile-preview .mobile-nav {
-  display: flex;
-  position: sticky;
-  bottom: 0;
-}
-.mobile-preview .main-area {
-  width: 100%;
-}
-.mobile-preview .topbar {
-  border-radius: 29px 29px 0 0;
-}
-.mobile-preview .app-footer {
-  display: none;
 }
 @container app (min-width:1250px) {
   main {
@@ -2572,19 +2512,6 @@ main {
   }
 }
 @media (max-width: 760px) {
-  .preview-bar {
-    padding: 0 16px;
-    font-size: 8px;
-    height: 32px;
-    letter-spacing: 1px;
-  }
-  .preview-version {
-    display: none;
-  }
-  .preview-bar button {
-    font-size: 9px;
-    padding: 4px 6px;
-  }
   .app-shell {
     display: block;
     min-height: calc(100vh - 32px);
@@ -2601,21 +2528,6 @@ main {
     right: 0;
     padding-bottom: max(12px, env(safe-area-inset-bottom));
     height: 64px;
-  }
-  .app-shell.mobile-preview {
-    width: 100%;
-    border: 0;
-    margin: 0;
-    border-radius: 0;
-    min-height: calc(100vh - 32px);
-    box-shadow: none;
-    padding-bottom: 62px;
-  }
-  .mobile-preview .topbar {
-    border-radius: 0;
-  }
-  .mobile-preview .mobile-nav {
-    position: fixed;
   }
   .toast {
     bottom: 78px;

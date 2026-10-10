@@ -1,5 +1,4 @@
 import { createServer } from "node:http";
-import { createServer as createSecureServer } from "node:https";
 import { createAuthentication, requestContext } from "./auth.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -39,7 +38,6 @@ export function createAppServer({
   store: rootStore,
   authentication = true,
   network = {},
-  tls,
 } = {}) {
   if (authentication && (!rootStore?.auth || !rootStore?.forProfile))
     throw new Error("La autenticación requiere PostgreSQL actualizado.");
@@ -305,7 +303,7 @@ export function createAppServer({
         });
     }
   };
-  return tls ? createSecureServer(tls, handler) : createServer(handler);
+  return createServer(handler);
 }
 
 async function readJson(req, limit = 150000) {

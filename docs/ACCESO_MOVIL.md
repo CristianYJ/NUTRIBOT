@@ -29,14 +29,7 @@ La fecha de nacimiento se edita en Mi perfil y la edad se calcula automáticamen
 
 `profiles.password_hash` guarda un hash scrypt con sal aleatoria por contraseña (N=131072, r=8, p=1), siguiendo la [guía de almacenamiento de contraseñas de OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html). No se almacena una contraseña recuperable. La API no devuelve el hash. Las cookies de sesión son HttpOnly y SameSite=Strict, con protección CSRF y límites de intentos; PostgreSQL guarda solo el hash del token de sesión. Recordar sesión dura hasta 30 días; sin marcarlo, la sesión caduca como máximo a las 8 horas.
 
-Por defecto la aplicación utiliza **HTTP en la red local**, que no cifra el tráfico entre teléfono y PC. Usa una red de confianza. Para cifrar también el transporte, configura en `.env` un certificado HTTPS válido y confiable para ambos dispositivos:
-
-```dotenv
-NUTRIBOT_TLS_CERT=C:/certificados/nutribot.crt
-NUTRIBOT_TLS_KEY=C:/certificados/nutribot.key
-```
-
-El certificado debe incluir los nombres/IP que se usarán al abrir Nutribot; para certificados de una autoridad local, instala esa autoridad de confianza en ambos dispositivos. Reinicia la app después de configurar ambos archivos. El QR usará `https://` y las cookies tendrán el atributo Secure. Guarda la clave privada fuera del repositorio. Esta versión no genera certificados ni publica la app en Internet.
+La aplicación utiliza **HTTP en la red local**. El QR contiene solo la dirección de Nutribot y pide iniciar sesión. No hay acceso automático por QR ni túnel de Internet. HTTP no cifra el transporte; el hash de la contraseña en la base de datos no cifra la conexión de red.
 
 ## Base de datos y archivos principales
 

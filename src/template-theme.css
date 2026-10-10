@@ -30,7 +30,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .culinary-navigation > button.active { color: var(--green); font-weight: 700; }
 .culinary-navigation > button.active::after { content: ""; position: absolute; bottom: -16px; left: 0; right: 0; height: 3px; background: var(--green); border-radius: 3px 3px 0 0; }
 .culinary-header-actions { display: flex; align-items: center; gap: 16px; }
-.layout-toggle { color: var(--muted); padding: 8px; }
 .culinary-user { display: flex; align-items: center; gap: 10px; padding: 0; text-align: left; }
 .culinary-user .avatar { width: 38px; height: 38px; background: #ffddb8; color: #684929; border: 3px solid #fff4e7; font-size: 13px; }
 .culinary-user > span:last-child { display: grid; gap: 4px; max-width: 105px; }
@@ -206,10 +205,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .culinary-shell .mobile-nav button { color: #64746b; font-size: 9px; gap: 6px; min-width: 50px; }
 .culinary-shell .mobile-nav button.active { color: var(--green); }
 .culinary-shell .mobile-nav button:nth-child(3) svg { box-sizing: content-box; padding: 13px; color: #fff; background: var(--green); border: 4px solid #faf8ff; border-radius: 50%; margin-top: -33px; box-shadow: 0 3px 12px #006c4925; }
-.culinary-shell.mobile-preview { border-color: #162c24; padding-bottom: 0; }
-.mobile-preview .culinary-header { padding: 18px; gap: 12px; min-height: 76px; }
-.mobile-preview .culinary-navigation, .mobile-preview .culinary-search, .mobile-preview .culinary-user > span:last-child { display: none; }
-.mobile-preview .culinary-header-actions { margin-left: auto; gap: 5px; }
 @container app (max-width: 1100px) {
   .culinary-toolbar { align-items: flex-start; }
   .culinary-toolbar-actions { width: 100%; justify-content: space-between; }
@@ -310,7 +305,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .culinary-header { min-height: 76px; padding: 18px 20px; }
   .culinary-navigation { display: none; }
   .culinary-header-actions { margin-left: auto; }
-  .culinary-shell.mobile-preview { padding-bottom: 76px; }
   .culinary-shell .mobile-nav { display: flex; }
 }
 @media (prefers-reduced-motion: reduce) {

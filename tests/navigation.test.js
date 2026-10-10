@@ -32,22 +32,21 @@ test("long conversations retain early messages and enforce an explicit limit", (
   );
 });
 
-test("navigation survives reload and changing layout without dropping the page or other query parameters", () => {
-  const current = new URL("http://localhost:5173/?mobile=1&test=yes#assistant");
+test("navigation preserves the page and unrelated query parameters", () => {
+  const current = new URL("http://localhost:5173/?test=yes#assistant");
   assert.deepEqual(readNavigation(current), {
     page: "assistant",
-    mobile: true,
   });
-  const wide = navigationUrl(current, { page: "assistant", mobile: false });
-  assert.deepEqual(readNavigation(wide), { page: "assistant", mobile: false });
+  const wide = navigationUrl(current, { page: "assistant" });
+  assert.deepEqual(readNavigation(wide), { page: "assistant" });
   assert.equal(wide.searchParams.get("test"), "yes");
   assert.equal(
-    navigationUrl(wide, { page: "profile", mobile: true }).hash,
+    navigationUrl(wide, { page: "profile" }).hash,
     "#profile",
   );
   assert.deepEqual(
-    readNavigation(new URL("http://localhost/?mobile=0#planner")),
-    { page: "home", mobile: false },
+    readNavigation(new URL("http://localhost/#planner")),
+    { page: "home" },
   );
 });
 

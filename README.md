@@ -2,7 +2,7 @@
 
 Nutribot genera recetas con **Gemini de Google** usando los ingredientes de tu despensa y los filtros alimentarios de tu perfil. **PostgreSQL 18** guarda perfil, despensa, recetas, favoritos y opiniones.
 
-El recorrido es sencillo: **Landing → Correo electrónico → Registro o inicio de sesión → Despensa → Perfil → Nutribot IA → Mis recetas**. Cada cuenta tiene datos independientes. La sección abierta y la vista móvil/amplia se conservan al recargar; también funcionan Atrás y Adelante. Cada acceso o recarga abre un chat nuevo. Las conversaciones y sus borradores permanecen en PostgreSQL y se abren desde Historial de chats.
+El recorrido es sencillo: **Landing → Correo electrónico → Registro o inicio de sesión → Despensa → Perfil → Nutribot IA → Mis recetas**. Cada cuenta tiene datos independientes. La sección abierta se conserva al recargar; también funcionan Atrás y Adelante. Cada acceso o recarga abre un chat nuevo. Las conversaciones y sus borradores permanecen en PostgreSQL y se abren desde Historial de chats.
 
 Es una aplicación web local adaptable a móvil y PC. Todavía no es una app Android/iOS instalada ni un servicio publicado en Internet.
 
@@ -59,7 +59,7 @@ npm run dev
 
 Abre [Nutribot](http://127.0.0.1:5173) y crea tu cuenta. Si ya tenías datos, registra la primera cuenta desde esa dirección y marca la opción para vincular el perfil existente. Mantén abierta la terminal; **Ctrl+C** detiene la app. Reinicia si cambias `.env` o archivos del servidor.
 
-La terminal genera un **QR para el teléfono**. Conecta ambos dispositivos a la misma red y escanéalo; también está en **menú de perfil → Conectar teléfono**. Inicia sesión con la misma cuenta para abrir sus datos. Consulta [cuentas, QR y HTTPS local](docs/ACCESO_MOVIL.md). La conexión predeterminada es HTTP; la guía explica cómo configurar HTTPS.
+La terminal muestra el **QR de la red local**. También está en **menú de perfil → Conectar teléfono**. Conecta la PC y el teléfono a la misma red, escanea el QR e inicia sesión con tu cuenta. El QR solo contiene la dirección HTTP de Nutribot. Consulta [cuentas y acceso móvil](docs/ACCESO_MOVIL.md).
 
 En Despensa selecciona ingredientes, revisa Perfil y pide una receta en Nutribot IA. La indicación **Generado con Gemini** identifica una respuesta real. Sin clave o cuota disponible puedes usar el catálogo y guardar datos, pero no generar recetas nuevas.
 

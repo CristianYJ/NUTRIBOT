@@ -1,5 +1,4 @@
 import { networkInterfaces } from "node:os";
-import { readFileSync } from "node:fs";
 import QRCode from "qrcode";
 export function isPrivateIpv4(address) {
   const parts = address.split(".").map(Number);
@@ -34,26 +33,16 @@ export function localAddresses(interfaces = networkInterfaces()) {
     ),
   ];
 }
-export function localTls() {
-  const cert = process.env.NUTRIBOT_TLS_CERT,
-    key = process.env.NUTRIBOT_TLS_KEY;
-  if (!cert && !key) return null;
-  if (!cert || !key)
-    throw new Error(
-      "Configura ambos archivos NUTRIBOT_TLS_CERT y NUTRIBOT_TLS_KEY.",
-    );
-  return { cert: readFileSync(cert), key: readFileSync(key) };
-}
-export async function connectionInfo(port, secure = false) {
+export async function connectionInfo(port) {
   const hosts = localAddresses();
   const urls = hosts.map(
-    (host) => `${secure ? "https" : "http"}://${host}:${port}`,
+    (host) => `http://${host}:${port}`,
   );
   return {
     hosts,
     origins: urls,
     urls,
-    secure,
+    secure: false,
     qrCodes: await Promise.all(
       urls.map(async (url) => ({
         url,
@@ -68,7 +57,7 @@ export async function connectionInfo(port, secure = false) {
 }
 export async function printConnection(info, port) {
   console.log(
-    `\nNutribot en esta PC: ${info.secure ? "https" : "http"}://localhost:${port}`,
+    `\nNutribot en esta PC: http://localhost:${port}`,
   );
   if (!info.urls.length) {
     console.log(

@@ -85,9 +85,7 @@ export default function PhoneConnection({ open, onClose }) {
             </label>
           )}
           <p className="phone-network-note">
-            {data.secure
-              ? "Conexión HTTPS. El teléfono debe confiar en el certificado configurado."
-              : "Conexión HTTP de red local: usa una Wi-Fi de confianza. Puedes configurar HTTPS para cifrar también la conexión."}
+            Conexión HTTP en la red local. El QR abre la aplicación; inicia sesión con tu cuenta.
           </p>
         </>
       ) : (

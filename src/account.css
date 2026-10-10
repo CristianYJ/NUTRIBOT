@@ -214,6 +214,56 @@
   text-underline-offset: 3px;
   padding: 6px 0;
 }
+.auth-back-home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 7px 16px 7px 8px;
+  border: 1px solid #c9e8da;
+  border-radius: 28px;
+  color: #096648;
+  background: linear-gradient(110deg, #ecfaf3, #f8fffb);
+  box-shadow: 0 4px 12px #006c490a;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background .2s, box-shadow .2s;
+}
+.auth-back-home:hover { background: #def5e9; box-shadow: 0 5px 16px #006c4918; }
+.auth-back-home:focus-visible { outline: 3px solid #006c49; outline-offset: 4px; }
+.auth-back-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: white; }
+.auth-back-arrow { font-size: 19px; margin-left: 6px; }
+.plan-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  width: max-content;
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid #d5d9df;
+  border-radius: 999px;
+  background: #f1f2f4;
+  color: #515b67;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .65px;
+  line-height: 1.3;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.plan-badge-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.plan-badge-pro { color: #006b51; background: #e5fbf3; border-color: #aae9d5; }
+.plan-badge-plus { color: #215ca2; background: #eaf3ff; border-color: #bed8f7; }
+.plan-badge-unknown { color: #53635c; background: #eef2ef; border-color: #d5ded8; }
+.culinary-user > span:last-child { max-width: 145px; }
+.account-identity .plan-badge { margin-top: 9px; }
+@media (max-width: 760px) {
+  .culinary-user > span:last-child { display: grid; max-width: 122px; }
+  .culinary-user small { display: none; }
+}
 .auth-storage {
   text-align: center;
   font-size: 10px;
@@ -349,6 +399,38 @@
   font-size: 12px;
   color: #006c49;
 }
+.profile-form .form-actions { justify-content: flex-end; }
+.privacy-panel {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  background: #f1f2f4;
+  border: 1px solid #e2e5e8;
+  color: #66707b;
+  scroll-margin-top: 100px;
+}
+.privacy-panel h3 { color: #39434d; }
+.privacy-panel p { color: #68727e; max-width: none; margin-bottom: 0; }
+.privacy-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 12px 16px;
+  border: 1px solid #cbd1d8;
+  border-radius: 12px;
+  background: #fff;
+  color: #495460;
+  font-size: 12px;
+  font-weight: 600;
+}
+.privacy-reset:hover { background: #e7eaee; }
+.privacy-panel:focus-visible,
+.privacy-reset:focus-visible,
+.footer-privacy:focus-visible { outline: 3px solid #93a2af; outline-offset: 3px; }
+.app-footer .footer-privacy { margin-left: auto; color: #606b76; padding: 8px 0; }
+.footer-privacy:hover { text-decoration: underline; text-underline-offset: 3px; }
 .profile-account-actions {
   margin-top: 28px;
   padding: 24px;
@@ -395,7 +477,7 @@
   width: min(460px, calc(100vw - 28px));
   border: 0;
   border-radius: 24px;
-  padding: 30px;
+  padding: 48px 28px 24px;
   color: #173527;
   background: white;
   max-height: 90dvh;
@@ -423,9 +505,10 @@
   color: #006c49;
 }
 .phone-dialog h2 {
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1.3;
-  margin-bottom: 12px;
+  max-width: 310px;
+  margin: 0 auto 12px;
 }
 .phone-dialog > p {
   font-size: 12px;
@@ -434,9 +517,10 @@
 }
 .phone-qr {
   display: block;
-  width: 240px;
+  width: 280px;
+  height: auto;
   max-width: 100%;
-  margin: 18px auto 6px;
+  margin: 20px auto 0;
   border-radius: 10px;
 }
 .phone-url {
@@ -494,6 +578,8 @@
   text-decoration: underline;
 }
 @container app (max-width: 650px) {
+  .privacy-panel { grid-template-columns: 24px minmax(0, 1fr); }
+  .privacy-reset { grid-column: 2; justify-self: end; max-width: 100%; }
   .profile-account-actions {
     flex-direction: column;
     align-items: stretch;
@@ -535,6 +621,6 @@
     font-size: 10px;
   }
   .phone-dialog {
-    padding: 26px 22px;
+    padding: 48px 22px 24px;
   }
 }

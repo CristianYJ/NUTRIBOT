@@ -168,6 +168,14 @@ function Workspace({ initial, onSignedOut }) {
     readNavigation(new URL(location.href)),
   );
   const { page } = navigation;
+  const [focusPrivacy, setFocusPrivacy] = useState(false);
+  const privacyPanel = useRef(null);
+  useEffect(() => {
+    if (page !== "profile" || !focusPrivacy) return;
+    privacyPanel.current?.focus({ preventScroll: true });
+    privacyPanel.current?.scrollIntoView({ block: "center", behavior: "auto" });
+    setFocusPrivacy(false);
+  }, [page, focusPrivacy]);
   useEffect(() => {
     const restore = () => setNavigation(readNavigation(new URL(location.href)));
     window.addEventListener("popstate", restore);
@@ -892,27 +900,28 @@ function Workspace({ initial, onSignedOut }) {
                     setToast("Perfil actualizado; comprobando guardado…");
                   }}
                 />
-                <section className="privacy-panel">
+                <section className="privacy-panel" ref={privacyPanel} tabIndex={-1}
+                  aria-labelledby="profile-privacy-title">
                   <Icon name="shield" size={24} />
                   <div>
-                    <h3>Tú decides qué compartir</h3>
+                    <h3 id="profile-privacy-title">Privacidad de tus datos</h3>
                     <p>
                       El perfil, la despensa y las recetas se guardan en la base
-                      de datos de esta PC y permanecen al cerrar el navegador.
+                      de datos del servidor, asociados a tu cuenta.
                       Al generar, se envían a Google tu mensaje, los
                       ingredientes y los filtros alimentarios. Correo,
                       contraseña, nombre, fecha de nacimiento, peso, estatura e
                       indicaciones del perfil no se envían a Google. Usa datos
                       ficticios en las pruebas.
                     </p>
-                    <button
-                      className="text-btn"
-                      onClick={() => setConfirmReset(true)}
-                    >
-                      <Icon name="reset" size={16} />
-                      Restaurar los datos de mi cuenta
-                    </button>
                   </div>
+                  <button
+                    className="privacy-reset"
+                    onClick={() => setConfirmReset(true)}
+                  >
+                    <Icon name="reset" size={16} />
+                    Restaurar mis datos
+                  </button>
                 </section>
                 <section className="profile-account-actions">
                   <div>
@@ -944,7 +953,10 @@ function Workspace({ initial, onSignedOut }) {
           <footer className="app-footer">
             <Brand small />
             <span>Menos dudas. Más cocina.</span>
-            <span>Recetas con IA</span>
+            <button className="footer-privacy" onClick={() => {
+              go("profile");
+              setFocusPrivacy(true);
+            }}>Política de privacidad</button>
           </footer>
         </div>
         <nav className="mobile-nav" aria-label="Navegación móvil">
@@ -1383,10 +1395,6 @@ function ProfileForm({ profile, onSave, catalog }) {
         </section>
       </div>
       <div className="form-actions">
-        <span>
-          <Icon name="shield" size={16} />
-          Se conserva en la PC de Nutribot al cerrar el navegador
-        </span>
         <button type="submit" className="btn primary">
           Guardar mi perfil
           <Icon name="check" size={18} />

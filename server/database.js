@@ -219,7 +219,7 @@ export async function openDatabase(options = {}) {
   async function readState(c) {
     const p = (
       await c.query(
-        `SELECT id,name,weight_kg,height_cm,goal,diet,exclusions,medical_notes,revision,email,to_char(birth_date,'YYYY-MM-DD') AS birth_date FROM profiles WHERE id=${profileId()}`,
+        `SELECT id,name,weight_kg,height_cm,goal,diet,exclusions,medical_notes,revision,email,plan_code,(SELECT name FROM plans WHERE code=profiles.plan_code) AS plan_name,to_char(birth_date,'YYYY-MM-DD') AS birth_date FROM profiles WHERE id=${profileId()}`,
       )
     ).rows[0];
     const all = await readRecipes(c);
@@ -231,6 +231,7 @@ export async function openDatabase(options = {}) {
         birthDate: p.birth_date || "",
         age: ageFromBirthDate(p.birth_date),
         name: p.name,
+        plan: { code: p.plan_code, name: p.plan_name },
         weight: p.weight_kg === null ? "" : String(Number(p.weight_kg)),
         height: p.height_cm === null ? "" : String(Number(p.height_cm)),
         goal: p.goal,
@@ -314,7 +315,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 3) throw new Error("Esquema de una versión posterior");
+      if (version > 4) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -375,6 +376,10 @@ export async function openDatabase(options = {}) {
       if(version<3){
         await c.query(readFileSync(new URL('./postgres/003_chat_history_pantry_dates.sql',import.meta.url),'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(3)');
+      }
+      if (version < 4) {
+        await c.query(readFileSync(new URL('./postgres/004_user_plans.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(4)');
       }
     });
   } catch (error) {

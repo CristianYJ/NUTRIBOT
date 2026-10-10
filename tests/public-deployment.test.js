@@ -34,8 +34,13 @@ test("public deployment fails closed for incomplete configuration and keeps the 
   assert.deepEqual(info.urls, [origin]);
   assert.equal(info.public, true);
   assert.equal(info.secure, true);
-  assert.equal(info.qrCodes[0].url, origin);
+  assert.equal(info.qrCodes[0].url, origin + "/?install=1");
   assert.match(info.qrCodes[0].image, /^data:image\/png;base64,/);
+  const localInfo = await connectionInfo(8787);
+  assert.equal(localInfo.public, false);
+  assert.equal(localInfo.secure, false);
+  assert.equal(localInfo.qrCodes.length, 1);
+  assert.equal(localInfo.qrCodes[0].url, "https://nutribot.facheritossv.com/?install=1");
 });
 
 test("public requests require the local authenticated HTTPS proxy and the exact origin", () => {

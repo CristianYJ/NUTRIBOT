@@ -4,7 +4,9 @@ Nutribot genera recetas con **Gemini de Google** usando los ingredientes de tu d
 
 El recorrido es sencillo: **Landing → Correo electrónico → Registro o inicio de sesión → Despensa → Perfil → Nutribot IA → Mis recetas**. Cada cuenta tiene datos independientes. La sección abierta se conserva al recargar; también funcionan Atrás y Adelante. Cada acceso o recarga abre un chat nuevo. Las conversaciones y sus borradores permanecen en PostgreSQL y se abren desde Historial de chats.
 
-Es una aplicación web local adaptable a móvil y PC. Todavía no es una app Android/iOS instalada ni un servicio publicado en Internet.
+Es una aplicación web adaptable a móvil y PC, con modo local y [despliegue en Oracle con HTTPS](docs/ORACLE.md). En HTTPS puede [instalarse como PWA desde el QR](docs/PWA.md), con icono y ventana independiente. Necesita conexión con el servidor; el APK es una etapa posterior.
+
+Los [planes de usuario](docs/PLANS.md) preparan las asignaciones Básico, NutriPro y NutriPro+, con historial administrativo. Esta etapa no incluye cobros ni restricciones de funciones por plan. La migración 004 requiere un despliegue manual revisado en Oracle.
 
 ## Instalar desde cero en otra PC
 

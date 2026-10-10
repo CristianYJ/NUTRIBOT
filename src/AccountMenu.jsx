@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
+import PlanBadge from "./PlanBadge.jsx";
 export default function AccountMenu({
   profile,
   onProfile,
@@ -54,7 +55,7 @@ export default function AccountMenu({
         <span className="avatar">{profile.name.charAt(0) || "T"}</span>
         <span>
           <strong>{profile.name}</strong>
-          <small>{profile.diet}</small>
+          <PlanBadge plan={profile.plan} />
         </span>
       </button>
       {open && (
@@ -62,6 +63,7 @@ export default function AccountMenu({
           <div className="account-identity">
             <strong>{profile.name}</strong>
             <small>{profile.email}</small>
+            <PlanBadge plan={profile.plan} />
           </div>
           <button onClick={() => choose(onProfile)}>
             <Icon name="user" size={18} />
@@ -69,7 +71,7 @@ export default function AccountMenu({
           </button>
           <button onClick={() => choose(onConnect)}>
             <Icon name="qr" size={18} />
-            Conectar teléfono
+            Instalar en mi teléfono
           </button>
           <button
             className="logout-option"

@@ -13,6 +13,8 @@ export default function CulinaryHeader({
   onSearchIngredient,
   onOpenRecipe,
   onFavorites,
+  mobile,
+  onToggleMobile,
   onLogout,
   loggingOut,
   onConnect,
@@ -133,6 +135,14 @@ export default function CulinaryHeader({
         </button>
       </nav>
       <div className="culinary-header-actions">
+        <button
+          className="layout-toggle"
+          onClick={onToggleMobile}
+          title={mobile ? "Vista amplia" : "Vista móvil"}
+          aria-label={mobile ? "Vista amplia" : "Vista móvil"}
+        >
+          <Icon name={mobile ? "monitor" : "phone"} size={19} />
+        </button>
         <AccountMenu
           profile={profile}
           onProfile={() => onNavigate("profile")}

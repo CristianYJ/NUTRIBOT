@@ -1,1 +1,52 @@
-.pantry-import-intro{padding:24px;margin:20px 0;display:flex;align-items:center;justify-content:space-between;gap:20px}.pantry-import-intro h2{margin:0 0 8px}.pantry-import-intro p{margin:0}.pantry-import-actions{display:flex;gap:10px;flex-wrap:wrap}.pantry-import-dialog{width:min(760px,calc(100vw - 32px));max-height:90dvh;overflow:auto;border:1px solid #dce2cf;border-radius:22px;padding:28px;background:#fafaf5;color:#293b29}.pantry-import-dialog::backdrop{background:#15271588}.pantry-import-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}.pantry-import-heading h2{margin:0 0 20px}.pantry-import-heading label{flex:1}.pantry-import-source,.pantry-review{border:0;padding:0;min-width:0}.pantry-import-dialog label{display:block;font-size:14px}.pantry-import-dialog textarea,.pantry-import-dialog input:not([type=checkbox]),.pantry-import-dialog select{display:block;width:100%;margin:8px 0 16px;padding:12px;border:1px solid #dce2cf;border-radius:8px;background:white;color:inherit;font:inherit;box-sizing:border-box}.pantry-import-dialog textarea{resize:vertical}.pantry-import-source>.text-btn{margin:16px}.pantry-photo-preview{display:block;width:100%;max-height:250px;object-fit:contain;border-radius:12px;background:#eef1e6}.pantry-review-item{padding:18px;margin:16px 0;border:1px solid #dce2cf;border-radius:12px;background:#fff}.pantry-review-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px}.pantry-allergen-options{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.pantry-allergen-options label,.pantry-confirm{display:flex!important;align-items:center;gap:8px}.pantry-confirm{margin:22px 0}.pantry-import-dialog input[type=checkbox]{width:18px;height:18px;accent-color:#354e31;flex-shrink:0}.pantry-import-error{padding:12px;background:#f9e8df;color:#852d1c;border-radius:8px}.pantry-import-dialog button:disabled{opacity:.55;cursor:wait}.pantry-import-dialog .microcopy{line-height:1.6}.pantry-camera{margin-top:10px}@media(max-width:650px){.pantry-import-intro{display:block}.pantry-import-actions{margin-top:18px}.pantry-review-fields{grid-template-columns:1fr;gap:0}.pantry-import-dialog{padding:18px}.pantry-import-heading{align-items:flex-start}.pantry-import-actions .btn{width:100%}}
+.pantry-import-intro{padding:24px;margin:20px 0;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.pantry-import-intro h2{margin:0 0 8px}
+.pantry-import-intro p{margin:0}
+.pantry-import-actions{display:flex;gap:10px;flex-wrap:wrap}
+.pantry-import-dialog{overflow:auto}
+.pantry-import-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.pantry-import-heading label{flex:1;min-width:0}
+.pantry-import-source,.pantry-review{border:0;padding:0;min-width:0}
+.pantry-import-dialog label{display:block;font-size:14px}
+.pantry-import-dialog textarea,.pantry-import-dialog input:not([type=checkbox]),.pantry-import-dialog select{display:block;width:100%;margin:8px 0 16px;padding:12px;border:1px solid #dce2cf;border-radius:8px;background:white;color:inherit;font:inherit;box-sizing:border-box}
+.pantry-import-dialog textarea{resize:vertical}
+.pantry-photo-preview{display:block;width:100%;object-fit:contain;border-radius:12px}
+.pantry-review-item{padding:18px;margin:16px 0;border:1px solid #e3e7ec;border-radius:12px;background:#fff}
+.pantry-review-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.pantry-allergen-options{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+.pantry-allergen-options label,.pantry-confirm{display:flex!important;align-items:center;gap:8px}
+.pantry-confirm{margin:22px 0}
+.pantry-import-dialog input[type=checkbox]{width:18px;height:18px;flex-shrink:0}
+.pantry-import-error{padding:12px;background:#f9e8df;color:#852d1c;border-radius:8px}
+.pantry-import-dialog button:disabled{opacity:.55}
+.pantry-import-dialog .microcopy{line-height:1.6}
+@media(max-width:650px){.pantry-import-intro{display:block}.pantry-import-actions{margin-top:18px}.pantry-review-fields{grid-template-columns:1fr;gap:0}.pantry-import-actions .btn{width:100%}}
+/* Nutri-Vision: photo selection and review share the same accessible dialog. */
+.pantry-import-dialog{box-sizing:border-box;width:min(576px,calc(100vw - 32px));max-height:90dvh;border:0;border-radius:24px;padding:32px;background:#fff;color:#131b2e;box-shadow:0 24px 80px #131b2e26}
+.pantry-import-dialog::backdrop{background:#131b2e66;backdrop-filter:blur(5px)}
+.pantry-import-dialog>.pantry-import-heading{margin-bottom:26px;align-items:center}
+.pantry-import-dialog>.pantry-import-heading h2{margin:0;font-size:28px;letter-spacing:-.8px}
+.pantry-import-dialog input.nutri-vision-file[type=file]{display:none}
+.nutri-vision-close{display:grid;place-items:center;flex:0 0 40px;width:40px;height:40px;border:0;border-radius:50%;background:transparent;color:#42574d;cursor:pointer}
+.nutri-vision-close:hover{background:#f2f3ff}
+.nutri-vision-dropzone{box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;width:100%;min-height:270px;padding:32px 20px;border:2px dashed #bbcabf;border-radius:16px;background:#f5f5ff;color:#536377;font:inherit;text-align:center;cursor:pointer;transition:background .15s,border-color .15s}
+.nutri-vision-dropzone:hover,.nutri-vision-dropzone.is-dragging{border-color:#006c49;background:#edf8f2}
+.nutri-vision-camera{position:relative;display:grid;place-items:center;width:76px;height:76px;border-radius:50%;background:#fff;color:#006c49;box-shadow:0 4px 14px #131b2e08}
+.nutri-vision-camera>span{position:absolute;right:15px;top:8px;font-size:18px;font-weight:700;background:white;line-height:1}
+.nutri-vision-drop-copy{max-width:280px;font-size:15px;line-height:1.8}
+.nutri-vision-drop-copy strong{color:#006c49;font-weight:600}
+.nutri-vision-dropzone small{font-size:11px;letter-spacing:.5px;color:#697786}
+.nutri-vision-change{font-size:13px;color:#006c49}
+.pantry-import-dialog .pantry-photo-preview{max-height:240px;background:transparent}
+.pantry-import-source .nutri-vision-identify{display:flex;justify-content:center;gap:10px;width:100%;min-height:52px;margin-top:24px;border-radius:13px;background:#006c49;color:#fff}
+.pantry-import-source>.nutri-vision-manual{display:block;width:100%;margin:20px 0 0;padding:8px 0;font-size:12px;color:#536377;text-align:center}
+.nutri-vision-manual strong{color:#354a43;font-weight:600}
+.pantry-import-dialog .nutri-vision-privacy{margin:12px 0 0;text-align:center;font-size:10px;color:#6c7786}
+.nutri-vision-mobile-actions{display:none}
+.pantry-import-dialog button:disabled{cursor:not-allowed}
+.pantry-import-dialog button:focus-visible{outline:3px solid #00b783;outline-offset:4px}
+.pantry-import-dialog input[type=checkbox]{accent-color:#006c49}
+.culinary-compose-tools button.culinary-compose-icon{display:grid;place-items:center;width:42px;min-height:42px;padding:0;border-radius:12px;color:#006c49;transition:background .15s}
+.culinary-compose-tools button.culinary-compose-icon:hover{background:#dff3ea}
+.culinary-compose-tools button.culinary-compose-icon:focus-visible{outline:2px solid #006c49;outline-offset:2px}
+@media(pointer:coarse){.nutri-vision-mobile-actions{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:16px}}
+@media(max-width:600px){.pantry-import-dialog{padding:24px 20px}.pantry-import-dialog>.pantry-import-heading{margin-bottom:20px}.pantry-import-dialog>.pantry-import-heading h2{font-size:25px}.nutri-vision-dropzone{min-height:230px;padding:24px 16px}.nutri-vision-mobile-actions{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:16px}}

@@ -1,6 +1,8 @@
+import NutritionClarification from "./NutritionClarification.jsx";
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
-import { availability, matchesProfile, requiresReview } from "./engine.js";
+import RecipePantryImpact from "./RecipePantryImpact.jsx";
+import { availability, matchesProfile } from "./engine.js";
 
 function MessageStamp({ message, name }) {
   const date = message.createdAt ? new Date(message.createdAt) : null;
@@ -15,16 +17,12 @@ function MessageStamp({ message, name }) {
           ·{" "}
         </>
       )}
-      {message.role === "user"
-        ? name
-        : message.source === "gemini"
-          ? "Generado por Nutribot"
-          : "Nutribot"}
+      {message.role === "user" ? name : "Nutribot"}
     </small>
   );
 }
 
-function ChatRecipe({ recipe, pantry, saved, onOpen, onSave, ingredients }) {
+function ChatRecipe({ recipe, pantry, saved, onOpen, onSave, ingredients, servings = 1 }) {
   const { available: count, missing } = availability(recipe, pantry);
   return (
     <article className="culinary-recipe">
@@ -40,6 +38,7 @@ function ChatRecipe({ recipe, pantry, saved, onOpen, onSave, ingredients }) {
           <span className="culinary-kicker">{missing.length ? "ALTERNATIVA CERCANA" : "UNA IDEA CON TU DESPENSA"}</span>
           <h2>{recipe.title}</h2>
           <div className="culinary-badges">
+            <span>{servings} {servings === 1 ? "persona" : "personas"}</span>
             <span>
               <Icon name="clock" size={14} />
               {recipe.time} min
@@ -72,8 +71,9 @@ function ChatRecipe({ recipe, pantry, saved, onOpen, onSave, ingredients }) {
           <p>{recipe.steps[0]}</p>
         </div>
       </div>
+      <RecipePantryImpact recipe={recipe} pantry={pantry} />
       <div className="culinary-recipe-actions">
-        <button className="btn primary" onClick={() => onOpen(recipe)}>
+        <button className="btn primary" onClick={() => onOpen(recipe, servings)}>
           <Icon name="book" size={17} />
           Ver receta completa
         </button>
@@ -102,7 +102,7 @@ export default function AssistantWorkspace({
   busy,
   saved,
   generated,
-  generate,
+  generate: requestGeneration,
   onNewChat,
   chatId,
   chatHistory,
@@ -116,7 +116,6 @@ export default function AssistantWorkspace({
   onImport,
   onOpenRecipe,
   onSave,
-  endRef,
 }) {
   const byId = new Map(ingredients.map((item) => [item.id, item]));
   const eligible = (recipe) =>
@@ -129,28 +128,49 @@ export default function AssistantWorkspace({
       .reverse()
       .flatMap((m) => m.recipes || [])
       .find(usable) || recent.find(usable);
-  const used = lastRecipe?.ingredients.length || 0;
-  const percent = pantry.length ? Math.round((used / pantry.length) * 100) : 0;
-  const review = requiresReview(profile, ingredients);
-  const guide = () =>
-    lastRecipe ? onOpenRecipe(lastRecipe) : onNavigate("recipes");
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const layout = useRef(null);
-  const [pantryExpanded, setPantryExpanded] = useState(false);
+  const guide = () => {
+    setToolPanel(null);
+    if (lastRecipe) onOpenRecipe(lastRecipe); else onNavigate("recipes");
+  };
+  const conversationRef = useRef(null);
+  const latestMessageRef = useRef(null);
+  const followLatest = useRef(true);
+  const lastMessageId = messages.at(-1)?.id;
+  const previousMessage = useRef({ chatId, lastMessageId });
+  const generate = (...args) => {
+    followLatest.current = true;
+    return requestGeneration(...args);
+  };
   useEffect(() => {
-    let compact;
-    const observer = new ResizeObserver(([entry]) => {
-      const nextCompact = entry.contentRect.width <= 1000;
-      if (compact !== nextCompact) {
-        compact = nextCompact;
-        setPantryExpanded(!nextCompact);
-      }
+    const previous = previousMessage.current;
+    previousMessage.current = { chatId, lastMessageId };
+    if (previous.chatId !== chatId) {
+      followLatest.current = true;
+      const conversation = conversationRef.current;
+      if (conversation) conversation.scrollTop = conversation.scrollHeight;
+      return;
+    }
+    if (previous.lastMessageId === lastMessageId || !followLatest.current) return;
+    const frame = requestAnimationFrame(() => {
+      if (document.querySelector("dialog[open]")) return;
+      const conversation = conversationRef.current, latest = latestMessageRef.current;
+      if (!conversation || !latest) return;
+      conversation.scrollTo({
+        top: conversation.scrollTop + latest.getBoundingClientRect().top - conversation.getBoundingClientRect().top - 20,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      });
     });
-    observer.observe(layout.current);
-    return () => observer.disconnect();
-  }, []);
+    return () => cancelAnimationFrame(frame);
+  }, [chatId, lastMessageId]);
+  const [toolPanel, setToolPanel] = useState("history");
+  const [historyPage, setHistoryPage] = useState(0);
+  const selectTool = (panel) => {
+    setToolPanel(current => current === panel ? null : panel);
+    setHistoryPage(0);
+    if (panel === "history" && toolPanel !== panel) onRefreshHistory();
+  };
   return (
-    <div className="page-enter culinary-assistant" ref={layout}>
+    <div className="culinary-assistant">
       <h1 className="visually-hidden">Tu chat de cocina</h1>
       <div className="culinary-assistant-grid">
         <section
@@ -159,6 +179,13 @@ export default function AssistantWorkspace({
         >
           <div
             className="culinary-conversation"
+            ref={conversationRef}
+            tabIndex={0}
+            aria-label="Mensajes del chat"
+            onScroll={e => {
+              const box = e.currentTarget;
+              followLatest.current = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+            }}
             aria-live="polite"
             aria-busy={busy}
           >
@@ -176,21 +203,19 @@ export default function AssistantWorkspace({
                       disabled={busy}
                       onClick={() => onImport("image")}
                     >
-                      subir una foto de tu refri
+                      usar Nutri-Vision
                     </button>{" "}
                     para agregar ingredientes y encontrar una idea con lo que
                     tienes.
                   </p>
                 </div>
                 <small className="culinary-message-stamp">
-                  NutriBot
+                  Nutribot
                 </small>
               </div>
             </div>
             {!messages.length && (
               <div className="culinary-starter">
-                <div aria-hidden="true">
-                </div>
                 <h2>Elige una sugerencia o cuéntame qué te gustaría cocinar</h2>
                 <p>
                   Nuestros Chefsitos están para ayudarte con tu próxima idea.
@@ -199,7 +224,7 @@ export default function AssistantWorkspace({
               </div>
             )}
             {messages.map((m, index) => (
-              <div className={`culinary-message ${m.role}`} key={m.id}>
+              <div className={`culinary-message ${m.role}`} key={m.id} ref={index === messages.length - 1 ? latestMessageRef : null}>
                 {m.role === "bot" && (
                   <span className="culinary-message-avatar">
                     <Icon name="bot" size={19} />
@@ -218,6 +243,23 @@ export default function AssistantWorkspace({
                         />
                       )}
                     <p>{m.text}</p>
+                    {m.type === "nutrition_setup" && index === messages.length - 1 && (
+                      <NutritionClarification ingredientIds={m.nutritionIngredientIds || []} disabled={busy}
+                        onContinue={() => generate(m.retryText || "Continúa con la receta que estábamos preparando", m.retryMode || "initial")} />
+                    )}
+                    {m.type === "conversation" && !m.servings && /cuánt|cuant|solo para ti|personas/i.test(m.text) && index === messages.length - 1 && (
+                      <div className="culinary-quick-replies" aria-label="Personas para cocinar">
+                        {["Solo para mí", "2 personas", "3 personas", "4 personas"].map(reply => (
+                          <button key={reply} disabled={busy} onClick={() => generate(reply)}>{reply}</button>
+                        ))}
+                      </div>
+                    )}
+                    {m.missingIngredients?.length > 0 && index === messages.length - 1 && (
+                      <div className="culinary-quick-replies">
+                        <button disabled={busy} onClick={() => generate("Sí, puedo conseguir los ingredientes que faltan.")}>Sí, puedo conseguirlos</button>
+                        <button disabled={busy} onClick={() => generate("Mejor otro plato con lo que tengo en mi despensa.")}>Usar lo que tengo</button>
+                      </div>
+                    )}
                     {m.ingredientNames?.length > 0 && (
                       <div className="culinary-detected">
                         {m.ingredientNames.map((name, index) => (
@@ -261,6 +303,7 @@ export default function AssistantWorkspace({
                     <ChatRecipe
                       key={recipe.id}
                       recipe={recipe}
+                      servings={m.servings || 1}
                       pantry={pantry}
                       saved={saved}
                       onOpen={onOpenRecipe}
@@ -295,7 +338,6 @@ export default function AssistantWorkspace({
                 </div>
               </div>
             )}
-            <div ref={endRef} />
           </div>
           <div className="culinary-composer-area">
             <div className="culinary-suggestions">
@@ -362,25 +404,11 @@ export default function AssistantWorkspace({
               </div>
               <div className="culinary-compose-tools">
                 <div>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onImport("image")}
-                  >
-                    <Icon name="camera" size={17} />
-                    Subir / tomar foto
+                  <button type="button" className="culinary-compose-icon" disabled={busy} onClick={() => onImport("image")} aria-label="Usar Nutri-Vision: subir o tomar foto" title="Usar Nutri-Vision">
+                    <Icon name="camera" size={21} />
                   </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onImport("text")}
-                  >
-                    <Icon name="plus" size={17} />
-                    Agregar alimentos
-                  </button>
-                  <button type="button" onClick={() => onNavigate("pantry")}>
-                    <Icon name="pantry" size={17} />
-                    Mi despensa ({pantry.length})
+                  <button type="button" className="culinary-compose-icon" disabled={busy} onClick={() => onImport("text")} aria-label="Agregar alimentos" title="Agregar alimentos">
+                    <Icon name="plus" size={21} />
                   </button>
                 </div>
                 <label>
@@ -408,61 +436,23 @@ export default function AssistantWorkspace({
             )}
           </div>
         </section>
-        <aside className="culinary-context" aria-label="Tu cocina en contexto">
-          <section
-            className="culinary-context-card context-controls-card"
-            aria-label="Despensa e historial"
-          >
-            <div
-              className="culinary-modes context-modes"
-              aria-label="Herramientas del chat"
-            >
-              <button
-                className={!historyOpen ? "active" : ""}
-                aria-pressed={!historyOpen}
-                onClick={() => setHistoryOpen(false)}
-              >
-                <Icon name="chat" size={16} />
-                <span>Conversación</span>
-              </button>
-              <button disabled={busy} onClick={() => onImport("image")}>
-                <Icon name="camera" size={16} />
-                <span>Visión Refri</span>
-              </button>
-              <button onClick={guide}>
-                <Icon name="chef" size={16} />
-                <span>Guía paso a paso</span>
-              </button>
-              <button
-                className={historyOpen ? "active" : ""}
-                aria-pressed={historyOpen}
-                onClick={() => {
-                  setHistoryOpen(true);
-                  onRefreshHistory();
-                }}
-              >
-                <Icon name="history" size={16} />
-                <span>Historial de chats</span>
-              </button>
-            </div>
-            <button
-              className="context-new-chat btn secondary"
-              disabled={busy}
-              onClick={async () => {
-                if (await onNewChat()) setHistoryOpen(false);
-              }}
-            >
-              <Icon name="plus" size={17} />
-              Nuevo chat
+        <aside className="chat-sidebar" aria-label="Herramientas del chat">
+          <button className="chat-sidebar-button new-chat" disabled={busy} onClick={async () => {
+            if (await onNewChat()) { setToolPanel("history"); setHistoryPage(0); }
+          }}><Icon name="plus" size={20} /><span>Nuevo chat</span></button>
+          <div className="chat-sidebar-tabs" aria-label="Vistas de tu cocina">
+            <button id="chat-tool-history" className="chat-sidebar-button" aria-expanded={toolPanel === "history"} aria-controls="chat-sidebar-preview" onClick={() => selectTool("history")}>
+              <Icon name="history" size={20} /><span>Historial</span>
             </button>
-            {historyOpen ? (
-              <div className="conversation-history">
-                <div className="culinary-card-title">
-                  <h2>
-                    <Icon name="history" />
-                    Tus conversaciones
-                  </h2>
-                </div>
+            <button id="chat-tool-pantry" className="chat-sidebar-button" aria-expanded={toolPanel === "pantry"} aria-controls="chat-sidebar-preview" onClick={() => selectTool("pantry")}>
+              <Icon name="pantry" size={20} /><span>Despensa</span>
+            </button>
+            <button id="chat-tool-recipes" className="chat-sidebar-button" aria-expanded={toolPanel === "recipes"} aria-controls="chat-sidebar-preview" onClick={() => selectTool("recipes")}>
+              <Icon name="book" size={20} /><span>Recetas recientes</span>
+            </button>
+          </div>
+          <section id="chat-sidebar-preview" className="chat-sidebar-preview" hidden={!toolPanel} aria-labelledby={toolPanel ? `chat-tool-${toolPanel}` : undefined}>
+        {toolPanel === "history" && (<div className="conversation-history">
                 {historyLoading && (
                   <p role="status" className="culinary-muted">
                     Cargando historial…
@@ -482,14 +472,14 @@ export default function AssistantWorkspace({
                   </p>
                 )}
                 <ul>
-                  {chatHistory.map((chat) => (
+                  {chatHistory.slice(historyPage * 3, historyPage * 3 + 3).map((chat) => (
                     <li key={chat.id}>
                       <button
                         aria-current={chat.id === chatId ? "true" : undefined}
                         disabled={busy}
                         onClick={async () => {
                           if (await onSelectChat(chat.id))
-                            setHistoryOpen(false);
+                            setToolPanel("history");
                         }}
                       >
                         <Icon name="chat" size={17} />
@@ -510,127 +500,34 @@ export default function AssistantWorkspace({
                     </li>
                   ))}
                 </ul>
+                {chatHistory.length > 3 && <div className="chat-preview-pagination">
+                  <button className="text-btn" disabled={historyPage === 0} onClick={() => setHistoryPage(page => page - 1)} aria-label="Conversaciones anteriores" title="Anterior"><span aria-hidden="true">◀</span></button>
+                  <span>{historyPage + 1} / {Math.ceil(chatHistory.length / 3)}</span>
+                  <button className="text-btn" disabled={(historyPage + 1) * 3 >= chatHistory.length} onClick={() => setHistoryPage(page => page + 1)} aria-label="Conversaciones siguientes" title="Siguiente"><span aria-hidden="true">▶</span></button>
+                </div>}
                 {hasMoreHistory && (
                   <button
                     className="text-btn"
                     disabled={historyLoading}
                     onClick={onMoreHistory}
                   >
-                    Ver más conversaciones
+                    Cargar más conversaciones
                   </button>
                 )}
-              </div>
-            ) : (
-              <details
-                className="context-pantry-details"
-                open={pantryExpanded}
-                onToggle={(event) =>
-                  setPantryExpanded(event.currentTarget.open)
-                }
-              >
-                <summary>
-                  <span>
-                    <Icon name="pantry" size={20} />
-                    Ingredientes en tu despensa
-                  </span>
-                  <span className="culinary-count">{pantry.length}</span>
-                </summary>
-                {pantry.length ? (
-                  <ul className="culinary-pantry-list">
-                    {pantry.slice(0, 6).map((id) => {
-                      const item = byId.get(id);
-                      return (
-                        item && (
-                          <li key={id}>
-                            <span className="culinary-food-emoji">
-                              {item.emoji}
-                            </span>
-                            <div>
-                              <strong>{item.name}</strong>
-                              <small>{item.category}</small>
-                            </div>
-                            <Icon name="check" size={16} />
-                          </li>
-                        )
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="culinary-muted">
-                    Agrega tus primeros ingredientes para empezar a cocinar.
-                  </p>
-                )}
-                <button
-                  className="culinary-text-action"
-                  onClick={() => onNavigate("pantry")}
-                >
-                  {pantry.length > 6
-                    ? "Ver los " + pantry.length + " ingredientes"
-                    : "Editar mi despensa"}
-                  <Icon name="arrow" size={16} />
-                </button>
-              </details>
-            )}
-          </section>
-          <section className="culinary-context-card culinary-impact">
-            <div className="culinary-card-title">
-              <h2>
-                <Icon name="leaf" />
-                Aprovecha lo que tienes
-              </h2>
-            </div>
-            <div className="culinary-impact-summary">
-              {lastRecipe ? (
-                <div
-                  className="culinary-ring"
-                  style={{ "--progress": `${percent}%` }}
-                >
-                  <span>{percent}%</span>
-                </div>
-              ) : (
-                <span className="culinary-impact-icon">
-                  <Icon name="leaf" size={30} />
-                </span>
-              )}
-              <div>
-                <strong>
-                  {lastRecipe
-                    ? `${used} ingredientes en esta receta`
-                    : "Tu despensa pone las ideas"}
-                </strong>
-                <p>
-                  {lastRecipe
-                    ? `De los ${pantry.length} alimentos que tienes, estos se usan en tu receta más reciente.`
-                    : "Las recetas parten de los alimentos que ya agregaste a tu cocina."}
-                </p>
-              </div>
-            </div>
-            <button
-              className="culinary-profile-summary"
-              onClick={() => onNavigate("profile")}
-            >
-              <Icon name="shield" size={17} />
-              <span>
-                {review ? "Revisión de perfil pendiente" : profile.diet}
-                <small>
-                  {profile.allergies.length} filtros de alergias aplicados
-                </small>
-              </span>
-              <Icon name="chevron" size={16} />
-            </button>
-          </section>
-          <section className="culinary-context-card">
-            <div className="culinary-card-title">
-              <h2>
-                <Icon name="history" />
-                Recetas recientes
-              </h2>
-            </div>
-            {recent.length ? (
+              </div>)}
+        {toolPanel === "pantry" && <>
+          <h2 className="chat-preview-title">Mi despensa <small>{pantry.length} alimentos</small></h2>
+          {pantry.length ? <ul className="culinary-pantry-list">{pantry.slice(0, 3).map(id => {
+            const item = byId.get(id);
+            return item && <li key={id}><span className="culinary-food-emoji">{item.emoji}</span><div><strong>{item.name}</strong><small>{item.category}</small></div><Icon name="check" size={16} /></li>;
+          })}</ul> : <p className="culinary-muted">Agrega tus primeros ingredientes para empezar a cocinar.</p>}
+          <button className="btn secondary" onClick={() => { setToolPanel(null); onNavigate("pantry"); }}>Ver mi despensa<Icon name="arrow" size={16} /></button>
+        </>}
+        {toolPanel === "recipes" && <><h2 className="chat-preview-title">Recetas recientes</h2>{recent.length ? (
               <ul className="culinary-history">
                 {recent.map((recipe) => (
                   <li key={recipe.id}>
-                    <button onClick={() => onOpenRecipe(recipe)}>
+                    <button onClick={() => { setToolPanel(null); onOpenRecipe(recipe); }}>
                       <i />
                       <span>
                         <strong>{recipe.title}</strong>
@@ -655,7 +552,7 @@ export default function AssistantWorkspace({
             >
               <Icon name={lastRecipe ? "play" : "book"} size={18} />
               {lastRecipe ? "Cocinar paso a paso" : "Explorar mis recetas"}
-            </button>
+            </button></>}
           </section>
         </aside>
       </div>

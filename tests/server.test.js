@@ -130,7 +130,9 @@ test("Gemini retries with eligible catalog only after no exact pantry recipe", a
   assert.deepEqual(prompts.map(p => p.fase), ["despensa", "alternativas"]);
   assert(!prompts[0].ingredientesPermitidos.some(i => i.id === "cilantro"));
   assert(prompts[1].ingredientesPermitidos.some(i => i.id === "cilantro"));
-  assert.equal(result.recipes[0].title, "Arroz con cilantro");
+  assert.equal(result.type, "conversation");
+  assert.deepEqual(result.missingIngredients, ["cilantro"]);
+  assert.equal(result.recipes.length, 0);
 });
 test("existing recipe titles are not returned as new alternatives", async () => {
   const i = input();
@@ -327,7 +329,7 @@ test("HTTP routes reject bad origin, private file paths and invalid payloads", (
         await fetch(url + "/api/recipes/suggest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: "x".repeat(13000),
+          body: "x".repeat(25000),
         })
       ).status,
       413,

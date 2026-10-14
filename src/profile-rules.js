@@ -44,7 +44,7 @@ export function profileRestrictions(profile, catalog = ingredients) {
   }
   const text = normalize(profile.exclusions || "");
   const parts = text ? text.split(/[,;\n]+|\s+y\s+/).map((part) =>
-    part.trim().replace(/^(?:sin|evito|evitar|no como)\s+/, "")) : [];
+    part.trim().replace(/^(?:sin|evito|evitar|no como|no me gustan?|prefiero no comer)\s+/, "")).filter(Boolean) : [];
   const resolve = (part) => rules.has(part) ? rules.get(part)
     : catalog.filter(item => foodKey(item.name) === foodKey(part)).map(item => item.id);
   const unknown = parts.some((part) => !rules.has(part) && !resolve(part).length);

@@ -19,7 +19,12 @@ test("passwords use independent salts, a costly scrypt hash, and constant-time v
   assert(await verifyPassword(password, a));
   assert(!(await verifyPassword("equivocada", a)));
   assert(!(await verifyPassword(password, null)));
-  assert.throws(() => validatePassword("12345678"), {
+  assert.equal(validatePassword("12345678"), "12345678");
+  assert.equal(validatePassword("x".repeat(128)).length, 128);
+  assert.throws(() => validatePassword("1234567"), {
+    code: "INVALID_PASSWORD",
+  });
+  assert.throws(() => validatePassword("x".repeat(129)), {
     code: "INVALID_PASSWORD",
   });
 });

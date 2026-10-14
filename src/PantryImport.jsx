@@ -1,58 +1,49 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState } from "react";
 import { allergyOptions } from "./data.js";
 import { ingredientCategories, findIngredient } from "./ingredient-utils.js";
 import { ingredientRule } from "./profile-rules.js";
 import { pantryRequest } from "./api.js";
+import Icon from "./Icons.jsx";
+import { preparePhoto, prefersCamera } from "./nutri-vision.js";
 import "./pantry-import.css";
 
 const blank = () => ({ name: "", category: "Otros", animal: false, meat: false, allergens: [] });
-export async function preparePhoto(file) {
-  if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type))
-    throw new Error("Selecciona una foto JPG, PNG o WebP.");
-  if (file.size > 12 * 1024 * 1024) throw new Error("La foto debe pesar menos de 12 MB.");
-  let bitmap;
-  try { bitmap = await createImageBitmap(file); }
-  catch { throw new Error("No pude abrir esa foto. Prueba con otra imagen."); }
-  try {
-    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    const context = canvas.getContext("2d");
-    context.fillStyle = "white"; context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const preview = canvas.toDataURL("image/jpeg", 0.82);
-    const data = preview.split(",")[1];
-    if (!data || data.length > 4194304) throw new Error("La foto es demasiado grande. Usa una imagen más pequeña.");
-    return { preview, image: { mimeType: "image/jpeg", data } };
-  } finally { bitmap.close(); }
-}
-
-export default function PantryImport({ catalog, onSave, openRequest, hideIntro = false }) {
+export default function PantryImport({ ref, catalog, onSave, hideIntro = false }) {
   const dialog = useRef(null), request = useRef(null), photoVersion = useRef(0);
   const [mode, setMode] = useState("text"), [text, setText] = useState("");
   const [photo, setPhoto] = useState(null), [items, setItems] = useState([]);
   const [status, setStatus] = useState(""), [error, setError] = useState("");
   const [confirmed, setConfirmed] = useState(false), [resultReady, setResultReady] = useState(false);
+  const gallery = useRef(null), camera = useRef(null);
+  const [dragging, setDragging] = useState(false);
   const busy = Boolean(status);
+  useImperativeHandle(ref, () => ({ open }));
   useEffect(() => () => { request.current?.abort(); photoVersion.current++; }, []);
   function close() {
     if (status === "saving") return;
     request.current?.abort(); request.current = null; photoVersion.current++;
     setStatus(""); setPhoto(null); dialog.current.close();
   }
+  function pickPhoto(input) {
+    try { input.current.click(); }
+    catch { setError("No se pudo abrir la cámara. Puedes elegir una foto de la galería."); }
+  }
   function open(next) {
+    if (status === "saving") return;
+    request.current?.abort(); request.current = null; photoVersion.current++;
+    setStatus(""); setDragging(false);
     setMode(next); setItems([]); setText(""); setPhoto(null); setError(""); setConfirmed(false); setResultReady(false);
     dialog.current.showModal();
+    // This must stay in the click handler, not an effect or timer.
+    if (next === "image" && prefersCamera()) pickPhoto(camera);
   }
-  useEffect(() => {
-    if (openRequest) open(openRequest.mode);
-  }, [openRequest]);
-  async function selectPhoto(event) {
+  function selectPhoto(event) {
     const file = event.target.files?.[0]; event.target.value = "";
-    if (!file) return;
+    if (file && !busy) loadPhoto(file);
+  }
+  async function loadPhoto(file) {
     const version = ++photoVersion.current;
-    setStatus("photo"); setError(""); setPhoto(null); setItems([]); setResultReady(false);
+    setStatus("photo"); setError(""); setPhoto(null); setItems([]); setConfirmed(false); setResultReady(false);
     try { const value = await preparePhoto(file); if (version === photoVersion.current) setPhoto(value); }
     catch (e) { if (version === photoVersion.current) setError(e.message); }
     finally { if (version === photoVersion.current) setStatus(""); }
@@ -84,24 +75,46 @@ export default function PantryImport({ catalog, onSave, openRequest, hideIntro =
   }
   return <>
     {!hideIntro && <section className="panel pantry-import-intro">
-      <div><h2>Agrega lo que tienes</h2><p>Escribe tu lista o toma una foto. Revisa los ingredientes antes de guardarlos.</p></div>
+      <div><h2>Agrega lo que tienes</h2><p>Escribe tu lista o usa Nutri-Vision. Revisa los ingredientes antes de guardarlos.</p></div>
       <div className="pantry-import-actions">
         <button className="btn primary" onClick={() => open("text")}>Agregar por texto</button>
-        <button className="btn secondary" onClick={() => open("image")}>Agregar por foto</button>
+        <button className="btn secondary" onClick={() => open("image")}>Usar Nutri-Vision</button>
       </div>
     </section>}
     <dialog ref={dialog} className="pantry-import-dialog" aria-labelledby="pantry-import-title" onCancel={e => { e.preventDefault(); close(); }}>
-      <div className="pantry-import-heading"><h2 id="pantry-import-title">{mode === "text" ? "Escribe tu despensa" : "Una foto de tu despensa"}</h2><button type="button" className="text-btn" disabled={status === "saving"} onClick={close}>Cerrar</button></div>
+      <input ref={gallery} className="nutri-vision-file" type="file" hidden accept="image/jpeg,image/png,image/webp" tabIndex={-1} aria-label="Elegir foto para Nutri-Vision" onChange={selectPhoto} disabled={busy} />
+      <input ref={camera} className="nutri-vision-file" type="file" hidden accept="image/jpeg,image/png,image/webp" capture="environment" tabIndex={-1} aria-label="Cámara de Nutri-Vision" onChange={selectPhoto} disabled={busy} />
+      <div className="pantry-import-heading">
+        <h2 id="pantry-import-title">{mode === "text" ? "Agrega tus alimentos" : "Nutri-Vision"}</h2>
+        <button type="button" className="nutri-vision-close" aria-label="Cerrar" disabled={status === "saving"} onClick={close}><Icon name="close" size={22} /></button>
+      </div>
       <fieldset disabled={busy} className="pantry-import-source">
         {mode === "text" ? <label>¿Qué ingredientes tienes?<textarea rows={3} maxLength={2000} value={text} onChange={e => setText(e.target.value)} placeholder="Tengo papas, zanahorias, dos huevos y aceite de oliva…" /></label> : <>
-          <p>Fotografía los alimentos o sus etiquetas con buena luz.</p>
-          <label>Seleccionar una imagen<input type="file" accept="image/jpeg,image/png,image/webp" onChange={selectPhoto} /></label>
-          <label className="pantry-camera">Tomar foto con el móvil<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={selectPhoto} /></label>
-          {photo && <img className="pantry-photo-preview" src={photo.preview} alt="Foto seleccionada para identificar ingredientes" />}
+          <button type="button" className={`nutri-vision-dropzone ${dragging ? "is-dragging" : ""}`} onClick={() => pickPhoto(gallery)}
+            aria-label={photo ? "Cambiar la foto de Nutri-Vision" : "Elegir una foto para Nutri-Vision"}
+            onDragOver={e => { e.preventDefault(); if (!busy) setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={e => {
+              e.preventDefault(); setDragging(false);
+              if (busy) return;
+              if (e.dataTransfer.files.length !== 1) { setError("Selecciona una sola foto a la vez."); return; }
+              loadPhoto(e.dataTransfer.files[0]);
+            }}>
+            {photo ? <><img className="pantry-photo-preview" src={photo.preview} alt="Foto seleccionada para Nutri-Vision" /><span className="nutri-vision-change">Haz clic para cambiar la foto</span></> : <>
+              <span className="nutri-vision-camera"><Icon name="camera" size={34} /><span>+</span></span>
+              <span className="nutri-vision-drop-copy">Arrastra tu foto aquí o <strong>haz clic para explorar</strong></span>
+              <small>JPG, PNG, WEBP hasta 15 MB</small>
+            </>}
+          </button>
+          <div className="nutri-vision-mobile-actions">
+            <button type="button" className="btn secondary" onClick={() => pickPhoto(camera)}><Icon name="camera" size={18} />Tomar foto</button>
+            <button type="button" className="text-btn" onClick={() => pickPhoto(gallery)}>Elegir de galería</button>
+          </div>
         </>}
-        <p className="microcopy">Al pulsar “Identificar ingredientes”, se enviará {mode === "text" ? "este texto" : "esta foto"} a Gemini (Google). La foto no se guarda en la base de datos de Nutribot.</p>
-        <button className="btn primary" type="button" onClick={analyze} disabled={mode === "text" ? !text.trim() : !photo}>Identificar ingredientes</button>
-        <button className="text-btn" type="button" onClick={() => { setItems(list => [...list, blank()]); setResultReady(true); setConfirmed(false); }} disabled={items.length >= 20}>Agregar uno manualmente</button>
+        <button className="btn primary nutri-vision-identify" type="button" onClick={analyze} disabled={mode === "text" ? !text.trim() : !photo}>Identificar ingredientes</button>
+        {mode === "image" ? <button className="text-btn nutri-vision-manual" type="button" onClick={() => open("text")}>¿Prefieres escribir? <strong>Agregar manualmente</strong></button> :
+          <button className="text-btn nutri-vision-manual" type="button" onClick={() => { setItems(list => [...list, blank()]); setResultReady(true); setConfirmed(false); }} disabled={items.length >= 20}>Agregar uno manualmente</button>}
+        <p className="microcopy nutri-vision-privacy">{mode === "text" ? "Al identificar ingredientes mediante texto, este se comparte con nuestros socios únicamente con el propósito descrito." : "Al identificar ingredientes mediante fotos, estas se comparten con nuestros socios únicamente con el propósito descrito."}</p>
       </fieldset>
       {status && <p role="status">{status === "saving" ? "Guardando en tu despensa…" : status === "photo" ? "Preparando la foto…" : "Identificando ingredientes…"}</p>}
       {error && <p className="pantry-import-error" role="alert">{error}</p>}

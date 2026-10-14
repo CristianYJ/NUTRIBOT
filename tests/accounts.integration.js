@@ -67,7 +67,7 @@ test("plans default to Basic, audit administrative changes, isolate users and su
 test("email lookup routes existing accounts to login and new emails to registration without authenticating", async (t) => {
   const f = await fixture(t);
   await f.store.auth.register(credentials("existing@example.test"), false);
-  const server = createAppServer({ store: f.store });
+  const server = createAppServer({ requireCompleteNutrition: false, store: f.store });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(
     () =>
@@ -296,7 +296,7 @@ test("accounts isolate pantry, custom catalog, recipes, favorites and chat acros
 });
 test("authenticated HTTP blocks anonymous reads, enforces CSRF, persists sessions, and revokes logout", async (t) => {
   const f = await fixture(t);
-  const server = createAppServer({
+  const server = createAppServer({ requireCompleteNutrition: false,
     store: f.store,
     network: { urls: ["http://192.168.1.10:8787"], qrCodes: [] },
   });

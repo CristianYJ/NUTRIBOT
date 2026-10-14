@@ -6,12 +6,12 @@ const options = { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 export function validatePassword(password) {
   if (
     typeof password !== "string" ||
-    password.length < 15 ||
+    password.length < 8 ||
     password.length > 128
   )
     throw new AppError(
       "INVALID_PASSWORD",
-      "Usa una contraseña de entre 15 y 128 caracteres. Puedes usar una frase larga.",
+      "Usa una contraseña de entre 8 y 128 caracteres.",
     );
   return password;
 }

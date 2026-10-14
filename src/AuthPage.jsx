@@ -176,13 +176,13 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                             : "current-password"
                         }
                         required
-                        minLength={step === "register" ? 15 : undefined}
+                        minLength={step === "register" ? 8 : undefined}
                         maxLength={128}
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
                         placeholder={
                           step === "register"
-                            ? "Al menos 15 caracteres"
+                            ? "Al menos 8 caracteres"
                             : "Ingresa tu contraseña"
                         }
                       />
@@ -201,8 +201,7 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                   {step === "register" && (
                     <>
                       <p className="auth-hint">
-                        Usa una frase larga que puedas recordar, de 15 a 128
-                        caracteres.
+                        Usa una contraseña de entre 8 y 128 caracteres.
                       </p>
                       <label htmlFor="auth-confirm">
                         Confirmar contraseña
@@ -213,7 +212,7 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                             type="password"
                             autoComplete="new-password"
                             required
-                            minLength={15}
+                            minLength={8}
                             maxLength={128}
                             value={confirm}
                             onChange={(event) => setConfirm(event.target.value)}

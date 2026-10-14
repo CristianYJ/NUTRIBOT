@@ -1,3 +1,4 @@
+import { recipeContext } from "./recipe-context.js";
 import { MAX_CHAT_MESSAGES } from "./conversation-limits.js";
 import PantryWorkspace from "./PantryWorkspace.jsx";
 import { authenticatedFetch } from "./auth-api.js";
@@ -12,6 +13,7 @@ import { newId } from "./ids.js";
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import PantryImport from "./PantryImport.jsx";
+import RecipePantryImpact from "./RecipePantryImpact.jsx";
 import CulinaryHeader from "./CulinaryHeader.jsx";
 import AssistantWorkspace from "./AssistantWorkspace.jsx";
 import NutritionPanel from "./NutritionPanel.jsx";
@@ -226,15 +228,13 @@ function Workspace({ initial, onSignedOut }) {
   const [maxTime, setMaxTime] = useState(chat.maxTime);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
-  const [pantryImportRequest, setPantryImportRequest] = useState(null);
-  const openPantryImport = (mode) =>
-    setPantryImportRequest({ mode, id: newId() });
+  const pantryImport = useRef(null);
+  const openPantryImport = (mode) => pantryImport.current?.open(mode);
   const [confirmReset, setConfirmReset] = useState(false);
   const request = useRef(null);
   const dialog = useRef(null);
   const resetDialog = useRef(null);
   const pending = useRef(null);
-  const end = useRef(null);
 
   const persistence = usePersistence(initial, {
     pantry,
@@ -393,15 +393,6 @@ function Workspace({ initial, onSignedOut }) {
     else resetDialog.current?.close();
   }, [confirmReset]);
   useEffect(() => {
-    if (messages.length && end.current?.parentElement) {
-      const conversation = end.current.parentElement;
-      conversation.scrollTo({
-        top: conversation.scrollHeight,
-        behavior: "smooth",
-      });
-    }
-  }, [messages, busy]);
-  useEffect(() => {
     if (request.current) {
       request.current.abort();
       request.current = null;
@@ -456,7 +447,7 @@ function Workspace({ initial, onSignedOut }) {
           role: "user",
           createdAt,
           text: context.preview
-            ? "Agregué ingredientes desde una foto."
+            ? "Agregué ingredientes con Nutri-Vision."
             : "Agregué ingredientes a mi despensa.",
           photo: context.preview,
         },
@@ -499,6 +490,7 @@ function Workspace({ initial, onSignedOut }) {
         revision,
         maxTime,
         message: text,
+        history: recipeContext(messages),
         mode,
         signal: controller.signal,
       });
@@ -603,7 +595,6 @@ function Workspace({ initial, onSignedOut }) {
             </>
           )}
           <span className="photo-label">
-            {r.source === "gemini" ? "Gemini · " : "Ejemplo · "}
             {r.category}
           </span>
         </button>
@@ -627,6 +618,7 @@ function Workspace({ initial, onSignedOut }) {
             <h3>{r.title}</h3>
           </button>
           <p>{r.subtitle}</p>
+          <RecipePantryImpact recipe={r} pantry={pantry} />
           <div className={`availability ${a.missing.length ? "missing" : ""}`}>
             <Icon name={a.missing.length ? "bag" : "check"} size={15} />
             {a.missing.length
@@ -639,7 +631,7 @@ function Workspace({ initial, onSignedOut }) {
   }
   return (
     <>
-      <div className="app-shell culinary-shell">
+      <div className={`app-shell culinary-shell ${page === "assistant" ? "assistant-shell" : ""}`}>
         <CulinaryHeader
           brand={<Brand />}
           page={page}
@@ -797,7 +789,6 @@ function Workspace({ initial, onSignedOut }) {
                 onImport={openPantryImport}
                 onOpenRecipe={openRecipe}
                 onSave={toggleSave}
-                endRef={end}
               />
             )}
             {page === "recipes" && (
@@ -992,7 +983,7 @@ function Workspace({ initial, onSignedOut }) {
       <PantryImport
         catalog={ingredients}
         onSave={addPantry}
-        openRequest={pantryImportRequest}
+        ref={pantryImport}
         hideIntro
       />
       <dialog
@@ -1077,9 +1068,7 @@ function Workspace({ initial, onSignedOut }) {
                 </label>
               </div>
               <p className="microcopy">
-                {servings > 1
-                  ? `Prepara ${servings} veces cada cantidad base indicada abajo.`
-                  : "Cantidades base para 1 porción."}{" "}
+                Cantidades para {servings} {servings === 1 ? "persona" : "personas"}.{" "}
                 La despensa comprueba presencia, no cantidades.
               </p>
               <ul className="detail-ingredients">
@@ -1089,10 +1078,11 @@ function Workspace({ initial, onSignedOut }) {
                       {ingredientById[id].emoji}
                     </span>
                     <span>
-                      {selected.amounts[i]}
-                      {servings > 1 && (
-                        <strong className="multiplier"> × {servings}</strong>
-                      )}
+                      {Number.isFinite(selected.grams?.[i]) && selected.grams[i] > 0
+                        ? <>{Number((selected.grams[i] * servings).toFixed(2)).toLocaleString("es")} g de {ingredientById[id].name.toLowerCase()}
+                            <small className="ingredient-base-amount">Por persona: {selected.amounts[i]}</small></>
+                        : <>{selected.amounts[i]}{servings > 1 && <strong className="multiplier"> × {servings}</strong>}</>}
+
                     </span>
                     <span className={pantry.includes(id) ? "have" : "need"}>
                       {pantry.includes(id) ? "En despensa" : "Te falta"}
@@ -1237,6 +1227,37 @@ function ProfileForm({ profile, onSave, catalog }) {
             />
           </label>
           <label>
+            Mi objetivo
+            <select
+              value={draft.goal}
+              onChange={(e) => field("goal", e.target.value)}
+            >
+              {[
+                "Comer más variado",
+                "Aprovechar mis ingredientes",
+                "Mantener mi peso",
+                "Bajar de peso",
+                "Aumentar de peso",
+              ].map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Preferencia alimentaria
+            <select
+              value={draft.diet}
+              onChange={(e) => field("diet", e.target.value)}
+            >
+              {["Sin preferencia", "Vegetariana", "Vegana"].map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+          </label>
+          <details className="profile-optional">
+            <summary>Datos personales opcionales</summary>
+            <p className="microcopy">Puedes pedir recetas sin completar estos datos.</p>
+          <label>
             Fecha de nacimiento <span className="optional">opcional</span>
             <input
               type="date"
@@ -1287,37 +1308,10 @@ function ProfileForm({ profile, onSave, catalog }) {
             </label>
           </div>
           <p className="microcopy">
-            Estos datos se guardan en tu perfil local. Nutribot no calcula
+            Estos datos se guardan en tu cuenta. Nutribot no calcula
             necesidades calóricas ni prescribe dietas.
           </p>
-          <label>
-            Mi objetivo
-            <select
-              value={draft.goal}
-              onChange={(e) => field("goal", e.target.value)}
-            >
-              {[
-                "Comer más variado",
-                "Aprovechar mis ingredientes",
-                "Mantener mi peso",
-                "Bajar de peso",
-                "Aumentar de peso",
-              ].map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Preferencia alimentaria
-            <select
-              value={draft.diet}
-              onChange={(e) => field("diet", e.target.value)}
-            >
-              {["Sin preferencia", "Vegetariana", "Vegana"].map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
-          </label>
+          </details>
         </section>
         <section className="panel form-panel">
           <div className="form-section-title">
@@ -1356,6 +1350,9 @@ function ProfileForm({ profile, onSave, catalog }) {
               onChange={(e) => field("exclusions", e.target.value)}
             />
           </label>
+          <details className="profile-optional">
+            <summary>Indicaciones y límites opcionales{(draft.maxSaturatedFatG || draft.maxSodiumMg || draft.maxSugarG) ? " · Hay límites activos" : ""}</summary>
+            <p className="microcopy">Solo si tu profesional te dio indicaciones. Puedes dejarlo vacío para cocinar con tus preferencias y alergias.</p>
           <label>
             Indicaciones de mi profesional{" "}
             <span className="optional">opcional</span>
@@ -1379,11 +1376,12 @@ function ProfileForm({ profile, onSave, catalog }) {
           <label>Azúcares totales máximos (g)
             <input type="number" min="0.01" max="200" step="0.01" value={draft.maxSugarG || ""} onChange={(e) => field("maxSugarG", e.target.value)} placeholder="Sin límite" />
           </label>
+          </details>
           <div className="review-note">
             <Icon name="info" size={18} />
             <p>
               {profileRestrictions(draft, catalog).reason ||
-                "Los alimentos reconocidos se excluyen de las recetas. Separa sus nombres con comas. Las indicaciones escritas se guardan, pero Nutribot no puede verificar automáticamente si una receta las cumple. Los alimentos que no podamos reconocer ponen las sugerencias en pausa."}
+                "Las recetas respetan las alergias y los alimentos que evitas. Escribe nombres separados por comas; te avisaremos si alguno necesita aclaración."}
             </p>
           </div>
         </section>

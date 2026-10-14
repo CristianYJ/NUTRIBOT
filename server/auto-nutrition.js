@@ -28,6 +28,17 @@ const namedFdcIds = {
   'mani': 2515376, 'cacahuates': 2515376, 'camarones': 175179,
   'camaron': 175179, 'salmon': 2706284, 'carne molida': 2705853,
   'pasta seca': 168927, 'pan integral': 2707709,
+  // Verified against FDC descriptions: table salt, raw sweet green pepper,
+  // and a raw composite of beef retail cuts (lean + fat, all grades).
+  'sal': 173468, 'sal de mesa': 173468,
+  'chile verde': 170427, 'pimiento verde': 170427,
+  'carne de res': 174757,
+  'frijoles negros cocidos sin sal': 173735,
+  'frijoles negros secos': 173734,
+  'aceite de canola': 172336,
+  'aceite de maiz': 171029,
+  'aceite de soya': 171411,
+
 };
 
 const catalogGrams = {
@@ -52,10 +63,11 @@ export function curatedFdcId(ingredientId, name) {
 
 export async function findAutomaticUsdaFood(item, apiKey, fetchImpl = fetch) {
   if (item.usda && Object.hasOwn(item.usda.nutrients || {}, 'fiber')) return null;
-  if ((unmatchedUntil.get(item.ingredientId) || 0) > Date.now()) return null;
   if (item.usda?.fdcId) return getUsdaFood(item.usda.fdcId, apiKey, fetchImpl);
   const curated = curatedFdcId(item.ingredientId, item.name);
   if (curated) return getUsdaFood(curated, apiKey, fetchImpl);
+  if (['frijoles negros', 'aceite vegetal'].includes(normalizeName(item.name))) return null;
+  if ((unmatchedUntil.get(item.ingredientId) || 0) > Date.now()) return null;
   // Conservative fallback for an English or already translated custom name.
   // A broad or branded search hit is not silently treated as the same food.
   const candidates = await searchUsdaFoods(item.name, apiKey, fetchImpl);
@@ -80,4 +92,13 @@ export async function resolveAutomaticUsdaLinks(store, items, apiKey, fetchImpl 
     unavailable: results.some((result) => result.status === 'rejected'),
     unmatched: missing.filter((item, index) => results[index].status !== 'fulfilled' || !results[index].value).map((item) => item.name),
   };
+}
+
+export function nutritionReferenceNotes(items) {
+  const notes = {
+    173468: 'Sal: se usa la ficha de sal de mesa.',
+    170427: 'Chile verde: se usa pimiento dulce verde crudo.',
+    174757: 'Carne de res: se usa una referencia de varios cortes crudos, con carne y grasa. El corte real puede cambiar los valores.',
+  };
+  return [...new Set(items.map(item => notes[item.usda?.fdcId]).filter(Boolean))];
 }

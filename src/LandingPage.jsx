@@ -11,8 +11,8 @@ const links = [
 ];
 const steps = [
   [
-    "Ingresa o fotografía tus ingredientes",
-    "Escribe lo que tienes o sube una foto de tu refri. Revisa los alimentos reconocidos antes de agregarlos a tu despensa.",
+    "Agrega tus ingredientes con Nutri-Vision",
+    "Escribe lo que tienes o usa Nutri-Vision con una foto de tu refri. Revisa los alimentos reconocidos antes de agregarlos a tu despensa.",
   ],
   [
     "NutriBot IA propone tu receta",
@@ -54,7 +54,7 @@ const benefits = [
     label: "Innovación IA",
     title: "Beneficio tecnológico",
     text: "Reúne texto, reconocimiento de ingredientes en fotos y recetas con IA en una interfaz que te acompaña tanto en la PC como en el teléfono.",
-    tags: ["Texto y fotografía", "Recetas con Gemini"],
+    tags: ["Nutri-Vision", "Recetas con Gemini"],
   },
 ];
 function Enter({ children = "Comenzar gratis", secondary = false }) {
@@ -153,7 +153,7 @@ export default function LandingPage({ brand }) {
               </span>
               <span>
                 <Icon name="camera" size={17} />
-                Texto o foto
+                Nutri-Vision
               </span>
               <span>
                 <Icon name="chef" size={17} />
@@ -390,7 +390,7 @@ export default function LandingPage({ brand }) {
               </div>
               <Checks
                 items={[
-                  "Despensa por texto y foto",
+                  "Despensa por texto y Nutri-Vision",
                   "Recetas, favoritos e historial",
                   "Fechas de despensa editables",
                 ]}

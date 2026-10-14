@@ -122,7 +122,10 @@ export async function generateStructured(
 }
 
 export async function generateWithGemini(input, config = {}) {
-  for (const scope of ["pantry", "catalog"]) {
+  const scopes = ["pantry", "catalog"];
+  let repair = false;
+  let issues = [];
+  for (const scope of scopes) {
     const ids = scope === "pantry" ? allowedIngredients(input) : eligibleIngredients(input);
     if (!ids.length) continue;
     // Short aliases keep custom UUIDs out of the provider's schema grammar.
@@ -133,6 +136,13 @@ export async function generateWithGemini(input, config = {}) {
     prompt.ingredientesPermitidos = prompt.ingredientesPermitidos.map(item =>
       ({ ...item, id: wireIds.get(item.id) }));
     prompt.ingredientesEnDespensa = prompt.ingredientesEnDespensa.map(id => wireIds.get(id));
+    prompt.referenciasNutricionales = prompt.referenciasNutricionales.filter(item => wireIds.has(item.id)).map(item => ({ ...item, id: wireIds.get(item.id) }));
+    prompt.faltantesConfirmados = prompt.faltantesConfirmados.map(id => wireIds.get(id)).filter(Boolean);
+    if (repair) prompt.problemasDetectados = issues.map(issue => ({
+      reason: issue.reason,
+      ...(issue.ingredientId && wireIds.has(issue.ingredientId) ? { ingredientId: wireIds.get(issue.ingredientId) } : {}),
+    }));
+    if (repair) prompt.correccion = "La receta anterior no pasó la validación. Regenera usando solo los IDs permitidos; declara todos los ingredientes mencionados, cantidades y gramos coherentes y no incluyas extras en los pasos.";
     const { output, model } = await generateStructured({
       parts: [{ text: JSON.stringify(prompt) }],
       instruction: SYSTEM_INSTRUCTION + " Los identificadores customN corresponden a alimentos agregados por el usuario: interpreta su nombre y úsalos normalmente en las recetas. En cantidades y pasos conserva el nombre completo cuando distingue una variedad o estado (por ejemplo, arroz cocido).",
@@ -148,10 +158,15 @@ export async function generateWithGemini(input, config = {}) {
     try {
       result = validateOutput(output, input, model, scope);
     } catch (error) {
-      if (scope === "pantry" && error.code === "INVALID_AI_OUTPUT") continue;
+      if (scope === "pantry" && !repair && error.code === "INVALID_AI_OUTPUT") {
+        scopes[1] = "pantry";
+        repair = true;
+        issues = error.validationIssues || [];
+        continue;
+      }
       throw error;
     }
-    if (result.type === "review" || result.type === "out_of_scope") return result;
+    if (result.type === "review" || result.type === "out_of_scope" || result.type === "conversation") return result;
     if (result.type !== "success") continue;
     const seen = new Set((input.previous || []).map((title) => title.normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
@@ -163,6 +178,16 @@ export async function generateWithGemini(input, config = {}) {
       return true;
     });
     if (result.recipes.length) {
+      const ready = result.recipes.filter(recipe => recipe.ingredients.every(id => input.pantry.includes(id) || input.approvedMissing?.includes(id)));
+      if (ready.length) result.recipes = ready;
+      const missing = [...new Set(result.recipes.flatMap(recipe => recipe.ingredients))]
+        .filter(id => !input.pantry.includes(id) && !input.approvedMissing?.includes(id));
+      if (missing.length) {
+        const names = missing.map(id => input.catalog.find(item => item.id === id)?.name || id);
+        return { type: "conversation", source: "gemini", model: result.model,
+          servings: result.servings, recipes: [], missingIngredients: missing,
+          text: `Con tu despensa no encontré una opción que cumpla la petición. Para preparar ${result.recipes[0].title} faltarían: ${names.join(", ")}. ¿Puedes conseguirlos o prefieres que busquemos otro plato con lo que tienes?` };
+      }
       result.text = result.recipes.some((recipe) => recipe.ingredients.some((id) => !input.pantry.includes(id)))
         ? `Encontré una alternativa cercana. Te indico qué ingredientes faltan para prepararla. Revisa cantidades, preparación y etiquetas.${input.hasProfessionalNotes ? " Las indicaciones escritas de tu profesional no se verificaron automáticamente." : ""}`
         : result.text;

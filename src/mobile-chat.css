@@ -1,0 +1,65 @@
+/* Mobile chat keeps the conversation in the available visual viewport. */
+@media (max-width: 800px) {
+  .culinary-shell.assistant-shell { height: var(--assistant-height, 100dvh); }
+  .assistant-shell .culinary-header { min-height: 60px; padding: 8px 14px; gap: 12px; }
+  .assistant-shell .culinary-header .brand { font-size: 22px; gap: 6px; }
+  .assistant-shell .culinary-header .brand img { width: 24px; height: 40px; }
+  .culinary-shell.assistant-shell .main-area > main { padding: 6px 8px; }
+  .assistant-shell .culinary-assistant-grid { gap: 6px; }
+  .assistant-shell .chat-sidebar { position: relative; z-index: 2; padding: 6px; gap: 4px; }
+  .assistant-shell .chat-sidebar > .new-chat { min-height: 40px; padding: 8px 38px; font-size: 13px; }
+  .assistant-shell .chat-sidebar > .new-chat > span { flex: 0 1 auto; white-space: nowrap; }
+  .assistant-shell .chat-sidebar-tabs .chat-sidebar-button { min-height: 44px; font-size: 11px; padding: 5px; }
+  .assistant-shell .chat-sidebar-tabs .chat-sidebar-button > span { flex: 0 1 auto; }
+  .assistant-shell .chat-sidebar-tabs svg { width: 17px; flex-shrink: 0; }
+  .assistant-shell .chat-sidebar-preview {
+    position: absolute; left: 0; right: 0; top: 100%; z-index: 3;
+    max-height: min(42dvh, 330px); padding: 12px; border-radius: 0 0 16px 16px;
+    background: white; box-shadow: 0 12px 24px #131b2e24;
+  }
+  .assistant-shell .culinary-chat { border-radius: 16px; }
+  .assistant-shell .culinary-conversation { padding: 14px 10px; gap: 20px; scrollbar-gutter: auto; }
+  .assistant-shell .culinary-message-avatar { display: none; }
+  .assistant-shell .culinary-bubble { padding: 12px 14px; }
+  .assistant-shell .culinary-bubble p { font-size: 16px; line-height: 1.6; }
+  .assistant-shell .culinary-message.user { margin-left: 24px; }
+  .assistant-shell .culinary-message.user .culinary-bubble { padding: 12px 14px; }
+  .assistant-shell .culinary-message-stamp { font-size: 11px; }
+  .assistant-shell .culinary-recipe { padding: 14px; }
+  .assistant-shell .culinary-recipe-heading { flex-direction: row; align-items: flex-start; gap: 10px; }
+  .assistant-shell .culinary-recipe-art { width: 54px; height: 62px; border-radius: 12px; }
+  .assistant-shell .culinary-recipe-art span { font-size: 24px; }
+  .assistant-shell .culinary-recipe-art span:nth-child(1) { left: 4px; top: 4px; }
+  .assistant-shell .culinary-recipe-art span:nth-child(2) { right: 2px; top: 18px; }
+  .assistant-shell .culinary-recipe-art span:nth-child(3) { left: 8px; bottom: 0; }
+  .assistant-shell .culinary-recipe h2 { font-size: 18px; line-height: 1.35; }
+  .assistant-shell .culinary-composer-area { padding: 8px; }
+  .assistant-shell .culinary-composer-area.has-messages .culinary-suggestions { display: none; }
+  .assistant-shell .culinary-suggestions { flex-wrap: nowrap; overflow-x: auto; }
+  .assistant-shell .culinary-suggestions button { white-space: nowrap; flex-shrink: 0; }
+  .assistant-shell .culinary-composer { padding: 8px 10px; }
+  .assistant-shell .culinary-compose-input { align-items: center; gap: 8px; }
+  .assistant-shell .culinary-compose-input textarea { font-size: 16px; line-height: 1.4; min-height: 44px; height: 44px; max-height: 88px; resize: none; }
+  .assistant-shell .culinary-send { width: 44px; height: 44px; flex-shrink: 0; }
+  .assistant-shell .culinary-compose-tools { padding-top: 4px; margin-top: 4px; flex-wrap: nowrap; }
+  .assistant-shell .culinary-compose-tools > div { gap: 4px; flex-wrap: nowrap; }
+  .assistant-shell .culinary-compose-tools button.culinary-compose-icon { width: 44px; min-height: 44px; }
+  .assistant-shell .culinary-compose-tools select { min-height: 44px; font-size: 12px; }
+  .assistant-shell .culinary-privacy { font-size: 10px; line-height: 1.4; margin-top: 5px; }
+  .assistant-shell .culinary-starter { padding: 8px; }
+  .assistant-shell .culinary-starter h2 { font-size: 18px; }
+  .assistant-shell .storage-status { flex-shrink: 0; min-height: 0; padding: 2px 12px; }
+  .assistant-shell[data-keyboard-open="true"] { padding-bottom: 0; }
+  .assistant-shell[data-keyboard-open="true"] > .culinary-header,
+  .assistant-shell[data-keyboard-open="true"] .mobile-nav,
+  .assistant-shell[data-keyboard-open="true"] .chat-sidebar,
+  .assistant-shell[data-keyboard-open="true"] .culinary-suggestions,
+  .assistant-shell[data-keyboard-open="true"] .culinary-privacy { display: none; }
+  .assistant-shell[data-keyboard-open="true"] .culinary-assistant-grid { grid-template-rows: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .culinary-shell.assistant-shell { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+  .culinary-shell.assistant-shell .mobile-nav { height: calc(60px + env(safe-area-inset-bottom)); padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
+  .assistant-shell .mobile-nav button:nth-child(3) svg { box-sizing: border-box; width: 26px; height: 26px; padding: 0; border: 0; margin: 0; background: none; color: inherit; box-shadow: none; }
+  .culinary-shell.assistant-shell[data-keyboard-open="true"] { padding-bottom: 0; }
+}

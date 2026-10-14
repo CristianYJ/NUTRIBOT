@@ -19,7 +19,7 @@ import AssistantWorkspace from "./AssistantWorkspace.jsx";
 import NutritionPanel from "./NutritionPanel.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
-import { readNavigation, navigationUrl } from "./navigation.js";
+import { readNavigation, navigationUrl, openRecipeInHistory, closeRecipeInHistory } from "./navigation.js";
 import { readChat } from "./chat-session.js";
 import { profileRestrictions } from "./profile-rules.js";
 import { allergyOptions } from "./data.js";
@@ -188,10 +188,10 @@ function Workspace({ initial, onSignedOut }) {
       window.removeEventListener("hashchange", restore);
     };
   }, []);
-  function navigate(next, replace = false) {
+  function navigate(next, replace = false, entryState = null) {
     const url = navigationUrl(location.href, next);
     if (url.href !== location.href)
-      history[replace ? "replaceState" : "pushState"](null, "", url);
+      history[replace ? "replaceState" : "pushState"](entryState, "", url);
     setNavigation(next);
   }
   const [pantry, setPantry] = useState(initial.pantry);
@@ -206,9 +206,10 @@ function Workspace({ initial, onSignedOut }) {
   const [category, setCategory] = useState("Todos");
   const [recipeTab, setRecipeTab] = useState("Explorar");
   const [meal, setMeal] = useState("Todas");
-  const [selected, setSelected] = useState(null);
+  const selected = allRecipes.find(recipe => recipe.id === navigation.recipeId) || null;
   const [servings, setServings] = useState(1);
   const [nutritionWithinLimits, setNutritionWithinLimits] = useState(false);
+  const recipeClosing = useRef(false);
   const [checked, setChecked] = useState([]);
   const [chat] = useState(() => ({
     id: newId(),
@@ -382,12 +383,18 @@ function Workspace({ initial, onSignedOut }) {
     return () => controller.abort();
   }, []);
   useEffect(() => {
+    recipeClosing.current = false;
     if (selected) {
       dialog.current?.showModal();
     } else {
       dialog.current?.close();
     }
   }, [selected]);
+  useEffect(() => {
+    setServings(navigation.servings || 1);
+    setNutritionWithinLimits(false);
+    setChecked([]);
+  }, [navigation.recipeId, navigation.servings]);
   useEffect(() => {
     if (confirmReset) resetDialog.current?.showModal();
     else resetDialog.current?.close();
@@ -404,15 +411,19 @@ function Workspace({ initial, onSignedOut }) {
     }
   }, [pantry, profile, maxTime]);
   function go(id) {
-    navigate({ ...navigation, page: id });
+    navigate({ page: id });
     setSearch("");
     window.scrollTo({ top: 0, behavior: "instant" });
   }
   function openRecipe(r, portions = 1) {
-    setSelected(r);
-    setServings(portions);
-    setNutritionWithinLimits(false);
-    setChecked([]);
+    // One history entry per open dialog. Back restores the page beneath it.
+    setNavigation(openRecipeInHistory(window, r.id, portions));
+  }
+  function closeRecipe() {
+    if (recipeClosing.current) return;
+    recipeClosing.current = true;
+    const next = closeRecipeInHistory(window);
+    if (next) setNavigation(next);
   }
   function toggleSave(id) {
     setSaved((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -990,9 +1001,9 @@ function Workspace({ initial, onSignedOut }) {
         className="recipe-dialog"
         aria-labelledby="recipe-title"
         ref={dialog}
-        onCancel={() => setSelected(null)}
+        onCancel={(event) => { event.preventDefault(); closeRecipe(); }}
         onClick={(e) => {
-          if (e.target === dialog.current) setSelected(null);
+          if (e.target === dialog.current) closeRecipe();
         }}
       >
         {selected && (
@@ -1008,7 +1019,7 @@ function Workspace({ initial, onSignedOut }) {
               <button
                 className="detail-close"
                 aria-label="Cerrar receta"
-                onClick={() => setSelected(null)}
+                onClick={closeRecipe}
               >
                 <Icon name="close" />
               </button>

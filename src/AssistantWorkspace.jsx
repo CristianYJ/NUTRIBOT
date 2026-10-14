@@ -117,6 +117,8 @@ export default function AssistantWorkspace({
   onOpenRecipe,
   onSave,
 }) {
+  const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 800px)").matches);
+  const workspaceRef = useRef(null);
   const byId = new Map(ingredients.map((item) => [item.id, item]));
   const eligible = (recipe) =>
     matchesProfile(recipe, profile, ingredients) &&
@@ -162,7 +164,39 @@ export default function AssistantWorkspace({
     });
     return () => cancelAnimationFrame(frame);
   }, [chatId, lastMessageId]);
-  const [toolPanel, setToolPanel] = useState("history");
+  const [toolPanel, setToolPanel] = useState(() => compact ? null : "history");
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 800px)");
+    const change = () => { setCompact(media.matches); setToolPanel(media.matches ? null : "history"); };
+    media.addEventListener("change", change);
+    return () => media.removeEventListener("change", change);
+  }, []);
+  useEffect(() => {
+    const shell = workspaceRef.current?.closest(".assistant-shell");
+    const viewport = window.visualViewport;
+    if (!shell || !viewport) return;
+    const resize = () => {
+      if (compact && viewport.scale === 1) {
+        shell.style.setProperty("--assistant-height", `${viewport.height}px`);
+        const typing = document.activeElement?.matches("textarea, input");
+        shell.dataset.keyboardOpen = String(Boolean(typing && (viewport.height < window.innerHeight - 100 || viewport.height < 500)));
+      } else {
+        shell.style.removeProperty("--assistant-height");
+        delete shell.dataset.keyboardOpen;
+      }
+    };
+    resize();
+    viewport.addEventListener("resize", resize);
+    document.addEventListener("focusin", resize);
+    document.addEventListener("focusout", resize);
+    return () => {
+      viewport.removeEventListener("resize", resize);
+      document.removeEventListener("focusin", resize);
+      document.removeEventListener("focusout", resize);
+      shell.style.removeProperty("--assistant-height");
+      delete shell.dataset.keyboardOpen;
+    };
+  }, [compact]);
   const [historyPage, setHistoryPage] = useState(0);
   const selectTool = (panel) => {
     setToolPanel(current => current === panel ? null : panel);
@@ -170,7 +204,7 @@ export default function AssistantWorkspace({
     if (panel === "history" && toolPanel !== panel) onRefreshHistory();
   };
   return (
-    <div className="culinary-assistant">
+    <div className="culinary-assistant" ref={workspaceRef}>
       <h1 className="visually-hidden">Tu chat de cocina</h1>
       <div className="culinary-assistant-grid">
         <section
@@ -339,7 +373,7 @@ export default function AssistantWorkspace({
               </div>
             )}
           </div>
-          <div className="culinary-composer-area">
+          <div className={`culinary-composer-area${messages.length ? " has-messages" : ""}`}>
             <div className="culinary-suggestions">
               <span>
                 <Icon name="sun" size={14} />
@@ -376,7 +410,7 @@ export default function AssistantWorkspace({
               <div className="culinary-compose-input">
                 <textarea
                   aria-label="Mensaje para Nutribot"
-                  placeholder="Escribe lo que tienes en mente… ¿qué cocinamos hoy?"
+                  placeholder={compact ? "¿Qué cocinamos hoy?" : "Escribe lo que tienes en mente… ¿qué cocinamos hoy?"}
                   value={message}
                   maxLength={500}
                   rows={2}
@@ -427,7 +461,7 @@ export default function AssistantWorkspace({
             </form>
             <p className="culinary-privacy">
               <Icon name="shield" size={13} />
-              Las consultas se envian a nuestros socios para generar recetas mas ricas y variadas para ti.
+              {compact ? "Tus consultas se comparten con nuestros socios para generar recetas." : "Las consultas se envían a nuestros socios para generar recetas más ricas y variadas para ti."}
             </p>
             {profile.medicalNotes?.trim() && (
               <p className="culinary-privacy" role="note">
@@ -438,7 +472,7 @@ export default function AssistantWorkspace({
         </section>
         <aside className="chat-sidebar" aria-label="Herramientas del chat">
           <button className="chat-sidebar-button new-chat" disabled={busy} onClick={async () => {
-            if (await onNewChat()) { setToolPanel("history"); setHistoryPage(0); }
+            if (await onNewChat()) { setToolPanel(compact ? null : "history"); setHistoryPage(0); }
           }}><Icon name="plus" size={20} /><span>Nuevo chat</span></button>
           <div className="chat-sidebar-tabs" aria-label="Vistas de tu cocina">
             <button id="chat-tool-history" className="chat-sidebar-button" aria-expanded={toolPanel === "history"} aria-controls="chat-sidebar-preview" onClick={() => selectTool("history")}>
@@ -479,7 +513,7 @@ export default function AssistantWorkspace({
                         disabled={busy}
                         onClick={async () => {
                           if (await onSelectChat(chat.id))
-                            setToolPanel("history");
+                            setToolPanel(compact ? null : "history");
                         }}
                       >
                         <Icon name="chat" size={17} />

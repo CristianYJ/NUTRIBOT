@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readNavigation, navigationUrl } from "../src/navigation.js";
+import { readNavigation, navigationUrl, openRecipeInHistory, closeRecipeInHistory } from "../src/navigation.js";
 import { readChat, writeChat } from "../src/chat-session.js";
 import { validateChat } from "../server/chat.js";
 
@@ -48,6 +48,48 @@ test("navigation preserves the page and unrelated query parameters", () => {
     readNavigation(new URL("http://localhost/#planner")),
     { page: "home" },
   );
+});
+
+function fakeBrowser(url) {
+  const entries = [{url, state:null}];
+  let index = 0;
+  return {
+    location: { get href() { return entries[index].url; } },
+    history: {
+      get state() { return entries[index].state; },
+      get length() { return entries.length; },
+      pushState(state, _, url) { entries.splice(++index); entries.push({url:String(url),state}); },
+      replaceState(state, _, url) { entries[index] = {url:String(url),state}; },
+      back() { if (index > 0) index--; },
+      forward() { if (index < entries.length - 1) index++; },
+    },
+  };
+}
+
+test('Back closes a recipe on the same page; Forward reopens it and explicit closing consumes the entry', () => {
+  const browser = fakeBrowser('https://nutribot.test/?launch=app#assistant');
+  assert.deepEqual(openRecipeInHistory(browser,'ai-recipe',4),{page:'assistant',recipeId:'ai-recipe',servings:4});
+  assert.equal(browser.history.length,2);
+  browser.history.back(); // Mobile back gesture / browser back.
+  assert.deepEqual(readNavigation(new URL(browser.location.href)),{page:'assistant'});
+  assert.equal(new URL(browser.location.href).searchParams.get('launch'),'app');
+  browser.history.forward();
+  assert.equal(readNavigation(new URL(browser.location.href)).recipeId,'ai-recipe');
+  assert.equal(closeRecipeInHistory(browser),null); // X / Escape uses the same entry.
+  assert.deepEqual(readNavigation(new URL(browser.location.href)),{page:'assistant'});
+  for (let i=0;i<3;i++) { openRecipeInHistory(browser,'ai-recipe',2); closeRecipeInHistory(browser); }
+  assert.equal(browser.history.length,2); // No accumulation of closed overlays.
+});
+
+test('a directly opened recipe closes inside the app; changing its recipe does not claim a back entry', () => {
+  const browser=fakeBrowser('https://nutribot.test/?recipe=first&servings=3#recipes');
+  openRecipeInHistory(browser,'second',2);
+  assert.equal(browser.history.length,1);
+  assert.deepEqual(closeRecipeInHistory(browser),{page:'recipes'});
+  assert.equal(new URL(browser.location.href).searchParams.has('recipe'),false);
+  assert.deepEqual(readNavigation(new URL('https://nutribot.test/?recipe=ai-1&servings=999#assistant')),
+    {page:'assistant',recipeId:'ai-1',servings:1});
+  assert.deepEqual(readNavigation(new URL('https://nutribot.test/?recipe=%3Cscript%3E#assistant')),{page:'assistant'});
 });
 
 test("chat reload resolves recipes from the database and preserves the draft; removed recipes stay removed", () => {

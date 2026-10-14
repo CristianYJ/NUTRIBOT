@@ -8,6 +8,8 @@ import { generateWithGemini } from "./gemini.js";
 import { analyzePantry } from "./pantry.js";
 import { profileRestrictions } from "../src/profile-rules.js";
 import { validateRevision } from "./state-validation.js";
+import { getUsdaFood, searchUsdaFoods } from "./nutrition.js";
+import { resolveAutomaticUsdaLinks } from './auto-nutrition.js';
 
 const dist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -32,6 +34,8 @@ const json = (res, status, body) => {
 };
 export function createAppServer({
   apiKey,
+  usdaApiKey,
+  usdaFetch = fetch,
   model = "gemini-3.5-flash-lite",
   generate = generateWithGemini,
   analyze = analyzePantry,
@@ -103,6 +107,7 @@ export function createAppServer({
         if (store?.health) await store.health();
         return json(res, 200, {
           configured: Boolean(apiKey),
+          usdaConfigured: Boolean(usdaApiKey),
           provider: "gemini",
           model,
           database: store?.provider || (store ? "sqlite" : "disabled"),
@@ -125,6 +130,39 @@ export function createAppServer({
         if (req.method === "PUT")
           return json(res, 200, await store.saveState(raw));
         return json(res, 200, await store.reset(raw.revision));
+      }
+      if (url.pathname === '/api/nutrition/search' && req.method === 'GET') {
+        const key = 'usda:' + context.ip;
+        const now = Date.now();
+        const recent = (requests.get(key) || []).filter((time) => now - time < 60000);
+        if (recent.length >= 20) throw new AppError('LOCAL_RATE_LIMIT', 'Espera un momento antes de volver a buscar alimentos.', 429);
+        requests.set(key, [...recent, now]);
+        return json(res, 200, { foods: await searchUsdaFoods(url.searchParams.get('q'), usdaApiKey, usdaFetch) });
+      }
+      const nutritionRecipe = url.pathname.match(/^\/api\/nutrition\/recipes\/([a-zA-Z0-9_-]+)$/);
+      if (nutritionRecipe && req.method === 'GET') {
+        const servings = Number(url.searchParams.get('servings') || 1);
+        const before = await store.getRecipeNutrition(nutritionRecipe[1], servings);
+        const needsLookup = before.ingredients.some((item) => !item.usda || !Object.hasOwn(item.usda.nutrients || {}, 'fiber'));
+        const lookup = await resolveAutomaticUsdaLinks(store, before.ingredients, usdaApiKey, usdaFetch);
+        const current = needsLookup ? await store.getRecipeNutrition(nutritionRecipe[1], servings) : before;
+        return json(res, 200, { ...current, lookup });
+      }
+      const nutritionGrams = url.pathname.match(/^\/api\/nutrition\/recipes\/([a-zA-Z0-9_-]+)\/ingredients\/([a-zA-Z0-9_-]+)$/);
+      if (nutritionGrams && req.method === 'PUT') {
+        const body = await readJson(req, 1000);
+        return json(res, 200, await store.setRecipeGrams(nutritionGrams[1], nutritionGrams[2], body.gramsPerPerson));
+      }
+      const nutritionLink = url.pathname.match(/^\/api\/nutrition\/ingredients\/([a-zA-Z0-9_-]+)\/usda$/);
+      if (nutritionLink && req.method === 'PUT') {
+        const body = await readJson(req, 1000);
+        const key = 'usda:' + context.ip;
+        const now = Date.now();
+        const recent = (requests.get(key) || []).filter((time) => now - time < 60000);
+        if (recent.length >= 20) throw new AppError('LOCAL_RATE_LIMIT', 'Espera un momento antes de consultar USDA otra vez.', 429);
+        requests.set(key, [...recent, now]);
+        const food = await getUsdaFood(body.fdcId, usdaApiKey, usdaFetch);
+        return json(res, 200, await store.setIngredientUsda(nutritionLink[1], food));
       }
       if (["/api/pantry/analyze", "/api/pantry/add"].includes(url.pathname)) {
         if (req.method !== "POST")
@@ -198,10 +236,12 @@ export function createAppServer({
           raw = {
             ...raw,
             pantry: state.pantry,
+            previous: state.generated,
             profile: {
               diet: state.profile.diet,
               allergies: state.profile.allergies,
               exclusions: state.profile.exclusions,
+              medicalNotes: state.profile.medicalNotes,
               needsReview: profileRestrictions(state.profile, state.ingredients)
                 .needsReview,
             },
@@ -229,12 +269,17 @@ export function createAppServer({
         };
         res.on("close", cancel);
         try {
-          const result = await generate(input, {
+          let result = await generate(input, {
             apiKey,
             model,
             signal: controller.signal,
           });
           if (!res.destroyed) {
+            if (store?.getIngredientNutritionItems && result.recipes?.length && usdaApiKey) {
+              const ids = [...new Set(result.recipes.flatMap((recipe) => recipe.ingredients))];
+              await resolveAutomaticUsdaLinks(store, await store.getIngredientNutritionItems(ids), usdaApiKey, usdaFetch);
+            }
+            if (store?.screenGeneratedNutrition) result = await store.screenGeneratedNutrition(result, state.profile);
             // Only validated provider output enters history. An old response cannot
             // restore recipes after a reset or a change of profile in another tab.
             if (store) await store.saveGenerated(result, state.revision);

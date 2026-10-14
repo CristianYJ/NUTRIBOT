@@ -113,6 +113,26 @@ de compatibilidad; no quitar el control para forzar el despliegue. Las versiones
 con cambios de base deben permitir volver al código anterior o tener un plan de
 recuperación explícito. El despliegue no copia datos de la PC ni ejecuta provisionado.
 
+Para una migración revisada hacia un commit concreto, detener y deshabilitar
+`nutribot-deploy.timer`, copiar la versión revisada de `pull-release.py` a
+`/usr/local/lib/nutribot-deploy/` y configurar en privado las variables nuevas
+de `/etc/nutribot/nutribot.env`. Después de que `main` tenga el workflow y la
+release inmutable aprobados, ejecutar:
+
+```bash
+sudo python3 /usr/local/lib/nutribot-deploy/pull-release.py --allow-migration SHA_COMPLETO
+```
+
+El SHA debe ser exactamente el HEAD de `main`. El instalador descarga y verifica
+el paquete, instala dependencias, detiene Nutribot para obtener dos respaldos
+consistentes (base completa y esquema `nutribot`), cambia de versión y comprueba
+HTTPS y PostgreSQL. Si falla el arranque, con la aplicación detenida restaura
+el esquema y el código anterior. Si la restauración falla, mantiene la aplicación
+detenida y el estado pendiente para recuperación manual. Una vez validadas las
+funciones afectadas, reactivar el temporizador. Tras una migración, `--rollback`
+simple queda bloqueado porque el código anterior podría no reconocer el esquema
+nuevo. Conservar el respaldo fuera del VPS para recuperación ante pérdida del disco.
+
 ## Certificado y fin del semestre
 
 Certificado actual: vence el 8 de enero de 2027. A petición del usuario no se

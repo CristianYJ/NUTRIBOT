@@ -2,7 +2,7 @@
 
 La aplicación usa **PostgreSQL 18** como almacenamiento principal. SQLite queda como origen histórico de importación, sin recibir nuevas escrituras de la app. Se separan cuentas, sesiones, conversaciones, despensa, vencimientos, recetas, restricciones, favoritos y registros de generación en tablas relacionadas.
 
-**Esquema verificado el 2 de octubre de 2026:** `nutribot`, versión **3**, con **24 tablas y 3 vistas**. Las migraciones aplicadas son 001, 002 y 003. Esta guía describe la estructura; los datos personales de cada instalación permanecen en su PC.
+**Esquema actual:** `nutribot`, versión **5**, con **28 tablas y 3 vistas**. Las migraciones 001 a 005 incluyen cuentas, chat, planes y datos nutricionales USDA. Los datos personales de cada instalación permanecen en su base.
 
 ## En esta PC
 
@@ -39,7 +39,7 @@ npm run db:init
 
 `db:provision` crea únicamente las dos bases indicadas y el usuario de la app. Genera su contraseña y la guarda en `.env`, conservando la clave Gemini. Si encuentra un nombre ocupado por otro propietario, se detiene sin sobrescribirlo. Si el rol ya existe, requiere sus credenciales previas en `.env` y no cambia su contraseña. La cuenta de administración no se usa para ejecutar Nutribot; puedes retirar su contraseña de `.env.postgres-admin` una vez completada la preparación.
 
-`db:init` aplica, en orden, todas las migraciones pendientes y carga el catálogo inicial una sola vez. En una instalación nueva crea también `auth_sessions`, `conversations` y `pantry_dates`, añade los campos de cuenta a `profiles` y genera la vista `profile_summary`. Su salida debe incluir `"schemaVersion": 3`. No necesitas crear tablas ni pegar los archivos SQL manualmente en DBeaver.
+`db:init` aplica, en orden, todas las migraciones pendientes y carga el catálogo inicial una sola vez. En una instalación nueva crea también `auth_sessions`, `conversations`, `pantry_dates`, planes y asociaciones USDA. Su salida debe incluir `"schemaVersion": 5`. No necesitas crear tablas ni pegar los archivos SQL manualmente en DBeaver.
 
 Si tu equipo ya tiene una base dedicada y un usuario con permisos sobre ella, configura directamente `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` y `PGTESTDATABASE` en `.env`, y omite `db:provision`. La base de pruebas debe ser distinta y terminar en `_test`. Esta versión se ha validado con conexiones locales; no desactives verificación TLS para adaptar una conexión remota.
 
@@ -70,7 +70,7 @@ npm run db:init
 npm run db:validate
 ```
 
-`db:init` no repite migraciones ya registradas. Debe mostrar `"schemaVersion": 3`; `db:validate` debe mostrar `"valid": true`. Si Git informa cambios pendientes o divergencia, resuélvelos antes de continuar; no reemplaces tu carpeta ni tu base para actualizar.
+`db:init` no repite migraciones ya registradas. Debe mostrar `"schemaVersion": 5`; `db:validate` debe mostrar `"valid": true`. Si Git informa cambios pendientes o divergencia, resuélvelos antes de continuar; no reemplaces tu carpeta ni tu base para actualizar.
 
 3. Inicia la aplicación y recarga el navegador con **Ctrl+F5**:
 
@@ -98,7 +98,7 @@ nutribot_project → Schemas / Esquemas → nutribot → Tables / Tablas
 
 En `Views / Vistas` hay `recipe_summary`, `weekly_plan_details` y `profile_summary`. Esta última contiene datos de cuenta y edad calculada, pero no hashes de contraseña. La conexión SQLite anterior muestra una copia histórica, ya no los cambios nuevos de la app. DBeaver puede generar el diagrama de relaciones a partir de las claves foráneas.
 
-## Modelo de datos: 24 tablas y 3 vistas
+## Modelo de datos: 28 tablas y 3 vistas
 
 | Grupo | Tablas | Función |
 | --- | --- | --- |
@@ -119,7 +119,7 @@ En `Views / Vistas` hay `recipe_summary`, `weekly_plan_details` y `profile_summa
 
 La migración [003_chat_history_pantry_dates.sql](../server/postgres/003_chat_history_pantry_dates.sql) convierte el chat previo en una conversación identificada por UUID y crea las fechas de despensa sin inventar fechas para los ingredientes existentes. Se aplica una sola vez con `npm run db:init`; crea una copia con `npm run db:backup` antes de actualizar.
 
-Las relaciones y restricciones se completan con las tres migraciones de `server/postgres/`. Hay claves primarias, foráneas, límites numéricos, campos obligatorios, índices y restricciones de unicidad. Las recetas ya no se guardan como un único documento JSON: sus ingredientes y pasos son registros consultables.
+Las relaciones y restricciones se completan con las cinco migraciones de `server/postgres/`. La migración 005 añade vínculos USDA por usuario, gramos por persona y límites nutricionales opcionales. Hay claves primarias, foráneas, límites numéricos, campos obligatorios, índices y restricciones de unicidad. Las recetas guardan ingredientes y pasos como registros consultables.
 
 ### Cuentas y sesiones
 

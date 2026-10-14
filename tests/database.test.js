@@ -238,11 +238,12 @@ test("HTTP state saves and generation uses stored restrictions, with history per
       pantry: ["huevo"],
       profile: { needsReview: false },
     };
-    const paused = await (
+    const withNotes = await (
       await send("/api/recipes/suggest", "POST", suggestion)
     ).json();
-    assert.equal(paused.type, "review");
-    assert.equal(calls(), 0);
+    assert.equal(withNotes.type, "success");
+    assert.match(withNotes.text, /no se verificaron automáticamente/);
+    assert.equal(calls(), 1);
     const cleared = await (
       await send("/api/state", "PUT", {
         ...body,
@@ -257,7 +258,7 @@ test("HTTP state saves and generation uses stored restrictions, with history per
       })
     ).json();
     assert.equal(result.recipes.length, 1);
-    assert.equal(calls(), 1);
+    assert.equal(calls(), 2);
     assert.equal(store.getState().generated[0].id, result.recipes[0].id);
     assert.equal(
       (await send("/api/recipes/suggest", "POST", suggestion)).status,

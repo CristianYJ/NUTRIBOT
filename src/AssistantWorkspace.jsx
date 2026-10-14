@@ -25,7 +25,7 @@ function MessageStamp({ message, name }) {
 }
 
 function ChatRecipe({ recipe, pantry, saved, onOpen, onSave, ingredients }) {
-  const count = availability(recipe, pantry).available;
+  const { available: count, missing } = availability(recipe, pantry);
   return (
     <article className="culinary-recipe">
       <div className="culinary-recipe-heading">
@@ -37,7 +37,7 @@ function ChatRecipe({ recipe, pantry, saved, onOpen, onSave, ingredients }) {
           ))}
         </div>
         <div>
-          <span className="culinary-kicker">UNA IDEA CON TU DESPENSA</span>
+          <span className="culinary-kicker">{missing.length ? "ALTERNATIVA CERCANA" : "UNA IDEA CON TU DESPENSA"}</span>
           <h2>{recipe.title}</h2>
           <div className="culinary-badges">
             <span>
@@ -54,12 +54,17 @@ function ChatRecipe({ recipe, pantry, saved, onOpen, onSave, ingredients }) {
             </span>
             <span className="apricot">
               <Icon name="pantry" size={14} />
-              {count} ingredientes
+              {count} de {recipe.ingredients.length} ingredientes
             </span>
           </div>
         </div>
       </div>
       <p className="culinary-recipe-subtitle">{recipe.subtitle}</p>
+      {missing.length > 0 && (
+        <p className="culinary-recipe-subtitle">
+          Te falta{missing.length > 1 ? "n" : ""}: {missing.map((id) => ingredients.find((item) => item.id === id)?.name || id).join(", ")}.
+        </p>
+      )}
       <div className="culinary-recipe-preview">
         <Icon name="chef" size={19} />
         <div>
@@ -114,16 +119,16 @@ export default function AssistantWorkspace({
   endRef,
 }) {
   const byId = new Map(ingredients.map((item) => [item.id, item]));
-  const usable = (recipe) =>
+  const eligible = (recipe) =>
     matchesProfile(recipe, profile, ingredients) &&
-    !availability(recipe, pantry).missing.length &&
     recipe.time <= maxTime;
-  const recent = generated.filter(usable).slice(0, 3);
+  const usable = (recipe) => eligible(recipe) && !availability(recipe, pantry).missing.length;
+  const recent = generated.filter(eligible).slice(0, 3);
   const lastRecipe =
     [...messages]
       .reverse()
       .flatMap((m) => m.recipes || [])
-      .find(usable) || recent[0];
+      .find(usable) || recent.find(usable);
   const used = lastRecipe?.ingredients.length || 0;
   const percent = pantry.length ? Math.round((used / pantry.length) * 100) : 0;
   const review = requiresReview(profile, ingredients);
@@ -193,7 +198,7 @@ export default function AssistantWorkspace({
                 </p>
               </div>
             )}
-            {messages.map((m) => (
+            {messages.map((m, index) => (
               <div className={`culinary-message ${m.role}`} key={m.id}>
                 {m.role === "bot" && (
                   <span className="culinary-message-avatar">
@@ -235,7 +240,7 @@ export default function AssistantWorkspace({
                     {m.type === "error" && (
                       <button
                         className="btn secondary"
-                        onClick={() => generate(m.retryText)}
+                        onClick={() => generate(m.retryText, m.retryMode || "initial")}
                         disabled={busy}
                       >
                         <Icon name="reset" size={16} />
@@ -252,7 +257,7 @@ export default function AssistantWorkspace({
                       </button>
                     )}
                   </div>
-                  {m.recipes?.filter(usable).map((recipe) => (
+                  {m.recipes?.filter(eligible).map((recipe) => (
                     <ChatRecipe
                       key={recipe.id}
                       recipe={recipe}
@@ -263,6 +268,14 @@ export default function AssistantWorkspace({
                       ingredients={ingredients}
                     />
                   ))}
+                  {m.role === "bot" && ["success", "empty"].includes(m.type) && (
+                    <button className="btn secondary" disabled={busy} onClick={() =>
+                      generate([...messages.slice(0, index)].reverse().find((item) => item.role === "user")?.text || "¿Qué puedo cocinar con lo que tengo?", "more")
+                    }>
+                      <Icon name="reset" size={16} />
+                      Generar más alternativas
+                    </button>
+                  )}
                   <MessageStamp message={m} name={profile.name} />
                 </div>
               </div>
@@ -388,6 +401,11 @@ export default function AssistantWorkspace({
               <Icon name="shield" size={13} />
               Las consultas se envian a nuestros socios para generar recetas mas ricas y variadas para ti.
             </p>
+            {profile.medicalNotes?.trim() && (
+              <p className="culinary-privacy" role="note">
+                Las indicaciones escritas de tu profesional están guardadas, pero estas recetas no se verifican automáticamente frente a ellas.
+              </p>
+            )}
           </div>
         </section>
         <aside className="culinary-context" aria-label="Tu cocina en contexto">

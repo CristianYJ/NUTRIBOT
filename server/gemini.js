@@ -1,6 +1,7 @@
 import {
   AppError,
   allowedIngredients,
+  eligibleIngredients,
   buildPrompt,
   responseSchema,
   SYSTEM_INSTRUCTION,
@@ -121,24 +122,52 @@ export async function generateStructured(
 }
 
 export async function generateWithGemini(input, config = {}) {
-  // Keep schema enum values short; database UUIDs can exceed the provider's
-  // structured-output grammar budget when repeated in a nested recipe array.
-  const wireIds = new Map(allowedIngredients(input).map((id, index) =>
-    [id, id.startsWith("food-") ? `custom${index}` : id]));
-  const databaseIds = new Map([...wireIds].map(([id, wire]) => [wire, id]));
-  const prompt = JSON.parse(buildPrompt(input));
-  prompt.ingredientesPermitidos = prompt.ingredientesPermitidos.map(item =>
-    ({ ...item, id: wireIds.get(item.id) }));
-  const { output, model } = await generateStructured({
-    parts: [{ text: JSON.stringify(prompt) }],
-    instruction: SYSTEM_INSTRUCTION + " Todos los elementos de ingredientesPermitidos están disponibles. Los identificadores customN corresponden a alimentos agregados por el usuario: interpreta su nombre y úsalos normalmente en las recetas. En cantidades y pasos conserva el nombre completo cuando distingue una variedad o estado (por ejemplo, arroz cocido).",
-    schema: responseSchema([...wireIds.values()]),
-  }, config);
-  if (Array.isArray(output?.recipes)) {
-    for (const recipe of output.recipes) {
-      if (Array.isArray(recipe?.ingredients))
-        recipe.ingredients = recipe.ingredients.map(id => databaseIds.get(id) || id);
+  for (const scope of ["pantry", "catalog"]) {
+    const ids = scope === "pantry" ? allowedIngredients(input) : eligibleIngredients(input);
+    if (!ids.length) continue;
+    // Short aliases keep custom UUIDs out of the provider's schema grammar.
+    const wireIds = new Map(ids.map((id, index) =>
+      [id, id.startsWith("food-") ? `custom${index}` : id]));
+    const databaseIds = new Map([...wireIds].map(([id, wire]) => [wire, id]));
+    const prompt = JSON.parse(buildPrompt(input, scope));
+    prompt.ingredientesPermitidos = prompt.ingredientesPermitidos.map(item =>
+      ({ ...item, id: wireIds.get(item.id) }));
+    prompt.ingredientesEnDespensa = prompt.ingredientesEnDespensa.map(id => wireIds.get(id));
+    const { output, model } = await generateStructured({
+      parts: [{ text: JSON.stringify(prompt) }],
+      instruction: SYSTEM_INSTRUCTION + " Los identificadores customN corresponden a alimentos agregados por el usuario: interpreta su nombre y úsalos normalmente en las recetas. En cantidades y pasos conserva el nombre completo cuando distingue una variedad o estado (por ejemplo, arroz cocido).",
+      schema: responseSchema([...wireIds.values()]),
+    }, config);
+    if (Array.isArray(output?.recipes)) {
+      for (const recipe of output.recipes) {
+        if (Array.isArray(recipe?.ingredients))
+          recipe.ingredients = recipe.ingredients.map(id => databaseIds.get(id) || id);
+      }
+    }
+    let result;
+    try {
+      result = validateOutput(output, input, model, scope);
+    } catch (error) {
+      if (scope === "pantry" && error.code === "INVALID_AI_OUTPUT") continue;
+      throw error;
+    }
+    if (result.type === "review" || result.type === "out_of_scope") return result;
+    if (result.type !== "success") continue;
+    const seen = new Set((input.previous || []).map((title) => title.normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
+    result.recipes = result.recipes.filter((recipe) => {
+      const title = recipe.title.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      if (seen.has(title)) return false;
+      seen.add(title);
+      return true;
+    });
+    if (result.recipes.length) {
+      result.text = result.recipes.some((recipe) => recipe.ingredients.some((id) => !input.pantry.includes(id)))
+        ? `Encontré una alternativa cercana. Te indico qué ingredientes faltan para prepararla. Revisa cantidades, preparación y etiquetas.${input.hasProfessionalNotes ? " Las indicaciones escritas de tu profesional no se verificaron automáticamente." : ""}`
+        : result.text;
+      return result;
     }
   }
-  return validateOutput(output, input, model);
+  return { type: "empty", source: "gemini", text: "No encontré otra receta distinta que cumpla tus filtros y el tiempo indicado. Prueba ampliar el tiempo o tu despensa.", recipes: [] };
 }

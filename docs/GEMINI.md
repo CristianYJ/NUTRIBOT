@@ -10,27 +10,28 @@ Se verificó una respuesta real de Google y una receta nueva con arroz, frijoles
 4. Abrir el resultado y guardar con el corazón.
 5. Revisar Recetas > Guardadas: la etiqueta Gemini distingue las recetas generadas de los ejemplos.
 
-«IA habilitada» solo confirma que el servidor tiene una clave configurada. Una respuesta «Generado con Gemini» confirma una llamada efectiva. La generación varía y cada petición es independiente, sin historial remoto.
+«IA habilitada» solo confirma que el servidor tiene una clave configurada. Una respuesta «Generado con Gemini» confirma una llamada efectiva. La generación varía. El servidor usa los títulos de recetas anteriores de esa cuenta para pedir alternativas distintas; no envía el historial del chat.
 
 ## Controles
 
 - El servidor lee despensa y filtros desde PostgreSQL y verifica la revisión antes de generar. Las recetas validadas se guardan antes de enviarse al navegador. Ver [POSTGRESQL.md](POSTGRESQL.md).
 - Esquema y validación posterior de título, tiempo, ingredientes, cantidades y pasos.
-- Ingredientes permitidos calculados en servidor según inventario, dieta y alergias.
+- Primero se consulta Gemini con los ingredientes disponibles. Si no hay una receta nueva y válida, se consulta con el catálogo seguro filtrado y se muestran los ingredientes faltantes. Esta segunda fase puede consumir otra solicitud de la API.
+- Ingredientes permitidos calculados en servidor según dieta, alergias y exclusiones; las alternativas se ordenan por número de faltantes.
 - Metadatos de alérgenos y origen calculados por el servidor, no confiados al modelo.
 - Comprobación adicional de menciones de ingredientes conocidos excluidos en cantidades y preparación.
-- Pausa por notas médicas, restricciones escritas y señales clínicas en el mensaje.
+- Las indicaciones escritas del profesional no bloquean toda la generación, pero no se interpretan ni se verifican automáticamente. Las exclusiones no reconocidas y las solicitudes clínicas del mensaje siguen en pausa.
 - Instrucción de responder solo sobre cocina y respuesta fija para salida fuera de tema.
 - Errores de clave, modelo, cuota, red y formato visibles, sin reemplazo por demo.
 - Límite de 6 solicitudes por minuto y 2 simultáneas; cuerpo de 12 KB y plazo de Google de 45 segundos.
 - Cancelación al cambiar ingredientes, perfil o tiempo durante la generación.
 - API local sin CORS abierto; rechazo de orígenes ajenos y rutas privadas.
 
-Los filtros de texto son parciales, no una comprensión exhaustiva del lenguaje. No certifican trazas, productos ni seguridad clínica. Las recetas de IA no están revisadas por un profesional y no tienen datos nutricionales hasta integrar una fuente verificable.
+Los filtros de texto son parciales, no una comprensión exhaustiva del lenguaje. No certifican trazas, productos ni seguridad clínica. Las recetas de IA no están revisadas por un profesional. Nutribot calcula automáticamente los nutrientes disponibles con FoodData Central y los gramos por persona de la receta; los pesos, alimentos o nutrientes sin datos fiables quedan sin verificar.
 
 ## Privacidad
 
-Google recibe el mensaje actual, ingredientes permitidos, tiempo, preferencia y alergias. El perfil completo se guarda en PostgreSQL mediante la API local de estado; no se envía a Google. La API de recetas lee los filtros almacenados y convierte las notas/exclusiones en un booleano de pausa. Un mensaje libre puede contener datos personales si el usuario los escribe. Usar datos ficticios.
+Google recibe el mensaje actual, ingredientes permitidos, identificadores de la despensa, tiempo, preferencia y hasta 30 títulos anteriores para evitar repeticiones. Las alergias y exclusiones se aplican en el servidor antes de elegir ingredientes. Las notas del profesional, datos personales y el historial del chat no se envían. Un mensaje libre puede contener datos personales si el usuario los escribe. Usar datos ficticios.
 
 La clave se lee en servidor desde `.env`, nunca se imprime ni se incluye en la compilación. `.env.example` no contiene una clave real. No usar el prefijo `VITE_` para secretos. Reiniciar el servidor al cambiar la clave. Restaurar datos locales no elimina solicitudes ya procesadas por Google; sus condiciones y la configuración de la cuenta aplican.
 

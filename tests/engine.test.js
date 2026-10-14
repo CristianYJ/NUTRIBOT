@@ -58,18 +58,13 @@ test("egg restriction and vegan diet remain mandatory", () => {
     ).every((r) => r.vegan),
   );
 });
-test("medical and unstructured restrictions pause recommendations", () => {
-  for (const patch of [
-    { medicalNotes: "Indicación ficticia para revisar" },
-    { exclusions: "Alergia a un ingrediente no catalogado" },
-  ]) {
-    const profile = { ...initialProfile, ...patch };
-    assert.deepEqual(recommend(initialPantry, profile), []);
-    assert.equal(
-      generateDemo({ pantry: initialPantry, profile, maxTime: 60 }).type,
-      "review",
-    );
-  }
+test("professional notes do not erase recipes; unknown exclusions still pause", () => {
+  const withNotes = { ...initialProfile, medicalNotes: "Indicación para revisar" };
+  assert(recommend(initialPantry, withNotes).length > 0);
+  assert.equal(generateDemo({ pantry: initialPantry, profile: withNotes, maxTime: 60 }).type, "success");
+  const unknown = { ...initialProfile, exclusions: "Alergia a un ingrediente no catalogado" };
+  assert.deepEqual(recommend(initialPantry, unknown), []);
+  assert.equal(generateDemo({ pantry: initialPantry, profile: unknown, maxTime: 60 }).type, "review");
 });
 test("restriction messages are routed to profile rather than a recipe", () => {
   for (const message of [

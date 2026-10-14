@@ -91,6 +91,9 @@ export const initialProfile = {
   allergies: [],
   exclusions: "",
   medicalNotes: "",
+  maxSaturatedFatG: "",
+  maxSodiumMg: "",
+  maxSugarG: "",
 };
 export const allergyOptions = [
   "Leche",

@@ -161,6 +161,10 @@ def rollback(state):
     previous = Path(state["pending"]["previous"])
     if previous.parent != RELEASES or not previous.is_dir():
         raise ValueError("Invalid rollback target")
+    schema_dump = state["pending"].get("schema_backup")
+    if schema_dump:
+        command(["/usr/bin/systemctl", "stop", "nutribot"])
+        restore_schema(Path(schema_dump))
     switch(previous)
     command(["/usr/bin/systemctl", "restart", "nutribot"])
     ready()
@@ -174,7 +178,7 @@ def rollback(state):
     print("Previous version restored; failed commit will not be retried automatically", flush=True)
 
 
-def activate(target, sha, state):
+def activate(target, sha, state, schema_dump=None):
     previous = CURRENT.resolve()
     if not CURRENT.is_symlink():
         previous = RELEASES / ("initial-" + str(time.time_ns()))
@@ -185,6 +189,8 @@ def activate(target, sha, state):
             previous.rename(CURRENT)
             raise
     state["pending"] = {"sha": sha, "previous": str(previous)}
+    if schema_dump:
+        state["pending"]["schema_backup"] = str(schema_dump)
     save_state(state)
     try:
         switch(target)
@@ -206,6 +212,30 @@ def backup(sha):
         command(["/usr/sbin/runuser", "-u", "postgres", "--", "/usr/pgsql-18/bin/pg_dump",
                  "--format=custom", "--no-owner", "--no-privileges", "--dbname=nutribot_project"], stdout=output)
     command(["/usr/pgsql-18/bin/pg_restore", "--list", str(path)], stdout=subprocess.DEVNULL)
+    return path
+
+
+def backup_schema(sha):
+    folder = STATE / "backups"
+    folder.mkdir(mode=0o700, exist_ok=True)
+    path = folder / ("schema-before-" + sha + "-" + str(time.time_ns()) + ".dump")
+    with path.open("xb") as output:
+        command(["/usr/sbin/runuser", "-u", "postgres", "--", "/usr/pgsql-18/bin/pg_dump",
+                 "--format=custom", "--no-owner", "--no-privileges", "--schema=nutribot",
+                 "--dbname=nutribot_project"], stdout=output)
+    command(["/usr/pgsql-18/bin/pg_restore", "--list", str(path)], stdout=subprocess.DEVNULL)
+    return path
+
+
+def restore_schema(path):
+    if path.parent != STATE / "backups" or not path.is_file():
+        raise ValueError("Invalid schema backup")
+    command(["/usr/sbin/runuser", "-u", "postgres", "--", "/usr/pgsql-18/bin/psql",
+             "--dbname=nutribot_project", "--set=ON_ERROR_STOP=1",
+             "--command=DROP SCHEMA IF EXISTS nutribot CASCADE"], stdout=subprocess.DEVNULL)
+    command(["/usr/sbin/runuser", "-u", "postgres", "--", "/usr/pgsql-18/bin/pg_restore",
+             "--exit-on-error", "--no-owner", "--no-privileges", "--role=nutribot_app",
+             "--dbname=nutribot_project", str(path)], stdout=subprocess.DEVNULL)
 
 
 def deploy():
@@ -222,16 +252,27 @@ def deploy():
     state = json.loads(file.read_text()) if file.exists() else {}
     if state.get("pending"):
         rollback(state)
+    manual_shas = [arg for arg in sys.argv[1:] if arg != "--allow-migration"]
+    manual = "--allow-migration" in sys.argv
+    if manual and (len(sys.argv) != 3 or sys.argv[1] != "--allow-migration"
+                   or len(manual_shas) != 1 or not re.fullmatch(r"[0-9a-f]{40}", manual_shas[0])):
+        raise ValueError("Usage: --allow-migration <exact-main-sha>")
+    if manual and subprocess.run(["/usr/bin/systemctl", "is-active", "--quiet",
+                                  "nutribot-deploy.timer"], check=False).returncode == 0:
+        raise ValueError("Stop and disable deployment timer before manual migration")
     if "--rollback" in sys.argv:
         previous = Path(state["previous"])
         if previous.parent != RELEASES or not previous.is_dir():
             raise ValueError("No valid previous release")
+        migration_guard(previous, CURRENT)
         # Pause the timer first. Keep a failed marker to avoid redeploying this SHA.
         state["pending"] = {"previous": str(previous), "sha": state.get("deployed")}
         save_state(state)
         rollback(state)
         return
     sha = head()
+    if manual and sha != manual_shas[0]:
+        raise ValueError("Manual migration SHA does not match current main")
     if sha in {state.get("deployed"), state.get("failed")}:
         print("No new eligible commit", flush=True)
         return
@@ -250,12 +291,13 @@ def deploy():
         archive.write_bytes(data)
         target = Path(tempfile.mkdtemp(prefix=sha + "-", dir=RELEASES))
         unpack(archive, target, sha)
-    try:
-        migration_guard(CURRENT, target)
-    except ValueError:
-        state["failed"] = sha
-        save_state(state)
-        raise
+    if not manual:
+        try:
+            migration_guard(CURRENT, target)
+        except ValueError:
+            state["failed"] = sha
+            save_state(state)
+            raise
     builder = pwd.getpwnam("nutribot-build")
     for path in [target, *target.rglob("*")]:
         os.chown(path, builder.pw_uid, builder.pw_gid)
@@ -273,11 +315,27 @@ def deploy():
     if head() != sha:
         print("main advanced while preparing; keeping current version", flush=True)
         return
-    backup(sha)
-    if head() != sha:
-        print("main advanced during backup; keeping current version", flush=True)
-        return
-    activate(target, sha, state)
+    if manual:
+        command(["/usr/bin/systemctl", "stop", "nutribot"])
+        before_activation = True
+        try:
+            backup(sha)
+            schema_dump = backup_schema(sha)
+            if head() != sha:
+                print("main advanced during backup; keeping current version", flush=True)
+                return
+            before_activation = False
+            activate(target, sha, state, schema_dump=schema_dump)
+        finally:
+            if before_activation:
+                command(["/usr/bin/systemctl", "start", "nutribot"])
+                ready()
+    else:
+        backup(sha)
+        if head() != sha:
+            print("main advanced during backup; keeping current version", flush=True)
+            return
+        activate(target, sha, state)
     print("Deployed " + sha + "; HTTPS and PostgreSQL OK", flush=True)
 
 

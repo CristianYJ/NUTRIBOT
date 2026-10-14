@@ -105,12 +105,46 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    4,
+    5,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
     6,
   );
+});
+
+test('USDA links and grams persist per recipe and enforce structured limits', async (t) => {
+  const f = await fixture(t);
+  const state = await f.store.getState();
+  const recipe = state.recipes.find((item) => item.ingredients.length > 2);
+  await f.store.saveState({ ...writable(state), profile: { ...state.profile, maxSodiumMg: '100' } });
+  const initial = await f.store.getRecipeNutrition(recipe.id, 2);
+  const lookupItems = await f.store.getIngredientNutritionItems(recipe.ingredients);
+  assert.deepEqual(lookupItems.map((item) => item.ingredientId), recipe.ingredients);
+  assert(lookupItems.every((item) => item.name && item.usda === null));
+  assert(initial.ingredients.every((item) => item.gramsPerPerson > 0));
+  assert.equal(initial.nutrition.perPerson.kcal, null);
+  assert.equal(initial.nutrition.checks.maxSodiumMg, 'unknown');
+  const suggestion = { type: 'success', text: 'Una receta', recipes: [{ ingredients: recipe.ingredients, grams: recipe.ingredients.map(() => 100) }] };
+  const pending = await f.store.screenGeneratedNutrition(suggestion, (await f.store.getState()).profile);
+  assert.equal(pending.recipes.length, 1);
+  assert.match(pending.text, /No se pudo verificar/);
+  const nutrients = { kcal: 100, protein: 2, carbs: 10, fat: 2, saturatedFat: 1, sodium: 50, sugars: 1, fiber: 3 };
+  for (const ingredientId of recipe.ingredients) {
+    await f.store.setRecipeGrams(recipe.id, ingredientId, 100);
+    await f.store.setIngredientUsda(ingredientId, { fdcId: 1234, description: 'Alimento de prueba', dataType: 'Foundation', nutrients });
+  }
+  const calculated = await (await f.reopen()).getRecipeNutrition(recipe.id, 2);
+  assert.equal(calculated.nutrition.perPerson.kcal, 100 * recipe.ingredients.length);
+  assert.equal(calculated.nutrition.total.kcal, 200 * recipe.ingredients.length);
+  assert.equal(calculated.nutrition.total.fiber, 6 * recipe.ingredients.length);
+  assert.equal(calculated.nutrition.complete, true);
+  assert.equal(calculated.nutrition.checks.maxSodiumMg, 'exceeds');
+  const screened = await f.store.screenGeneratedNutrition(suggestion, (await f.store.getState()).profile);
+  assert.equal(screened.type, 'review');
+  assert.equal(screened.recipes.length, 0);
+  await f.store.reset(1);
+  assert.equal((await f.store.getRecipeNutrition(recipe.id, 2)).nutrition.perPerson.kcal, null);
 });
 
 test("custom pantry persists, deduplicates, filters recipes and resets atomically", async (t) => {

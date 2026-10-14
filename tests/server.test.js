@@ -4,6 +4,7 @@ import {
   parseInput,
   preflight,
   allowedIngredients,
+  eligibleIngredients,
   validateOutput,
   buildPrompt,
   AppError,
@@ -69,6 +70,82 @@ test("names, measurements and raw medical notes never enter the Gemini prompt", 
     "medicalNotes",
   ])
     assert(!prompt.includes(value));
+  assert.equal(parsed.hasProfessionalNotes, true);
+  assert.equal(preflight(parsed), null);
+});
+test("catalog alternatives respect filters and report ingredients missing from pantry", () => {
+  const i = input();
+  i.profile.allergies = ["Leche"];
+  assert(!eligibleIngredients(i).includes("queso"));
+  const near = output();
+  near.recipes[0] = {
+    title: "Arroz con cilantro", subtitle: "Una porción casera.", time: 25,
+    category: "Almuerzo", ingredients: ["arroz", "cilantro"],
+    amounts: ["50 g de arroz crudo", "1 cucharada de cilantro"],
+    steps: ["Cuece el arroz en agua potable y mezcla con el cilantro lavado."],
+  };
+  assert.throws(() => validateOutput(near, i, "test"), { code: "INVALID_AI_OUTPUT" });
+  const result = validateOutput(near, i, "test", "catalog");
+  assert.equal(result.recipes[0].ingredients.filter(id => !i.pantry.includes(id)).join(), "cilantro");
+  assert.match(result.text, /te falta/i);
+  const unrelated = structuredClone(near);
+  unrelated.recipes[0].ingredients = ["cilantro"];
+  unrelated.recipes[0].title = "Cilantro fresco";
+  unrelated.recipes[0].amounts = ["1 cucharada de cilantro"];
+  unrelated.recipes[0].steps = ["Lava y sirve el cilantro."];
+  assert.throws(() => validateOutput(unrelated, i, "test", "catalog"), { code: "INVALID_AI_OUTPUT" });
+});
+test("a declared custom pantry food is not rejected as an undeclared extra", () => {
+  const oil = { id: "food-oil", name: "Aceite de oliva", category: "Otros", allergens: [], animal: false, meat: false };
+  const i = parseInput({
+    pantry: ["tomate", oil.id], maxTime: 15, message: "Prepara tomate",
+    profile: { diet: "Vegana", allergies: [], needsReview: false },
+  }, [...(input().catalog), oil]);
+  const recipe = {
+    title: "Tomate con aceite de oliva", subtitle: "Un plato sencillo", time: 10,
+    category: "Almuerzo", ingredients: ["tomate", oil.id],
+    amounts: ["1 tomate", "1 cucharadita de aceite de oliva"],
+    steps: ["Lava y corta el tomate. Añade el aceite de oliva."],
+  };
+  assert.equal(validateOutput({ intent: "recipe", recipes: [recipe] }, i, "test").type, "success");
+});
+test("Gemini retries with eligible catalog only after no exact pantry recipe", async () => {
+  const prompts = [];
+  const near = output();
+  near.recipes[0] = {
+    title: "Arroz con cilantro", subtitle: "Una porción casera.", time: 25,
+    category: "Almuerzo", ingredients: ["arroz", "cilantro"],
+    amounts: ["50 g de arroz crudo", "1 cucharada de cilantro"],
+    steps: ["Cuece el arroz en agua potable y mezcla con el cilantro lavado."],
+  };
+  const result = await generateWithGemini(input(), {
+    apiKey: "test-key",
+    fetchImpl: async (_url, options) => {
+      const prompt = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text);
+      prompts.push(prompt);
+      const response = prompts.length === 1 ? { intent: "no_match", recipes: [] } : near;
+      return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(response) }] } }] }) };
+    },
+  });
+  assert.deepEqual(prompts.map(p => p.fase), ["despensa", "alternativas"]);
+  assert(!prompts[0].ingredientesPermitidos.some(i => i.id === "cilantro"));
+  assert(prompts[1].ingredientesPermitidos.some(i => i.id === "cilantro"));
+  assert.equal(result.recipes[0].title, "Arroz con cilantro");
+});
+test("existing recipe titles are not returned as new alternatives", async () => {
+  const i = input();
+  i.previous = ["Arroz con tomate"];
+  let calls = 0;
+  const result = await generateWithGemini(i, {
+    apiKey: "test-key",
+    fetchImpl: async () => {
+      calls++;
+      const response = calls === 1 ? output() : { intent: "no_match", recipes: [] };
+      return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(response) }] } }] }) };
+    },
+  });
+  assert.equal(calls, 2);
+  assert.equal(result.type, "empty");
 });
 test("ingredient exclusions are computed on the server", () => {
   const i = input();

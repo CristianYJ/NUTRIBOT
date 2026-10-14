@@ -8,5 +8,6 @@ try {
 }
 export const config = {
   apiKey: process.env.GEMINI_API_KEY?.trim(),
+  usdaApiKey: process.env.USDA_API_KEY?.trim(),
   model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
 };

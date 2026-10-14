@@ -22,6 +22,8 @@ import {
   diets,
 } from "./state-validation.js";
 import { postgresOptions } from "./postgres-config.js";
+import { calculateRecipeNutrition } from "./nutrition.js";
+import { estimatedGrams } from "./auto-nutrition.js";
 
 export async function openDatabase(options = {}) {
   const { schema = "nutribot", ...connection } = options;
@@ -68,7 +70,7 @@ export async function openDatabase(options = {}) {
   }
   async function writeProfile(c, p) {
     await c.query(
-      `UPDATE profiles SET name=$1,weight_kg=$2,height_cm=$3,goal=$4,diet=$5,exclusions=$6,medical_notes=$7,birth_date=$8,updated_at=now() WHERE id=${profileId()}`,
+      `UPDATE profiles SET name=$1,weight_kg=$2,height_cm=$3,goal=$4,diet=$5,exclusions=$6,medical_notes=$7,birth_date=$8,max_saturated_fat_g=$9,max_sodium_mg=$10,max_sugar_g=$11,updated_at=now() WHERE id=${profileId()}`,
       [
         p.name,
         p.weight === "" ? null : Number(p.weight),
@@ -78,6 +80,9 @@ export async function openDatabase(options = {}) {
         p.exclusions,
         p.medicalNotes,
         p.birthDate || null,
+        p.maxSaturatedFatG || null,
+        p.maxSodiumMg || null,
+        p.maxSugarG || null,
       ],
     );
     await c.query(
@@ -116,13 +121,16 @@ export async function openDatabase(options = {}) {
         r.createdAt || new Date().toISOString(),
       ],
     );
-    for (const [pos, id] of r.ingredients.entries())
-      await c.query("INSERT INTO recipe_ingredients VALUES($1,$2,$3,$4)", [
+    for (const [pos, id] of r.ingredients.entries()) {
+      await c.query("INSERT INTO recipe_ingredients(recipe_id,ingredient_id,amount,position) VALUES($1,$2,$3,$4)", [
         r.id,
         id,
         r.amounts[pos],
         pos,
       ]);
+      if (r.grams?.[pos] != null)
+        await c.query("UPDATE recipe_ingredients SET grams_per_person=$1 WHERE recipe_id=$2 AND ingredient_id=$3", [r.grams[pos], r.id, id]);
+    }
     for (const [pos, step] of r.steps.entries())
       await c.query("INSERT INTO recipe_steps VALUES($1,$2,$3)", [
         r.id,
@@ -161,6 +169,7 @@ export async function openDatabase(options = {}) {
           createdAt: r.created_at.toISOString(),
           ingredients: [],
           amounts: [],
+          grams: [],
           steps: [],
           allergens: [],
           nutrition: null,
@@ -176,6 +185,7 @@ export async function openDatabase(options = {}) {
       if (r) {
         r.ingredients.push(row.ingredient_id);
         r.amounts.push(row.amount);
+        r.grams.push(row.grams_per_person === null ? null : Number(row.grams_per_person));
       }
     }
     for (const row of (
@@ -219,7 +229,7 @@ export async function openDatabase(options = {}) {
   async function readState(c) {
     const p = (
       await c.query(
-        `SELECT id,name,weight_kg,height_cm,goal,diet,exclusions,medical_notes,revision,email,plan_code,(SELECT name FROM plans WHERE code=profiles.plan_code) AS plan_name,to_char(birth_date,'YYYY-MM-DD') AS birth_date FROM profiles WHERE id=${profileId()}`,
+        `SELECT id,name,weight_kg,height_cm,goal,diet,exclusions,medical_notes,max_saturated_fat_g,max_sodium_mg,max_sugar_g,revision,email,plan_code,(SELECT name FROM plans WHERE code=profiles.plan_code) AS plan_name,to_char(birth_date,'YYYY-MM-DD') AS birth_date FROM profiles WHERE id=${profileId()}`,
       )
     ).rows[0];
     const all = await readRecipes(c);
@@ -238,6 +248,9 @@ export async function openDatabase(options = {}) {
         diet: p.diet,
         exclusions: p.exclusions,
         medicalNotes: p.medical_notes,
+        maxSaturatedFatG: p.max_saturated_fat_g === null ? "" : String(Number(p.max_saturated_fat_g)),
+        maxSodiumMg: p.max_sodium_mg === null ? "" : String(Number(p.max_sodium_mg)),
+        maxSugarG: p.max_sugar_g === null ? "" : String(Number(p.max_sugar_g)),
         allergies: (
           await c.query(
             `SELECT allergen FROM profile_allergies WHERE profile_id=${profileId()} ORDER BY allergen`,
@@ -315,7 +328,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 4) throw new Error("Esquema de una versión posterior");
+      if (version > 5) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -381,6 +394,10 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/004_user_plans.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(4)');
       }
+      if (version < 5) {
+        await c.query(readFileSync(new URL('./postgres/005_usda_nutrition.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(5)');
+      }
     });
   } catch (error) {
     await pool.end();
@@ -395,6 +412,83 @@ export async function openDatabase(options = {}) {
       return true;
     },
     getState: () => transaction(readState, true),
+    getIngredientNutritionItems(ids) {
+      if (!Array.isArray(ids) || ids.length > 28 || ids.some((id) => typeof id !== 'string' || !id || id.length > 60))
+        throw new AppError('INVALID_INGREDIENT', 'Lista de ingredientes inválida.');
+      return transaction(async (c) => (await c.query(
+        `SELECT i.id AS ingredient_id,i.name,u.fdc_id,u.description,u.data_type,u.nutrients
+         FROM ingredients i LEFT JOIN ingredient_usda_links u ON u.ingredient_id=i.id AND u.profile_id=$2
+         WHERE i.id=ANY($1::varchar[]) AND (i.profile_id IS NULL OR i.profile_id=$2)
+         ORDER BY array_position($1::varchar[],i.id)`, [ids, profileId()])).rows.map((row) => ({
+          ingredientId: row.ingredient_id, name: row.name,
+          usda: row.fdc_id === null ? null : { fdcId: Number(row.fdc_id), description: row.description, dataType: row.data_type, nutrients: row.nutrients },
+        })), true);
+    },
+    getRecipeNutrition(recipeId, servings = 1) {
+      if (typeof recipeId !== 'string' || recipeId.length > 100 || !recipeId) throw new AppError('INVALID_RECIPE', 'Receta inválida.');
+      return transaction(async (c) => {
+        const profile = (await c.query(`SELECT max_saturated_fat_g,max_sodium_mg,max_sugar_g FROM profiles WHERE id=${profileId()}`)).rows[0];
+        const rows = (await c.query(
+          `SELECT ri.ingredient_id,i.name,ri.amount,r.source,COALESCE(o.grams_per_person,ri.grams_per_person) AS grams_per_person,
+            u.fdc_id,u.description,u.data_type,u.nutrients
+           FROM recipe_ingredients ri
+           JOIN recipes r ON r.id=ri.recipe_id
+           JOIN ingredients i ON i.id=ri.ingredient_id
+           LEFT JOIN recipe_gram_overrides o ON o.recipe_id=ri.recipe_id AND o.ingredient_id=ri.ingredient_id AND o.profile_id=$2
+           LEFT JOIN ingredient_usda_links u ON u.ingredient_id=ri.ingredient_id AND u.profile_id=$2
+           WHERE ri.recipe_id=$1 AND (r.source='catalog' OR r.profile_id=$2)
+           ORDER BY ri.position`, [recipeId, profileId()])).rows;
+        if (!rows.length) throw new AppError('NOT_FOUND', 'Receta no encontrada.', 404);
+        const items = rows.map((row) => ({
+          ingredientId: row.ingredient_id,
+          name: row.name,
+          amount: row.amount,
+          gramsPerPerson: row.grams_per_person === null ? estimatedGrams(recipeId, row.ingredient_id, row.amount, row.source) : Number(row.grams_per_person),
+          usda: row.fdc_id === null ? null : { fdcId: Number(row.fdc_id), description: row.description, dataType: row.data_type, nutrients: row.nutrients },
+        }));
+        return { ingredients: items, nutrition: calculateRecipeNutrition(items, servings, {
+          maxSaturatedFatG: profile.max_saturated_fat_g,
+          maxSodiumMg: profile.max_sodium_mg,
+          maxSugarG: profile.max_sugar_g,
+        }) };
+      }, true);
+    },
+    setRecipeGrams(recipeId, ingredientId, grams) {
+      if (typeof recipeId !== 'string' || recipeId.length > 100 || typeof ingredientId !== 'string' || ingredientId.length > 60 || typeof grams !== 'number' || !Number.isFinite(grams) || grams <= 0 || grams > 5000)
+        throw new AppError('INVALID_GRAMS', 'Indica entre 0,01 y 5000 gramos por persona.');
+      return transaction(async (c) => {
+        const allowed = await c.query(`SELECT 1 FROM recipe_ingredients ri JOIN recipes r ON r.id=ri.recipe_id WHERE ri.recipe_id=$1 AND ri.ingredient_id=$2 AND (r.source='catalog' OR r.profile_id=$3)`, [recipeId, ingredientId, profileId()]);
+        if (!allowed.rowCount) throw new AppError('NOT_FOUND', 'Ingrediente de receta no encontrado.', 404);
+        await c.query(`INSERT INTO recipe_gram_overrides(profile_id,recipe_id,ingredient_id,grams_per_person) VALUES($1,$2,$3,$4) ON CONFLICT(profile_id,recipe_id,ingredient_id) DO UPDATE SET grams_per_person=EXCLUDED.grams_per_person`, [profileId(), recipeId, ingredientId, grams]);
+        return { saved: true };
+      });
+    },
+    setIngredientUsda(ingredientId, food) {
+      if (typeof ingredientId !== 'string' || !ingredientId || ingredientId.length > 60)
+        throw new AppError('INVALID_INGREDIENT', 'Ingrediente inválido.');
+      return transaction(async (c) => {
+        const allowed = await c.query(`SELECT 1 FROM ingredients WHERE id=$1 AND (profile_id IS NULL OR profile_id=$2)`, [ingredientId, profileId()]);
+        if (!allowed.rowCount) throw new AppError('NOT_FOUND', 'Ingrediente no encontrado.', 404);
+        await c.query(`INSERT INTO ingredient_usda_links(profile_id,ingredient_id,fdc_id,description,data_type,nutrients) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(profile_id,ingredient_id) DO UPDATE SET fdc_id=EXCLUDED.fdc_id,description=EXCLUDED.description,data_type=EXCLUDED.data_type,nutrients=EXCLUDED.nutrients,updated_at=now()`, [profileId(), ingredientId, food.fdcId, food.description, food.dataType, food.nutrients]);
+        return { saved: true };
+      });
+    },
+    screenGeneratedNutrition(result, profile) {
+      if (result.type !== 'success' || !result.recipes?.length || ![profile.maxSaturatedFatG, profile.maxSodiumMg, profile.maxSugarG].some(Boolean)) return Promise.resolve(result);
+      return transaction(async (c) => {
+        const links = new Map((await c.query(`SELECT ingredient_id, nutrients FROM ingredient_usda_links WHERE profile_id=${profileId()}`)).rows.map((row) => [row.ingredient_id, row.nutrients]));
+        let unverified = false;
+        const recipes = result.recipes.filter((recipe) => {
+          const items = recipe.ingredients.map((id, index) => ({ gramsPerPerson: recipe.grams?.[index] ?? null, usda: links.has(id) ? { nutrients: links.get(id) } : null }));
+          const { checks } = calculateRecipeNutrition(items, 1, profile);
+          if (Object.values(checks).includes('exceeds')) return false;
+          if (Object.values(checks).includes('unknown')) unverified = true;
+          return true;
+        });
+        if (!recipes.length) return { ...result, type: 'review', recipes: [], text: 'Las recetas propuestas superan al menos un límite nutricional configurado en tu perfil. Prueba otra petición o ajusta tus ingredientes.' };
+        return { ...result, recipes, text: unverified ? `${result.text} No se pudo verificar algún límite nutricional porque faltan cantidades o datos de USDA para ciertos ingredientes.` : result.text };
+      }, true);
+    },
     async saveState(raw) {
       return transaction(async (c) => {
         await checkRevision(c, raw?.revision);
@@ -507,6 +601,8 @@ export async function openDatabase(options = {}) {
       return transaction(async (c) => {
         await checkRevision(c, expected);
         for (const table of [
+          "recipe_gram_overrides",
+          "ingredient_usda_links",
           "meal_plans",
           "favorites",
           "recipe_feedback",
@@ -570,8 +666,10 @@ export async function openDatabase(options = {}) {
           profile: { diet: "Sin preferencia", allergies: [] },
         };
         for (const r of legacy.generated) {
+          const imported = { ...r };
+          if (Array.isArray(imported.grams) && imported.grams.every((value) => value === null)) delete imported.grams;
           const validated = validateOutput(
-            { intent: "recipe", recipes: [r] },
+            { intent: "recipe", recipes: [imported] },
             input,
             r.model || "legacy-gemini",
           ).recipes[0];
@@ -603,7 +701,7 @@ export async function openDatabase(options = {}) {
       transaction(
         async (c) => ({
           provider: "postgresql",
-          schemaVersion: 3,
+          schemaVersion: 5,
           ingredients: Number(
             (await c.query("SELECT count(*) AS n FROM ingredients")).rows[0].n,
           ),
@@ -661,6 +759,11 @@ export async function openDatabase(options = {}) {
       "saveState",
       "addPantry",
       "saveGenerated",
+      "getRecipeNutrition",
+      "getIngredientNutritionItems",
+      "setRecipeGrams",
+      "setIngredientUsda",
+      "screenGeneratedNutrition",
       "reset",
       "listChats",
       "getChat",

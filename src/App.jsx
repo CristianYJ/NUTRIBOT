@@ -14,6 +14,7 @@ import Icon from "./Icons.jsx";
 import PantryImport from "./PantryImport.jsx";
 import CulinaryHeader from "./CulinaryHeader.jsx";
 import AssistantWorkspace from "./AssistantWorkspace.jsx";
+import NutritionPanel from "./NutritionPanel.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
 import { readNavigation, navigationUrl } from "./navigation.js";
@@ -205,6 +206,7 @@ function Workspace({ initial, onSignedOut }) {
   const [meal, setMeal] = useState("Todas");
   const [selected, setSelected] = useState(null);
   const [servings, setServings] = useState(1);
+  const [nutritionWithinLimits, setNutritionWithinLimits] = useState(false);
   const [checked, setChecked] = useState([]);
   const [chat] = useState(() => ({
     id: newId(),
@@ -418,6 +420,7 @@ function Workspace({ initial, onSignedOut }) {
   function openRecipe(r, portions = 1) {
     setSelected(r);
     setServings(portions);
+    setNutritionWithinLimits(false);
     setChecked([]);
   }
   function toggleSave(id) {
@@ -470,7 +473,7 @@ function Workspace({ initial, onSignedOut }) {
       ]);
     }
   }
-  async function generate(text = "¿Qué puedo cocinar con lo que tengo?") {
+  async function generate(text = "¿Qué puedo cocinar con lo que tengo?", mode = "initial") {
     if (request.current || switchingChat) return;
     if (messages.length > MAX_CHAT_MESSAGES - 2) {
       setToast(
@@ -496,6 +499,7 @@ function Workspace({ initial, onSignedOut }) {
         revision,
         maxTime,
         message: text,
+        mode,
         signal: controller.signal,
       });
       if (controller.signal.aborted || request.current !== controller) return;
@@ -521,6 +525,7 @@ function Workspace({ initial, onSignedOut }) {
           text: error.message,
           recipes: [],
           retryText: text,
+          retryMode: mode,
           id: newId(),
         },
       ]);
@@ -625,7 +630,7 @@ function Workspace({ initial, onSignedOut }) {
           <div className={`availability ${a.missing.length ? "missing" : ""}`}>
             <Icon name={a.missing.length ? "bag" : "check"} size={15} />
             {a.missing.length
-              ? `Te falta${a.missing.length > 1 ? "n" : ""} ${a.missing.length} ingrediente${a.missing.length > 1 ? "s" : ""}`
+              ? `Te falta${a.missing.length > 1 ? "n" : ""}: ${a.missing.map((id) => ingredients.find((item) => item.id === id)?.name || id).join(", ")}`
               : "Tienes todos los ingredientes"}
           </div>
         </div>
@@ -834,8 +839,7 @@ function Workspace({ initial, onSignedOut }) {
                     title="Sugerencias en pausa"
                     action={button("Revisar perfil", () => go("profile"))}
                   >
-                    Tus indicaciones escritas necesitan revisión. Tus recetas
-                    guardadas se conservan.
+                    Hay alimentos en “Otros alimentos que evito” que no se pudieron reconocer. Tus recetas guardadas se conservan.
                   </Empty>
                 ) : (
                   <>
@@ -878,6 +882,7 @@ function Workspace({ initial, onSignedOut }) {
                     Las recetas de Gemini se distinguen de los ejemplos del
                     catálogo. Verifica etiquetas y posibles trazas de alérgenos;
                     los filtros no certifican seguridad alimentaria.
+                    {profile.medicalNotes?.trim() && " Las indicaciones escritas de tu profesional no se verifican automáticamente."}
                   </span>
                 </div>
               </div>
@@ -1057,13 +1062,13 @@ function Workspace({ initial, onSignedOut }) {
               <div className="serving-row">
                 <h3>Ingredientes</h3>
                 <label>
-                  Porciones{" "}
+                  Personas{" "}
                   <select
-                    aria-label="Porciones"
+                    aria-label="Personas"
                     value={servings}
                     onChange={(e) => setServings(Number(e.target.value))}
                   >
-                    {[1, 2, 3, 4].map((n) => (
+                    {Array.from({ length: 12 }, (_, index) => index + 1).map((n) => (
                       <option key={n} value={n}>
                         {n}
                       </option>
@@ -1095,32 +1100,9 @@ function Workspace({ initial, onSignedOut }) {
                   </li>
                 ))}
               </ul>
-              {selected.nutrition ? (
-                <>
-                  <h3 className="nutrition-heading">
-                    Una mirada al plato <Tag>Datos de ejemplo</Tag>
-                  </h3>
-                  <div className="nutrition-grid">
-                    {["kcal", "g proteína", "g carbohidratos", "g grasas"].map(
-                      (label, i) => (
-                        <div key={label}>
-                          <strong>{selected.nutrition[i]}</strong>
-                          <span>{label}</span>
-                        </div>
-                      ),
-                    )}
-                  </div>
-                  <p className="microcopy">
-                    Valores ilustrativos por porción, sin cálculo nutricional
-                    verificado. No cambian según peso, estatura ni objetivos.
-                  </p>
-                </>
-              ) : (
-                <div className="review-note">
-                  Receta generada por IA, sin revisión profesional. No mostramos
-                  calorías ni macronutrientes hasta integrar una fuente
-                  nutricional verificable.
-                </div>
+              <NutritionPanel key={selected.id} recipe={selected} servings={servings} onValidation={setNutritionWithinLimits} />
+              {(profile.maxSaturatedFatG || profile.maxSodiumMg || profile.maxSugarG) && !nutritionWithinLimits && (
+                <div className="review-note">Hay límites nutricionales en tu perfil. Esta receta aún no se pudo verificar o supera un límite; revisa el resultado antes de prepararla.</div>
               )}
               <h3 className="steps-heading">Manos a la cocina</h3>
               <div className="recipe-steps">
@@ -1129,7 +1111,7 @@ function Workspace({ initial, onSignedOut }) {
                     key={step}
                     className={checked.includes(i) ? "done" : ""}
                     aria-pressed={checked.includes(i)}
-                    disabled={!matchesProfile(selected, profile, ingredients)}
+                    disabled={!matchesProfile(selected, profile, ingredients) || (Boolean(profile.maxSaturatedFatG || profile.maxSodiumMg || profile.maxSugarG) && !nutritionWithinLimits)}
                     onClick={() =>
                       setChecked((c) =>
                         c.includes(i) ? c.filter((n) => n !== i) : [...c, i],
@@ -1380,16 +1362,28 @@ function ProfileForm({ profile, onSave, catalog }) {
             <textarea
               rows={3}
               maxLength={1000}
-              placeholder="Transcribe una indicación alimentaria para revisión. No incluyas documentos ni datos identificativos."
+              placeholder="Anota aquí las indicaciones de tu profesional. No incluyas datos identificativos."
               value={draft.medicalNotes}
               onChange={(e) => field("medicalNotes", e.target.value)}
             />
+          </label>
+          <p className="microcopy">Límites opcionales por persona y por comida. Úsalos solo si ya te indicaron una cifra concreta. Nutribot los comprueba cuando hay cantidades y datos USDA completos.</p>
+          <div className="field-row">
+            <label>Grasa saturada máxima (g)
+              <input type="number" min="0.01" max="100" step="0.01" value={draft.maxSaturatedFatG || ""} onChange={(e) => field("maxSaturatedFatG", e.target.value)} placeholder="Sin límite" />
+            </label>
+            <label>Sodio máximo (mg)
+              <input type="number" min="0.01" max="10000" step="0.01" value={draft.maxSodiumMg || ""} onChange={(e) => field("maxSodiumMg", e.target.value)} placeholder="Sin límite" />
+            </label>
+          </div>
+          <label>Azúcares totales máximos (g)
+            <input type="number" min="0.01" max="200" step="0.01" value={draft.maxSugarG || ""} onChange={(e) => field("maxSugarG", e.target.value)} placeholder="Sin límite" />
           </label>
           <div className="review-note">
             <Icon name="info" size={18} />
             <p>
               {profileRestrictions(draft, catalog).reason ||
-                "Los alimentos reconocidos se excluyen de las recetas. Separa sus nombres con comas. Las indicaciones médicas o los alimentos que no podamos reconocer ponen las sugerencias en pausa."}
+                "Los alimentos reconocidos se excluyen de las recetas. Separa sus nombres con comas. Las indicaciones escritas se guardan, pero Nutribot no puede verificar automáticamente si una receta las cumple. Los alimentos que no podamos reconocer ponen las sugerencias en pausa."}
             </p>
           </div>
         </section>

@@ -262,7 +262,7 @@ export default function PantryWorkspace({
             aria-pressed={view === "pantry"}
             onClick={() => setView("pantry")}
           >
-            En mi despensa
+            En mi despensa ({pantry.length})
           </button>
           <button
             aria-pressed={view === "catalog"}
@@ -272,7 +272,7 @@ export default function PantryWorkspace({
               setSelection([]);
             }}
           >
-            Catálogo de alimentos
+            Catálogo de alimentos ({ingredients.length})
           </button>
         </div>
         <button

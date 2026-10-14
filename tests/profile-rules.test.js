@@ -33,15 +33,16 @@ test("recognized food lists exclude ingredients on server and in saved recipes",
   }
 });
 
-test("unknown or clinical restrictions still pause without guessing", () => {
+test("unknown exclusions pause, while professional notes remain unverified", () => {
   for (const exclusions of ["pan blanco, alimento desconocido", "dieta renal", "sin huevo excepto los martes", "no pan blanco pero sí huevo"]) {
     const input = request(exclusions);
     assert.equal(preflight(input).type, "review");
     assert.equal(requiresReview(input.profile), true);
   }
   const result = profileRestrictions({ ...initialProfile, exclusions: "pan blanco", medicalNotes: "Indicación médica" });
-  assert.equal(result.needsReview, true);
-  assert.match(result.reason, /Indicaciones de mi profesional/);
+  assert.equal(result.needsReview, false);
+  assert.equal(result.unverifiedNotes, true);
+  assert.equal(result.reason, "");
 });
 
 test("provider cannot reintroduce excluded ingredients or bread in recipe text", () => {

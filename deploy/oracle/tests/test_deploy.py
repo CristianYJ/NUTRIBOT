@@ -129,6 +129,43 @@ class ReleaseTests(unittest.TestCase):
                 deploy.rollback(state)
         self.assertIn("pending", state)
 
+    def test_migration_rollback_restores_schema_before_old_code(self):
+        releases = self.root / "releases"
+        previous = releases / "old"
+        previous.mkdir(parents=True)
+        (previous / "RELEASE.json").write_text(json.dumps({"commit": "b" * 40}))
+        schema_dump = self.root / "schema.dump"
+        state = {"pending": {"sha": SHA, "previous": str(previous),
+                             "schema_backup": str(schema_dump)}}
+        events = []
+        with patch.object(deploy, "RELEASES", releases), \
+             patch.object(deploy, "save_state"), \
+             patch.object(deploy, "command", side_effect=lambda args: events.append(args)), \
+             patch.object(deploy, "restore_schema", side_effect=lambda path: events.append(("restore", path))), \
+             patch.object(deploy, "switch", side_effect=lambda path: events.append(("switch", path))), \
+             patch.object(deploy, "ready"):
+            deploy.rollback(state)
+        self.assertEqual(events[0], ["/usr/bin/systemctl", "stop", "nutribot"])
+        self.assertEqual(events[1], ("restore", schema_dump))
+        self.assertEqual(events[2], ("switch", previous))
+        self.assertEqual(events[3], ["/usr/bin/systemctl", "restart", "nutribot"])
+        self.assertNotIn("pending", state)
+
+    def test_migration_restore_failure_never_starts_old_code(self):
+        releases = self.root / "releases"
+        previous = releases / "old"
+        previous.mkdir(parents=True)
+        state = {"pending": {"sha": SHA, "previous": str(previous),
+                             "schema_backup": str(self.root / "schema.dump")}}
+        with patch.object(deploy, "RELEASES", releases), \
+             patch.object(deploy, "command"), \
+             patch.object(deploy, "restore_schema", side_effect=RuntimeError("restore failed")), \
+             patch.object(deploy, "switch") as switch:
+            with self.assertRaisesRegex(RuntimeError, "restore failed"):
+                deploy.rollback(state)
+        switch.assert_not_called()
+        self.assertIn("pending", state)
+
     def test_no_deploy_for_unverified_workflow(self):
         for runs in [[], [{"head_sha": SHA, "head_branch": "main", "event": "pull_request",
                           "conclusion": "success", "head_repository": {"full_name": deploy.REPO}}]]:

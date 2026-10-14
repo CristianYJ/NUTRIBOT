@@ -2692,3 +2692,23 @@ main {
 .start-steps li > span:last-child { display: block; color: #657064; font-size: 14px; margin-top: 4px; }
 .saved-shortcut { margin-top: 24px; }
 .sidebar-user { margin-top: auto; }
+.usda-panel {
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid #dfe6d1;
+  border-radius: 12px;
+  background: #fbfcf7;
+}
+.usda-panel h3 { margin: 0; font-size: 18px; }
+.usda-mode { display: flex; gap: 6px; margin: 17px 0 9px; }
+.usda-mode button { padding: 7px 11px; border: 1px solid #c7d4b6; border-radius: 20px; color: #46613a; background: white; cursor: pointer; }
+.usda-mode button.active { color: #fff; border-color: #4c7139; background: #4c7139; }
+.usda-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 15px 0; }
+.usda-card { min-height: 87px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; padding: 9px 4px; border-radius: 8px; text-align: center; background: #eef2e8; }
+.usda-card:nth-child(n+5) { background: #e3edda; }
+.usda-card span { font-size: 10px; color: #4f6444; }
+.usda-card strong { font: 650 20px "Space Grotesk", sans-serif; color: #253b27; }
+.usda-card small { font-size: 9px; color: #607352; }
+@media (max-width: 620px) {
+  .usda-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -42,6 +42,9 @@ export function validateState(raw, catalog = ingredients) {
     (p.birthDate !== undefined && p.birthDate !== "" && ageFromBirthDate(p.birthDate) === null) ||
     !measurement(p.weight, 20, 400) ||
     !measurement(p.height, 80, 250) ||
+    !measurement(p.maxSaturatedFatG ?? "", 0.01, 100) ||
+    !measurement(p.maxSodiumMg ?? "", 0.01, 10000) ||
+    !measurement(p.maxSugarG ?? "", 0.01, 200) ||
     !goals.includes(p.goal) ||
     !diets.includes(p.diet) ||
     !string(p.exclusions, 1000) ||
@@ -73,6 +76,9 @@ export function validateState(raw, catalog = ingredients) {
       ...(p.birthDate !== undefined ? { birthDate: p.birthDate } : {}),
       weight: p.weight,
       height: p.height,
+      maxSaturatedFatG: p.maxSaturatedFatG ?? "",
+      maxSodiumMg: p.maxSodiumMg ?? "",
+      maxSugarG: p.maxSugarG ?? "",
       goal: p.goal,
       diet: p.diet,
       allergies: [...p.allergies],

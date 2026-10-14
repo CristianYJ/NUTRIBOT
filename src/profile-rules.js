@@ -49,12 +49,11 @@ export function profileRestrictions(profile, catalog = ingredients) {
     : catalog.filter(item => foodKey(item.name) === foodKey(part)).map(item => item.id);
   const unknown = parts.some((part) => !rules.has(part) && !resolve(part).length);
   const excludedIngredients = [...new Set(parts.flatMap(resolve))];
-  const reason = profile.medicalNotes?.trim()
-    ? 'El campo “Indicaciones de mi profesional” contiene texto. Nutribot no puede interpretar esas indicaciones. Revísalo en tu perfil; si lo llenaste por error, corrígelo y guarda los cambios.'
-    : unknown
-      ? 'No pude reconocer todos los alimentos de “Otros alimentos que evito”. Escribe nombres como huevo, queso o pan blanco, separados por comas. Las indicaciones clínicas necesitan revisión.'
-      : "";
-  return { excludedIngredients, needsReview: Boolean(reason), reason };
+  const reason = unknown
+    ? 'No pude reconocer todos los alimentos de “Otros alimentos que evito”. Escribe nombres como huevo, queso o pan blanco, separados por comas. Las indicaciones clínicas necesitan revisión.'
+    : "";
+  return { excludedIngredients, needsReview: Boolean(reason), reason,
+    unverifiedNotes: Boolean(profile.medicalNotes?.trim()) };
 }
 
 export const ingredientRule = (item) => foodRules[item?.id] || item || {};

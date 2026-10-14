@@ -46,7 +46,13 @@ export function validateChat(raw) {
       role: message.role,
       text: message.text,
       recipeIds,
-      type: ["success", "review", "error", "empty", "notice"].includes(
+      ...(Array.isArray(message.nutritionIngredientIds) && message.nutritionIngredientIds.length <= 28 && message.nutritionIngredientIds.every(id => string(id, 60))
+        ? { nutritionIngredientIds: message.nutritionIngredientIds } : {}),
+      ...(Array.isArray(message.missingIngredients) && message.missingIngredients.length <= 14 && message.missingIngredients.every(id => string(id, 100))
+        ? { missingIngredients: message.missingIngredients } : {}),
+      ...(Number.isInteger(message.servings) && message.servings >= 1 && message.servings <= 12 ? { servings: message.servings } : {}),
+      ...(["initial", "more"].includes(message.retryMode) ? { retryMode: message.retryMode } : {}),
+      type: ["success", "conversation", "nutrition_setup", "review", "error", "empty", "notice"].includes(
         message.type,
       )
         ? message.type

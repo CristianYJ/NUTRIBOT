@@ -237,7 +237,7 @@ export default function PantryWorkspace({
             </button>
             <button className="btn secondary" onClick={() => onImport("image")}>
               <Icon name="camera" size={16} />
-              Por foto
+              Usar Nutri-Vision
             </button>
           </div>
         </section>
@@ -408,7 +408,7 @@ export default function PantryWorkspace({
           <p>
             {search || category !== "Todos"
               ? "Prueba otra búsqueda o categoría."
-              : "Agrega alimentos por texto, foto o desde el catálogo."}
+              : "Agrega alimentos por texto, con Nutri-Vision o desde el catálogo."}
           </p>
         </div>
       )}

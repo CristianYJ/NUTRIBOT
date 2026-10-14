@@ -6,6 +6,7 @@ import { openDatabase } from "../server/database.js";
 import { postgresOptions } from "../server/postgres-config.js";
 import { createAppServer } from "../server/app.js";
 import { validateOutput, parseInput, allowedIngredients } from "../server/recipes.js";
+import { requireRecipeNutrition } from "../server/nutrition-readiness.js";
 
 const database = process.env.PGTESTDATABASE;
 if (
@@ -145,6 +146,31 @@ test('USDA links and grams persist per recipe and enforce structured limits', as
   assert.equal(screened.recipes.length, 0);
   await f.store.reset(1);
   assert.equal((await f.store.getRecipeNutrition(recipe.id, 2)).nutrition.perPerson.kcal, null);
+});
+
+test('pending nutrition saves no recipe, and confirmed USDA references survive reopening before generation', async t => {
+  const f = await fixture(t);
+  const suggestion = result();
+  suggestion.servings = 3;
+  suggestion.recipes[0].grams = [50, 100];
+  const profile = (await f.store.getState()).profile;
+  const pending = await requireRecipeNutrition(suggestion, f.store, '', undefined, profile, 'Arroz para tres', 'initial');
+  assert.equal(pending.type, 'nutrition_setup');
+  await f.store.saveGenerated(pending, 0);
+  assert.equal((await f.store.getState()).generated.length, 0);
+  for (const id of suggestion.recipes[0].ingredients) {
+    await f.store.setIngredientUsda(id, {fdcId:1234, description:'Synthetic test food', dataType:'Foundation',
+      nutrients:{kcal:100, protein:5, carbs:10, fat:2, saturatedFat:0, sodium:20, sugars:1, fiber:4}});
+  }
+  const reopened = await f.reopen();
+  const complete = await requireRecipeNutrition(suggestion, reopened, '', undefined, profile, 'Arroz para tres', 'initial');
+  assert.equal(complete.type, 'success');
+  await reopened.saveGenerated(complete, 0);
+  const stored = await reopened.getRecipeNutrition(suggestion.recipes[0].id, 3);
+  assert.equal(stored.nutrition.complete, true);
+  assert.equal(stored.nutrition.total.kcal, 450);
+  const events = (await f.sql.query('SELECT outcome, recipe_count FROM generation_events ORDER BY id')).rows;
+  assert.deepEqual(events, [{outcome:'nutrition_setup',recipe_count:0},{outcome:'success',recipe_count:1}]);
 });
 
 test("custom pantry persists, deduplicates, filters recipes and resets atomically", async (t) => {
@@ -291,7 +317,7 @@ test("reset clears personal recipes but keeps catalogue; stale AI cannot resurre
 test("HTTP uses PostgreSQL restrictions, persists asynchronous results, and rejects foreign origins", async (t) => {
   const f = await fixture(t);
   let calls = 0;
-  const server = createAppServer({ authentication: false,
+  const server = createAppServer({ requireCompleteNutrition: false, authentication: false,
     store: f.store,
     generate: async () => {
       calls++;
@@ -350,7 +376,7 @@ test("HTTP uses PostgreSQL restrictions, persists asynchronous results, and reje
   assert.equal((await f.store.summary()).generated, 1);
 });
 test("HTTP reports unavailable PostgreSQL without leaking database error details", async (t) => {
-  const server = createAppServer({ authentication: false,
+  const server = createAppServer({ requireCompleteNutrition: false, authentication: false,
     store: {
       provider: "postgresql",
       health: async () => {

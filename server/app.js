@@ -1,15 +1,16 @@
+import { requireRecipeNutrition, nutritionQuestion, hasCompleteNutrients, referenceChoices } from './nutrition-readiness.js';
 import { createServer } from "node:http";
 import { createAuthentication, requestContext } from "./auth.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AppError, parseInput, preflight } from "./recipes.js";
-import { generateWithGemini } from "./gemini.js";
+import { AppError, parseInput, preflight, eligibleIngredients } from "./recipes.js";
+import { generateWithGemini, generateStructured } from "./gemini.js";
 import { analyzePantry } from "./pantry.js";
 import { profileRestrictions } from "../src/profile-rules.js";
 import { validateRevision } from "./state-validation.js";
-import { getUsdaFood, searchUsdaFoods } from "./nutrition.js";
-import { resolveAutomaticUsdaLinks } from './auto-nutrition.js';
+import { getUsdaFood, searchUsdaFoods, translateFoodQuery } from "./nutrition.js";
+import { resolveAutomaticUsdaLinks, nutritionReferenceNotes } from './auto-nutrition.js';
 
 const dist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -38,6 +39,7 @@ export function createAppServer({
   usdaFetch = fetch,
   model = "gemini-3.5-flash-lite",
   generate = generateWithGemini,
+  requireCompleteNutrition = true,
   analyze = analyzePantry,
   serveStatic = false,
   store: rootStore,
@@ -139,6 +141,28 @@ export function createAppServer({
         requests.set(key, [...recent, now]);
         return json(res, 200, { foods: await searchUsdaFoods(url.searchParams.get('q'), usdaApiKey, usdaFetch) });
       }
+      const nutritionOptions = url.pathname.match(/^\/api\/nutrition\/ingredients\/([a-zA-Z0-9_-]+)\/options$/);
+      if (nutritionOptions && req.method === 'GET') {
+        const [item] = await store.getIngredientNutritionItems([nutritionOptions[1]]);
+        if (!item) throw new AppError('NOT_FOUND', 'Ingrediente no encontrado.', 404);
+        const state = await store.getState();
+        return json(res, 200, nutritionQuestion(item, state.profile.allergies));
+      }
+      const nutritionSearch = url.pathname.match(/^\/api\/nutrition\/ingredients\/([a-zA-Z0-9_-]+)\/search$/);
+      if (nutritionSearch && req.method === 'GET') {
+        const key = 'usda:' + context.ip;
+        const now = Date.now();
+        const recent = (requests.get(key) || []).filter(time => now - time < 60000);
+        if (recent.length >= 20) throw new AppError('LOCAL_RATE_LIMIT', 'Espera un momento antes de volver a buscar.', 429);
+        requests.set(key, [...recent, now]);
+        const [item] = await store.getIngredientNutritionItems([nutritionSearch[1]]);
+        if (!item) throw new AppError('NOT_FOUND', 'Ingrediente no encontrado.', 404);
+        const text = url.searchParams.get('q') || item.name;
+        if (text.length > 100) throw new AppError('INVALID_QUERY', 'Usa un nombre de alimento más corto.');
+        const query = nutritionQuestion(item).query && !url.searchParams.get('q')
+          ? nutritionQuestion(item).query : await translateFoodQuery(text, { apiKey, model }, generateStructured);
+        return json(res, 200, { query, foods: await searchUsdaFoods(query, usdaApiKey, usdaFetch) });
+      }
       const nutritionRecipe = url.pathname.match(/^\/api\/nutrition\/recipes\/([a-zA-Z0-9_-]+)$/);
       if (nutritionRecipe && req.method === 'GET') {
         const servings = Number(url.searchParams.get('servings') || 1);
@@ -146,7 +170,7 @@ export function createAppServer({
         const needsLookup = before.ingredients.some((item) => !item.usda || !Object.hasOwn(item.usda.nutrients || {}, 'fiber'));
         const lookup = await resolveAutomaticUsdaLinks(store, before.ingredients, usdaApiKey, usdaFetch);
         const current = needsLookup ? await store.getRecipeNutrition(nutritionRecipe[1], servings) : before;
-        return json(res, 200, { ...current, lookup });
+        return json(res, 200, { ...current, lookup, referenceNotes: nutritionReferenceNotes(current.ingredients) });
       }
       const nutritionGrams = url.pathname.match(/^\/api\/nutrition\/recipes\/([a-zA-Z0-9_-]+)\/ingredients\/([a-zA-Z0-9_-]+)$/);
       if (nutritionGrams && req.method === 'PUT') {
@@ -161,7 +185,15 @@ export function createAppServer({
         const recent = (requests.get(key) || []).filter((time) => now - time < 60000);
         if (recent.length >= 20) throw new AppError('LOCAL_RATE_LIMIT', 'Espera un momento antes de consultar USDA otra vez.', 429);
         requests.set(key, [...recent, now]);
+        if (body.confirmed !== true) throw new AppError('REVIEW_REQUIRED', 'Confirma que la ficha corresponde al alimento que utilizas.');
+        const [item] = await store.getIngredientNutritionItems([nutritionLink[1]]);
+        if (!item) throw new AppError('NOT_FOUND', 'Ingrediente no encontrado.', 404);
+        const state = await store.getState();
+        const option = referenceChoices(item.name).find(option => option.fdcId === body.fdcId);
+        if (option?.allergen && state.profile.allergies.includes(option.allergen))
+          throw new AppError('PROFILE_RESTRICTION', 'Esta opción no coincide con las alergias de tu perfil.');
         const food = await getUsdaFood(body.fdcId, usdaApiKey, usdaFetch);
+        if (!hasCompleteNutrients(food)) throw new AppError('INCOMPLETE_NUTRIENTS', 'Esta ficha no trae todos los nutrientes necesarios. Elige otra ficha del mismo alimento o deja la preparación pendiente.');
         return json(res, 200, await store.setIngredientUsda(nutritionLink[1], food));
       }
       if (["/api/pantry/analyze", "/api/pantry/add"].includes(url.pathname)) {
@@ -222,7 +254,7 @@ export function createAppServer({
             error: "METHOD_NOT_ALLOWED",
             text: "Utiliza POST para solicitar recetas.",
           });
-        let raw = await readJson(req, 12000);
+        let raw = await readJson(req, 24000);
         let state;
         if (store) {
           validateRevision(raw?.revision);
@@ -236,7 +268,7 @@ export function createAppServer({
           raw = {
             ...raw,
             pantry: state.pantry,
-            previous: state.generated,
+            previous: raw.mode === "more" ? state.generated : [],
             profile: {
               diet: state.profile.diet,
               allergies: state.profile.allergies,
@@ -248,6 +280,19 @@ export function createAppServer({
           };
         }
         const input = parseInput(raw, state?.ingredients);
+        // Resolve recipe references against this account, never client-supplied recipe text.
+        const contextIds = new Set(input.history.flatMap(message => message.recipeIds));
+        const eligible = new Set(eligibleIngredients(input));
+        input.discussedRecipes = (state?.generated || []).filter(recipe => contextIds.has(recipe.id) && recipe.ingredients.every(id => eligible.has(id))).slice(0, 3)
+          .map(({ title, ingredients, amounts, steps }) => ({ title, ingredients, amounts, steps }));
+        if (store?.getIngredientNutritionItems) {
+          const items = [];
+          for (let offset = 0; offset < input.pantry.length; offset += 28)
+            items.push(...await store.getIngredientNutritionItems(input.pantry.slice(offset, offset + 28)));
+          input.nutritionReferences = items.filter(item => hasCompleteNutrients(item.usda)).map(item => ({
+            id: item.ingredientId, description: item.usda.description,
+          }));
+        }
         const stopped = preflight(input);
         if (stopped) return json(res, 200, stopped);
         const now = Date.now(),
@@ -275,9 +320,8 @@ export function createAppServer({
             signal: controller.signal,
           });
           if (!res.destroyed) {
-            if (store?.getIngredientNutritionItems && result.recipes?.length && usdaApiKey) {
-              const ids = [...new Set(result.recipes.flatMap((recipe) => recipe.ingredients))];
-              await resolveAutomaticUsdaLinks(store, await store.getIngredientNutritionItems(ids), usdaApiKey, usdaFetch);
+            if (requireCompleteNutrition && store?.getIngredientNutritionItems) {
+              result = await requireRecipeNutrition(result, store, usdaApiKey, usdaFetch, state.profile, input.message, input.mode);
             }
             if (store?.screenGeneratedNutrition) result = await store.screenGeneratedNutrition(result, state.profile);
             // Only validated provider output enters history. An old response cannot

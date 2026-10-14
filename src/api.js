@@ -1,12 +1,14 @@
 import { authenticatedFetch } from "./auth-api.js";
 export async function nutritionRequest(method, path, body, signal) {
   let response;
+  // A translated search can require one Gemini call followed by USDA.
+  const timeout = AbortSignal.timeout(/\/search(?:\?|$)/.test(path) ? 65000 : 16000);
   try {
     response = await authenticatedFetch('/api/nutrition/' + path, {
       method,
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
-      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(16000)]) : AbortSignal.timeout(16000),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
   } catch (error) {
     if (signal?.aborted) throw error;
@@ -18,7 +20,7 @@ export async function nutritionRequest(method, path, body, signal) {
   if (!response.ok) throw new Error(data.text || 'No se pudo consultar la información nutricional.');
   return data;
 }
-export async function requestRecipe({ maxTime, message, mode, signal, revision }) {
+export async function requestRecipe({ maxTime, message, mode, history, signal, revision }) {
   let response;
   try {
     response = await authenticatedFetch("/api/recipes/suggest", {
@@ -29,6 +31,7 @@ export async function requestRecipe({ maxTime, message, mode, signal, revision }
         maxTime,
         message,
         mode,
+        history,
         revision,
       }),
     });

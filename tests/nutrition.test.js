@@ -105,3 +105,29 @@ test('Gemini grams must align with declared ingredients', () => {
   assert.deepEqual(validateOutput({ intent: 'recipe', recipes: [recipe] }, input, 'test').recipes[0].grams, [50, 100]);
   assert.throws(() => validateOutput({ intent: 'recipe', recipes: [{ ...recipe, grams: [50] }] }, input, 'test'), { code: 'INVALID_AI_OUTPUT' });
 });
+
+test('Spanish salt, green pepper and beef resolve automatically; known zero nutrients stay zero', async () => {
+  const foods = {
+    173468: { description: 'Salt, table', values: [0,0,0,0,0,38758,0,0] },
+    170427: { description: 'Peppers, sweet, green, raw', values: [20,.86,4.64,.17,.058,3,2.4,1.7] },
+    174757: { description: 'Beef, composite of trimmed retail cuts, separable lean and fat, raw', values: [167,20.95,0,9.3,3.845,61,0,0] },
+  };
+  const ids=[1008,1003,1005,1004,1258,1093,2000,1079];
+  const items=[{ingredientId:'food-salt',name:'sal',gramsPerPerson:2},{ingredientId:'chile_verde',name:'Chile verde',gramsPerPerson:30},{ingredientId:'carne_res',name:'Carne de res',gramsPerPerson:150}];
+  const result=await resolveAutomaticUsdaLinks({setIngredientUsda:async(id,food)=>{items.find(i=>i.ingredientId===id).usda=food;}},items,'fake-key',async url=>{
+    assert.match(url.pathname,/\/food\/\d+$/); // No Spanish search that can never match an English description.
+    const fdcId=Number(url.pathname.split('/').at(-1)),food=foods[fdcId];
+    assert(food);
+    return {ok:true,json:async()=>({fdcId,description:food.description,dataType:'SR Legacy',foodNutrients:ids.map((id,index)=>({nutrient:{id},amount:food.values[index]}))})};
+  });
+  assert.deepEqual(result,{unavailable:false,unmatched:[]});
+  const nutrition=calculateRecipeNutrition(items,12);
+  assert.equal(nutrition.complete,true);
+  assert.equal(nutrition.perPerson.kcal,256.5);
+  assert.equal(nutrition.total.kcal,3078);
+  assert.equal(items[0].usda.nutrients.kcal,0);
+  assert.equal(nutrition.perPerson.sodium,867.56);
+  assert.equal(curatedFdcId('other','Sal de ajo'),null);
+  assert.equal(curatedFdcId('other','Chile picante'),null);
+  assert.equal(curatedFdcId('other','Carne de res cocida'),null);
+});

@@ -63,8 +63,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .culinary-modes button.active { background: #fff; color: var(--green); box-shadow: 0 2px 4px #131b2e0c; }
 .culinary-clear { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); padding: 8px 0; }
 .culinary-assistant-grid { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 26px; align-items: start; }
-.culinary-chat { min-width: 0; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 7px 28px #131b2e04; }
-.culinary-conversation { padding: 30px 26px; display: flex; flex-direction: column; gap: 26px; min-height: 470px; max-height: 720px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #dfe7e1 transparent; }
+.culinary-chat { min-width: 0; background: #fff; border-radius: 24px; overflow: clip; box-shadow: 0 7px 28px #131b2e04; }
+.culinary-conversation { padding: 30px 26px; display: flex; flex-direction: column; gap: 26px; min-height: 0; overflow: visible; }
 .culinary-message { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
 .culinary-message-avatar { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; color: var(--green); background: #e6f9f0; border-radius: 50%; }
 .culinary-message-body { flex: 1; min-width: 0; }
@@ -74,7 +74,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .culinary-bubble > .btn { margin-top: 16px; font-size: 11px; padding: 12px 16px; }
 .culinary-bubble.error { background: #fff3ec; }
 .culinary-message-stamp { display: block; margin: 8px 3px 0; font-size: 10px; color: #737b78; }
-.culinary-starter { margin: auto; text-align: center; padding: 32px 12px 20px; }
+.culinary-starter { margin: 0; text-align: center; padding: 18px 12px 8px; }
 .culinary-starter > div { display: flex; justify-content: center; margin-bottom: 22px; }
 .culinary-starter > div > span { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 18px; background: #eaf8f0; border: 4px solid white; margin-left: -6px; font-size: 28px; transform: rotate(-8deg); }
 .culinary-starter > div > span:nth-child(even) { background: #f2f3ff; transform: rotate(8deg); }
@@ -112,7 +112,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .culinary-thinking > span:nth-child(2) { animation-delay: .2s; }
 .culinary-thinking > span:nth-child(3) { animation-delay: .4s; }
 .culinary-thinking small { font-size: 10px; color: var(--muted); padding-left: 4px; }
-.culinary-composer-area { padding: 18px 26px 14px; border-top: 1px solid #f0f2f8; }
+.culinary-composer-area { padding: 18px 26px 14px; border-top: 1px solid #f0f2f8; background: #fff; border-radius: 0 0 24px 24px; }
 .culinary-suggestions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
 .culinary-suggestions > span { font-size: 9px; font-weight: 600; letter-spacing: .8px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
 .culinary-suggestions button { border: 1px solid #e3e7e5; border-radius: 20px; padding: 7px 10px; font-size: 11px; color: #3c4a42; background: #fff; }
@@ -142,16 +142,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .culinary-pantry-list small { display: block; font-size: 10px; color: #67766d; margin-top: 4px; }
 .culinary-pantry-list li > svg { color: var(--green); }
 .culinary-text-action { color: var(--green); font-size: 11px; font-weight: 600; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 16px 0 0; }
-.culinary-impact { background: linear-gradient(120deg, #ddfaef 0%, #cff3e4 65%, #d8f6ec 100%); }
-.culinary-impact-summary { display: flex; align-items: center; gap: 14px; }
-.culinary-ring { width: 66px; height: 66px; flex-shrink: 0; border-radius: 50%; padding: 5px; background: conic-gradient(#008456 var(--progress), #b5e5cf 0); }
-.culinary-ring > span { width: 100%; height: 100%; display: grid; place-items: center; border-radius: 50%; background: #d8f7e9; color: #006c49; font: 700 20px "Space Grotesk", sans-serif; }
-.culinary-impact-icon { display: grid; place-items: center; border-radius: 50%; background: #b9ecd3; width: 62px; height: 62px; flex-shrink: 0; color: var(--green); }
-.culinary-impact-summary strong { font-size: 12px; color: #0b674a; line-height: 1.5; display: block; }
-.culinary-impact-summary p { font-size: 11px; color: #3f7461; margin-top: 4px; line-height: 1.7; }
-.culinary-profile-summary { border-top: 1px solid #bce5d3; display: flex; align-items: center; gap: 9px; padding: 16px 0 0; margin-top: 18px; text-align: left; width: 100%; color: var(--green); }
-.culinary-profile-summary > span { font-size: 11px; flex: 1; }
-.culinary-profile-summary small { display: block; font-size: 10px; color: #407461; margin-top: 4px; }
 .culinary-muted { color: #63716e; font-size: 12px; line-height: 1.85; }
 .culinary-history { list-style: none; padding: 0; margin: 0; }
 .culinary-history button { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 0 0 20px; }
@@ -245,7 +235,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .culinary-modes button { padding: 10px 7px; font-size: 10px; gap: 4px; white-space: normal; }
   .culinary-clear { margin-left: auto; font-size: 9px; }
   .culinary-chat { border-radius: 18px; }
-  .culinary-conversation { padding: 22px 14px; min-height: 280px; max-height: 620px; gap: 22px; }
+  .culinary-conversation { padding: 22px 14px; min-height: 0; gap: 22px; }
   .culinary-message { gap: 8px; }
   .culinary-message-avatar { width: 27px; height: 27px; }
   .culinary-message-avatar svg { width: 16px; }
@@ -310,3 +300,91 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (prefers-reduced-motion: reduce) {
   .culinary-thinking > span { animation: none; }
 }
+
+/* The assistant occupies the viewport; only the conversation scrolls. */
+.culinary-shell.assistant-shell{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.assistant-shell>.culinary-header{flex-shrink:0}
+.assistant-shell>.main-area{display:flex;flex:1;flex-direction:column;min-height:0;overflow:hidden}
+.culinary-shell.assistant-shell .main-area>main{flex:1;min-height:0;overflow:hidden;padding:20px 40px}
+.assistant-shell .app-footer{display:none}
+.assistant-shell .culinary-assistant,.assistant-shell .culinary-assistant-grid{height:100%;min-height:0}
+.assistant-shell .culinary-assistant-grid{grid-template-columns:minmax(0,1fr) 280px;align-items:stretch}
+.assistant-shell .culinary-chat{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.assistant-shell .culinary-conversation{flex:1;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;scrollbar-width:thin;scrollbar-color:#c7dcd2 transparent;scrollbar-gutter:stable}
+.assistant-shell .culinary-composer-area{position:static;flex-shrink:0;background:#fff}
+.chat-sidebar{align-self:start;max-height:100%;min-height:0;display:flex;flex-direction:column;gap:10px;padding:20px;background:#fff;border-radius:24px}
+.chat-sidebar-button{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:12px 14px;border-radius:12px;background:#f5f5ff;color:#42594f;text-align:left;font-size:13px}
+.chat-sidebar-button>span{flex:1;font-weight:600}
+.chat-sidebar-button:hover{background:#e6f6ee;color:#006c49}
+.chat-sidebar-button.new-chat{background:#006c49;color:#fff;margin-bottom:4px}
+.chat-sidebar-button.new-chat:hover{background:#00583b}
+@media(max-width:1000px){.assistant-shell .culinary-assistant-grid{grid-template-columns:minmax(0,1fr) 220px;gap:16px}.chat-sidebar{padding:14px}.chat-sidebar-button{gap:8px;padding:10px;font-size:12px}}
+@media(max-width:800px){
+  .culinary-shell.assistant-shell .main-area>main{padding:10px 14px}
+  .assistant-shell .culinary-assistant-grid{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:10px}
+  .chat-sidebar{grid-row:1;display:flex;gap:6px;padding:8px;border-radius:14px}
+  .chat-sidebar-button{flex-direction:column;justify-content:center;gap:4px;min-height:54px;padding:6px 3px;font-size:10px;text-align:center}
+  .chat-sidebar-button>span{flex:0}.chat-sidebar-button.new-chat{margin-bottom:0}
+  .chat-sidebar-button>svg:last-child:not(:first-child),.chat-sidebar-button>.culinary-count{display:none}
+  .assistant-shell .culinary-composer-area{padding:10px 12px}
+  .assistant-shell .culinary-suggestions{margin-bottom:8px;gap:4px}
+  .assistant-shell .culinary-suggestions>span{display:none}
+  .assistant-shell .culinary-privacy{font-size:9px;margin-top:6px}
+}
+@media(max-height:650px){
+  .assistant-shell .culinary-suggestions{display:none}
+  .assistant-shell .culinary-composer-area{padding-top:8px;padding-bottom:8px}
+  .assistant-shell .culinary-compose-input textarea{min-height:32px;height:36px}
+  .assistant-shell .culinary-composer{padding:10px}
+}
+
+.chat-sidebar-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;flex-shrink:0}
+.chat-sidebar-tabs .chat-sidebar-button{flex-direction:column;justify-content:center;gap:7px;padding:10px 3px;min-height:76px;font-size:10px;text-align:center;line-height:1.4}
+.chat-sidebar-tabs .chat-sidebar-button>span{flex:0}
+.chat-sidebar-tabs .chat-sidebar-button[aria-expanded=true]{background:#e1f6eb;color:#006c49;box-shadow:inset 0 0 0 1px #a8d9c1}
+.chat-sidebar>.new-chat{flex-shrink:0;position:relative;justify-content:center}
+.chat-sidebar>.new-chat>span{flex:0;text-align:center}
+.chat-sidebar>.new-chat>svg{position:absolute;left:16px}
+.chat-sidebar-preview{min-height:0;overflow-y:auto;scrollbar-width:thin;overscroll-behavior:contain;border-top:1px solid #e8ece9;padding-top:16px}
+.chat-sidebar-preview[hidden]{display:none}
+.chat-preview-title,.chat-sidebar-preview .culinary-card-title h2{font-size:13px;margin:0 0 12px;line-height:1.5}
+.chat-preview-title small{display:block;font-size:10px;color:#63716e;font-weight:400}
+.chat-sidebar-preview .culinary-card-title{margin-bottom:10px}
+.chat-sidebar-preview .conversation-history ul{max-height:none;overflow:visible}
+.chat-sidebar-preview .conversation-history li button{padding:10px 8px}
+.chat-sidebar-preview .culinary-pantry-list{display:flex;flex-direction:column;gap:8px;margin:0 0 12px}
+.chat-sidebar-preview .culinary-pantry-list li{padding:10px;gap:8px}
+.chat-sidebar-preview .culinary-pantry-list strong{font-size:11px}
+.chat-sidebar-preview .btn{font-size:11px;padding:10px;width:100%;justify-content:center}
+.chat-sidebar-preview .culinary-muted{font-size:11px;line-height:1.7}
+.chat-sidebar-preview .culinary-history strong{font-size:11px}
+.chat-preview-pagination{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:10px 0;font-size:10px;color:#63716e}
+.chat-preview-pagination button{display:grid;place-items:center;width:36px;height:36px;font-size:14px;padding:0;border-radius:8px}
+.chat-preview-pagination button:hover:not(:disabled){background:#e6f6ee}
+@media(max-width:800px){
+ .chat-sidebar>.new-chat{flex-direction:row;min-height:36px}
+ .chat-sidebar-tabs .chat-sidebar-button{flex-direction:row;min-height:42px;padding:6px;gap:6px}
+ .chat-sidebar-preview{max-height:22dvh;padding-top:10px}
+}
+
+.profile-optional{margin-top:20px;border:1px solid #e1e5e8;border-radius:14px;padding:16px;background:#fafbfc}
+.profile-optional summary{cursor:pointer;font-weight:600;color:#52636c;line-height:1.5}
+.profile-optional[open] summary{margin-bottom:16px}
+.profile-optional label{margin-top:14px}
+.culinary-quick-replies{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.culinary-quick-replies button{padding:8px 14px;border-radius:20px;border:1px solid #ccddd7;background:#fff;color:#006b50;font:inherit;cursor:pointer}
+.culinary-quick-replies button:disabled{opacity:.5;cursor:default}
+
+.ingredient-base-amount{display:block;color:#63716e;font-size:12px;margin-top:4px}
+
+.usda-references{margin-top:12px;font-size:13px;color:#52636c;line-height:1.6}
+.usda-references summary{cursor:pointer;font-weight:600}
+.usda-references ul{margin:8px 0;padding-left:20px}
+
+.nutrition-clarification{margin-top:16px;padding:16px;border:1px solid #d9e5df;border-radius:14px;background:#fff;color:#173c32;display:grid;gap:12px}
+.nutrition-clarification details{font-size:13px;line-height:1.6}
+.nutrition-clarification summary{cursor:pointer;color:#006b50}
+.nutrition-clarification input{display:block;width:100%;margin:8px 0;padding:10px;border:1px solid #cbd9d2;border-radius:8px;font:inherit}
+.nutrition-food-options{list-style:none;padding:0;display:grid;gap:12px}
+.nutrition-food-options li{display:grid;gap:6px;padding:12px;border:1px solid #e0e7e2;border-radius:10px}
+.nutrition-food-options .btn{justify-self:start}

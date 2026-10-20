@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Icon from "./Icons.jsx";
 import { landingSections } from "./public-navigation.js";
+import { planCatalog } from './plan-catalog.js';
 
 const links = [
   ["como-funciona", "Cómo funciona"],
@@ -133,10 +134,6 @@ export default function LandingPage({ brand }) {
           aria-labelledby="landing-title"
         >
           <div className="landing-hero-copy">
-            <span className="landing-eyebrow">
-              <i />
-              Asistente culinario
-            </span>
             <h1 id="landing-title">
               Cocina inteligente, aprovecha más y reduce el desperdicio
             </h1>
@@ -161,52 +158,11 @@ export default function LandingPage({ brand }) {
               </span>
             </div>
           </div>
-          <aside
-            className="landing-demo"
-            aria-label="Ejemplo ilustrativo de una receta"
-          >
-            <div className="landing-demo-header">
-              <span className="landing-demo-icon">
-                <Icon name="camera" />
-              </span>
-              <div>
-                <h2>Una mirada a tu refri</h2>
-                <p>Ingredientes revisados por ti</p>
-              </div>
-              <span className="landing-example">Ejemplo</span>
-            </div>
-            <div className="landing-ingredients">
-              <span>🥬 Espinacas</span>
-              <span>🍅 Tomates cherry</span>
-              <span>🍗 Pechuga de pollo</span>
-            </div>
-            <div className="landing-demo-recipe">
-              <div className="landing-demo-kicker">
-                UNA IDEA CON TU DESPENSA
-                <Icon name="spark" size={16} />
-              </div>
-              <h3>Sartén de pollo con espinacas y tomates cherry</h3>
-              <p>
-                Una combinación sencilla para darle una nueva idea a los
-                ingredientes de siempre.
-              </p>
-              <div className="landing-demo-stats">
-                <div>
-                  <small>Ingredientes</small>
-                  <strong>3 alimentos</strong>
-                </div>
-                <div>
-                  <small>A tu manera</small>
-                  <strong>Casero</strong>
-                </div>
-                <div>
-                  <small>Preparación</small>
-                  <strong>Paso a paso</strong>
-                </div>
-              </div>
-            </div>
-            <Enter>Encontrar mi próxima receta</Enter>
-          </aside>
+          <figure className="landing-app-preview">
+            <img src="/images/landing/app-movil.jpeg" width="738" height="1600"
+              alt="NutriBot en el teléfono: despensa, ingredientes y acceso a Nutri-Vision"
+              fetchPriority="high" decoding="async" />
+          </figure>
         </section>
         <section className="landing-section landing-width" id="como-funciona">
           <h2>De ingredientes sueltos a una buena cena en 3 pasos</h2>
@@ -225,7 +181,7 @@ export default function LandingPage({ brand }) {
           id="beneficios-impacto"
         >
           <div className="landing-width">
-            <h2>Cuatro beneficios esenciales pensados para tu día a día</h2>
+            <h2>Beneficios pensados para tu día a día</h2>
             <div className="landing-two">
               {benefits.map((item) => (
                 <article className="landing-card" key={item.title}>
@@ -309,9 +265,6 @@ export default function LandingPage({ brand }) {
           </div>
           <div className="landing-unified">
             <div>
-              <span className="landing-mini-label mint">
-                Una cocina conectada
-              </span>
               <h3>Menos herramientas sueltas. Más tiempo para cocinar.</h3>
               <Checks
                 items={[
@@ -334,110 +287,89 @@ export default function LandingPage({ brand }) {
               <span className="landing-feature-icon mint">
                 <Icon name="pantry" />
               </span>
-              <h3>Conexiones para el futuro</h3>
+              <h3>Conexiones</h3>
               <p>
-                Las alianzas con comercios y las listas de compras son
-                propuestas para futuras versiones. Hoy puedes organizar los
-                ingredientes que ya tienes.
+                Nuestros aliados son parte fundamental del crecimiento de NutriBot y estamos siempre abiertos a nuevas conexiones que nos ayuden a mejorar tu experiencia.
               </p>
-              <span className="landing-state">En propuesta</span>
             </article>
             <article className="landing-card">
               <span className="landing-feature-icon mint">
                 <Icon name="chef" />
               </span>
               <h3>Inspiración para cocinar</h3>
-              <p>
-                Las recetas son sugerencias culinarias. NutriBot no calcula
-                necesidades nutricionales, interpreta tratamientos ni sustituye
-                las indicaciones de tu profesional.
-              </p>
-              <span className="landing-state">Alcance actual</span>
-            </article>
+              <p>Nutribot no sustituye la opinión de profesionales, es un acompañante para mejorar tu experiencia culinaria y llevar un mejor y mayor control de tus habitos alimenticios</p>
+              </article>
             <article className="landing-card" id="privacidad">
               <span className="landing-feature-icon teal">
                 <Icon name="shield" />
               </span>
-              <h3>Tus datos, en tu cocina</h3>
+              <h3>Privacidad</h3>
               <p>
-                Cada cuenta tiene datos independientes guardados en la PC
-                anfitriona. Para generar recetas se envían a Google el mensaje,
-                los ingredientes y los filtros; al analizar una foto, se envía
-                esa imagen.
-              </p>
-              <p>
-                Las contraseñas se guardan mediante hash. La conexión local usa
-                HTTP salvo que se configure HTTPS.
+                La privacidad es fundamental en NutriBot. Tu información es tratada con los más altos estándares de seguridad y confidencialidad. Los datos se procesan exclusivamente para mejorar tu experiencia culinaria, respetando siempre tu privacidad y tus preferencias. 
               </p>
             </article>
           </div>
         </section>
         <section className="landing-section landing-width" id="planes">
           <span className="landing-section-label">
-            Acceso actual y próximos pasos
+            Un plan para tu cocina
           </span>
-          <h2>Empieza con tu cocina de hoy</h2>
-          <p className="landing-section-intro">
-            La versión local está disponible. Los planes de pago de esta
-            propuesta aún no se pueden contratar.
-          </p>
+          <h2>Elige cuánto quieres explorar en tu cocina</h2>
           <div className="landing-three landing-plans">
             <article className="landing-card">
-              <h3>Básico local</h3>
-              <p>Para comenzar con lo que tienes</p>
+              <h3>{planCatalog.basico.name}</h3>
               <div className="landing-price">
-                $0<small> / acceso local</small>
+                $0<small> / gratis</small>
               </div>
               <Checks
                 items={[
-                  "Despensa por texto y Nutri-Vision",
-                  "Recetas, favoritos e historial",
-                  "Fechas de despensa editables",
+                  `${planCatalog.basico.recipes} generaciones de recetas por semana`,
+                  `${planCatalog.basico.vision} análisis de foto con Nutri-Vision al mes`,
+                  "Tu propia despensa",
+                  "Recetas paso a paso, favoritos e historial",
+                  "Preferencias, alergias y restricciones",
+                  "Información nutricional por receta",
+                  "Registro de comidas y nutrición diaria por persona",
+                  "Valoración de tus comidas",
                 ]}
               />
-              <p className="landing-plan-note">
-                Las funciones de IA dependen de la clave y la cuota de Google
-                configuradas en la PC.
-              </p>
               <Enter secondary>Comenzar</Enter>
             </article>
             <article className="landing-card featured">
-              <span className="landing-plan-badge">Propuesta a futuro</span>
-              <h3>NutriBot Pro</h3>
-              <p>Más posibilidades para tu cocina</p>
+              <span className="landing-plan-badge">Recomendado</span>
+              <h3>{planCatalog.nutripro.name}</h3>
               <div className="landing-price">
-                $2.99<small> / mes propuesto</small>
+                $2.99<small> / mesl</small>
               </div>
               <Checks
                 items={[
-                  "Herramientas de planificación propuestas",
-                  "Más opciones de organización",
-                  "Funciones y límites por definir",
+                  "Todo lo incluido en Básico",
+                  `${planCatalog.nutripro.recipes} generaciones de recetas por semana`,
+                  `${planCatalog.nutripro.vision} de usos de Nutri-Vision al mes`,
+                  "Más cupo para pedir alternativas de recetas",
+                  "Más fotos para actualizar tu despensa",
+                  "El mismo seguimiento nutricional y de comidas",
                 ]}
               />
-              <p className="landing-plan-note">
-                Precio orientativo. Sin suscripción ni prueba de pago activa.
-              </p>
               <button className="landing-cta" disabled>
                 Próximamente
               </button>
             </article>
-            <article className="landing-card">
-              <h3>Plan anual</h3>
-              <p>Una opción pensada a largo plazo</p>
+            <article className="landing-card landing-plan-max">
+              <h3>{planCatalog.nutripro_plus.name}</h3>
               <div className="landing-price">
-                $29.99<small> / año propuesto</small>
+                $9.99<small> / mes</small>
               </div>
               <Checks
                 items={[
-                  "Propuesta de pago anual",
-                  "Beneficios por definir",
-                  "Disponible en una versión futura",
+                  "Todo lo incluido en NutriPro",
+                  `${planCatalog.nutripro_plus.recipes} generaciones de recetas por semana`,
+                  `${planCatalog.nutripro_plus.vision} de fotos con Nutri-Vision al mes`,
+                  "El maximo cupo para explorar alternativas",
+                  "Análisis de fotos para una despensa activa",
+                  "Seguimiento nutricional personalizado",
                 ]}
               />
-              <p className="landing-plan-note">
-                Precio orientativo. Todavía no se realizan cobros.
-              </p>
               <button className="landing-cta secondary" disabled>
                 Próximamente
               </button>
@@ -445,14 +377,15 @@ export default function LandingPage({ brand }) {
           </div>
         </section>
         <section className="landing-bottom-cta landing-width">
-          <span className="landing-eyebrow">Tu próxima idea empieza aquí</span>
+          <div className="landing-bottom-copy">
           <h2>
-            Empieza hoy a cocinar mejor
-            <br />
-            con lo que tienes en casa
+            Empieza hoy a cocinar
           </h2>
           <p>Crea tu cuenta y convierte tu despensa en nuevas posibilidades.</p>
           <Enter secondary>Empezar con mi correo</Enter>
+          </div>
+          <img className="landing-bowl-photo" src="/images/landing/bowl.png"
+            alt="Bowl de arroz, vegetales y pollo crujiente" loading="lazy" decoding="async" />
         </section>
       </main>
       <footer className="landing-footer">
@@ -474,3 +407,4 @@ export default function LandingPage({ brand }) {
     </div>
   );
 }
+

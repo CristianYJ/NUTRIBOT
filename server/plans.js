@@ -5,8 +5,9 @@ export const planCodes = ["basico", "nutripro", "nutripro_plus"];
 
 // Administrative DB access only. This is intentionally not an HTTP route.
 export async function assignPlan(client, { email, plan, reason, apply = false }) {
+  if (plan === 'nutrimax') plan = 'nutripro_plus';
   const account = normalizeEmail(email);
-  if (!planCodes.includes(plan)) throw new AppError("INVALID_PLAN", "Usa basico, nutripro o nutripro_plus.");
+  if (!planCodes.includes(plan)) throw new AppError("INVALID_PLAN", "Usa basico, nutripro o nutrimax.");
   if (typeof reason !== "string" || !reason.trim() || reason.trim().length > 300)
     throw new AppError("INVALID_REASON", "Indica un motivo de 1 a 300 caracteres.");
   await client.query("BEGIN");

@@ -19,6 +19,8 @@ export function validatePantryItems(items, allowEmpty = false) {
 }
 
 export function pantryParts(raw) {
+  if (!raw?.image || raw.text !== undefined)
+    throw new AppError('MANUAL_ONLY', 'Los alimentos por texto se agregan manualmente. Nutri-Vision solo analiza fotos.');
   const hasImage = raw?.image !== undefined;
   if (hasImage) {
     const img = raw.image;
@@ -33,9 +35,6 @@ export function pantryParts(raw) {
       throw new AppError("INVALID_IMAGE", "La imagen no es válida. Selecciona otra foto.");
     return [{ text: "Identifica los alimentos visibles en esta imagen para revisar y agregar a mi despensa." }, { inlineData: { mimeType: img.mimeType, data: img.data } }];
   }
-  if (typeof raw?.text !== "string" || !raw.text.trim() || raw.text.length > 2000)
-    throw new AppError("INVALID_TEXT", "Escribe tu lista de ingredientes (máximo 2000 caracteres).");
-  return [{ text: raw.text.trim() }];
 }
 
 export async function analyzePantry(raw, config) {

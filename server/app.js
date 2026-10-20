@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AppError, parseInput, preflight, eligibleIngredients } from "./recipes.js";
 import { generateWithGemini, generateStructured } from "./gemini.js";
-import { analyzePantry } from "./pantry.js";
+import { analyzePantry, pantryParts } from "./pantry.js";
 import { profileRestrictions } from "../src/profile-rules.js";
 import { validateRevision } from "./state-validation.js";
 import { getUsdaFood, searchUsdaFoods, translateFoodQuery } from "./nutrition.js";
@@ -22,6 +22,8 @@ const mime = {
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
   ".webmanifest": "application/manifest+json; charset=utf-8",
   ".woff2": "font/woff2",
 };
@@ -90,6 +92,23 @@ export function createAppServer({
         if (!["GET", "HEAD"].includes(req.method))
           auth.requireCsrf(req, session);
         store = rootStore.forProfile(session.profileId);
+      }
+      const reserveUsage = async feature => {
+        if (store?.reserveUsage) return store.reserveUsage(feature);
+        if (authentication) throw new AppError('PLAN_UNAVAILABLE', 'No se pudo comprobar el cupo de tu plan.', 503);
+        return null; // Explicit unauthenticated test fixtures only.
+      };
+      if (url.pathname === '/api/plan' && req.method === 'GET') {
+        if (!store?.getUsage) throw new AppError('PLAN_UNAVAILABLE', 'No se pudo consultar tu plan.', 503);
+        return json(res, 200, await store.getUsage());
+      }
+      if (url.pathname === '/api/meals/today' && req.method === 'GET') return json(res,200,await store.getTodayMeals());
+      const mealRoute = url.pathname.match(/^\/api\/meals\/([^/]+)$/);
+      if (mealRoute) {
+        if (req.method === 'PUT') return json(res,200,await store.recordMeal(mealRoute[1],await readJson(req)));
+        if (req.method === 'PATCH') return json(res,200,await store.rateMeal(mealRoute[1],(await readJson(req)).rating));
+        if (req.method === 'DELETE') return json(res,200,await store.removeMeal(mealRoute[1]));
+        throw new AppError('METHOD_NOT_ALLOWED','Método no permitido.',405);
       }
       if (url.pathname === "/api/connection" && req.method === "GET")
         return json(res, 200, {
@@ -217,6 +236,7 @@ export function createAppServer({
           );
         }
         const raw = await readJson(req, 4300000);
+        pantryParts(raw); // Reject text and invalid photos before quota/provider calls.
         const now = Date.now(),
           key = "pantry:" + context.ip;
         for (const [key, times] of requests)
@@ -225,26 +245,33 @@ export function createAppServer({
         if (recent.length >= 6 || active >= 2)
           throw new AppError(
             "LOCAL_RATE_LIMIT",
-            "Espera un momento antes de analizar otra lista o foto.",
+            "Espera un momento antes de analizar otra foto.",
             429,
           );
         requests.set(key, [...recent, now]);
         active++;
+        let usageToken;
         const controller = new AbortController();
         const cancel = () => {
           if (!res.writableEnded) controller.abort();
         };
         res.on("close", cancel);
         try {
+          usageToken = await reserveUsage('vision');
+          if (res.destroyed) return;
           const result = await analyze(raw, {
             apiKey,
             model,
             signal: controller.signal,
           });
-          if (!res.destroyed) json(res, 200, result);
+          if (!res.destroyed) {
+            if (usageToken) await store.finishUsage(usageToken, result.items.length > 0);
+            json(res, 200, result);
+          }
         } finally {
           active--;
           res.off("close", cancel);
+          if (usageToken) await store.finishUsage(usageToken, false);
         }
         return;
       }
@@ -308,12 +335,15 @@ export function createAppServer({
           );
         requests.set(ip, [...recent, now]);
         active++;
+        let usageToken;
         const controller = new AbortController();
         const cancel = () => {
           if (!res.writableEnded) controller.abort();
         };
         res.on("close", cancel);
         try {
+          usageToken = await reserveUsage('recipes');
+          if (res.destroyed) return;
           let result = await generate(input, {
             apiKey,
             model,
@@ -326,12 +356,13 @@ export function createAppServer({
             if (store?.screenGeneratedNutrition) result = await store.screenGeneratedNutrition(result, state.profile);
             // Only validated provider output enters history. An old response cannot
             // restore recipes after a reset or a change of profile in another tab.
-            if (store) await store.saveGenerated(result, state.revision);
+            if (store) await store.saveGenerated(result, state.revision, usageToken);
             json(res, 200, result);
           }
         } finally {
           active--;
           res.off("close", cancel);
+          if (usageToken) await store.finishUsage(usageToken, false);
         }
         return;
       }

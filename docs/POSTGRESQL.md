@@ -39,7 +39,7 @@ npm run db:init
 
 `db:provision` crea únicamente las dos bases indicadas y el usuario de la app. Genera su contraseña y la guarda en `.env`, conservando la clave Gemini. Si encuentra un nombre ocupado por otro propietario, se detiene sin sobrescribirlo. Si el rol ya existe, requiere sus credenciales previas en `.env` y no cambia su contraseña. La cuenta de administración no se usa para ejecutar Nutribot; puedes retirar su contraseña de `.env.postgres-admin` una vez completada la preparación.
 
-`db:init` aplica, en orden, todas las migraciones pendientes y carga el catálogo inicial una sola vez. En una instalación nueva crea también `auth_sessions`, `conversations`, `pantry_dates`, planes y asociaciones USDA. Su salida debe incluir `"schemaVersion": 5`. No necesitas crear tablas ni pegar los archivos SQL manualmente en DBeaver.
+`db:init` aplica, en orden, todas las migraciones pendientes y carga el catálogo inicial una sola vez. En una instalación nueva crea también `auth_sessions`, `conversations`, `pantry_dates`, planes, consumo por cuenta y asociaciones USDA. Su salida debe incluir `"schemaVersion": 7`. No necesitas crear tablas ni pegar los archivos SQL manualmente en DBeaver.
 
 Si tu equipo ya tiene una base dedicada y un usuario con permisos sobre ella, configura directamente `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` y `PGTESTDATABASE` en `.env`, y omite `db:provision`. La base de pruebas debe ser distinta y terminar en `_test`. Esta versión se ha validado con conexiones locales; no desactives verificación TLS para adaptar una conexión remota.
 
@@ -70,7 +70,7 @@ npm run db:init
 npm run db:validate
 ```
 
-`db:init` no repite migraciones ya registradas. Debe mostrar `"schemaVersion": 5`; `db:validate` debe mostrar `"valid": true`. Si Git informa cambios pendientes o divergencia, resuélvelos antes de continuar; no reemplaces tu carpeta ni tu base para actualizar.
+`db:init` no repite migraciones ya registradas. Debe mostrar `"schemaVersion": 7`; `db:validate` debe mostrar `"valid": true`. Si Git informa cambios pendientes o divergencia, resuélvelos antes de continuar; no reemplaces tu carpeta ni tu base para actualizar.
 
 3. Inicia la aplicación y recarga el navegador con **Ctrl+F5**:
 
@@ -226,3 +226,4 @@ En Windows se busca el directorio habitual `C:/Program Files/PostgreSQL/18/bin`.
 Ver [VALIDACION.md](VALIDACION.md) para los casos de prueba, resultados esperados y guion de presentación.
 
 Referencias técnicas: [transacciones node-postgres](https://node-postgres.com/features/transactions), [consultas parametrizadas](https://node-postgres.com/features/queries), [restricciones PostgreSQL](https://www.postgresql.org/docs/18/ddl-constraints.html), [pg_dump](https://www.postgresql.org/docs/18/app-pgdump.html).
+

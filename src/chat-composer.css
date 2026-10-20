@@ -1,0 +1,39 @@
+/* Compact controls leave the remaining height to the conversation. */
+.assistant-shell .culinary-composer-area { padding: 12px 22px 10px; }
+.chat-composer-topline { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-width: 0; }
+.assistant-shell .chat-composer-topline .culinary-suggestions { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; gap: 6px; margin: 0; }
+.chat-composer-topline .plan-usage-inline { margin: 0 0 0 auto; text-align: right; flex-shrink: 0; font-size: 11px; }
+.assistant-shell .culinary-composer.compact-composer { display: flex; align-items: flex-end; gap: 10px; padding: 10px; border-radius: 18px; }
+.compact-composer textarea { min-width: 0; flex: 1; background: transparent; border: 0; border-radius: 8px; resize: none; min-height: 44px; max-height: 100px; padding: 11px 2px; font: inherit; font-size: 14px; line-height: 22px; color: #24382f; }
+.compact-composer textarea::placeholder { color: #718079; }
+.chat-options-toggle { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; color: #006c49; background: #e3eee9; }
+.chat-options-toggle:hover, .chat-options-toggle[aria-expanded=true] { background: #cceede; }
+.compact-composer .culinary-send { width: 44px; height: 44px; flex-shrink: 0; }
+.chat-compose-popover { position: fixed; z-index: 40; padding: 8px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid #dce6e1; border-radius: 18px; background: #fff; box-shadow: 0 12px 40px #152b2926; }
+.chat-compose-popover > button { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 12px; border-radius: 10px; text-align: left; color: #164735; }
+.chat-compose-popover > button:hover { background: #f0f7f3; }
+.chat-compose-popover > button span { font-size: 13px; font-weight: 600; }
+.chat-compose-popover small { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; color: #63716e; }
+.chat-cooking-time { display: grid; gap: 10px; padding: 12px; margin-top: 4px; border-top: 1px solid #e7ece9; font-size: 12px; color: #42594f; }
+.chat-cooking-time > span { display: flex; align-items: center; gap: 10px; }
+.chat-cooking-time select { width: 100%; min-height: 42px; background: #f5f6fc; border: 1px solid #e2e5ed; border-radius: 10px; padding: 8px; font: inherit; color: #193e31; }
+.assistant-shell .culinary-privacy { margin-top: 7px; }
+.assistant-shell .culinary-conversation:focus-visible { outline: 2px solid #b9d9cd; outline-offset: -3px; }
+.assistant-shell .chat-sidebar > .new-chat > span { white-space: nowrap; }
+@media (max-width: 1100px) {
+  .chat-composer-topline { flex-wrap: wrap; gap: 6px; }
+  .chat-composer-topline .plan-usage-inline { margin-left: auto; }
+}
+@media (max-width: 800px) {
+  .assistant-shell .culinary-composer-area { padding: 8px; }
+  .assistant-shell .chat-composer-topline .culinary-suggestions { flex-basis: 100%; flex-wrap: nowrap; overflow-x: auto; }
+  .chat-composer-topline .plan-usage-inline { font-size: 10px; }
+  .assistant-shell .culinary-composer.compact-composer { padding: 6px; gap: 6px; }
+  .compact-composer textarea { font-size: 16px; }
+  .assistant-shell .culinary-composer-area.has-messages .culinary-suggestions { display: none; }
+  .assistant-shell .culinary-privacy { font-size: 9px; line-height: 1.4; }
+  .assistant-shell[data-keyboard-open=true] .chat-composer-topline { display: none; }
+}
+@media (max-height: 650px) {
+  .assistant-shell .chat-composer-topline .culinary-suggestions { display: none; }
+}

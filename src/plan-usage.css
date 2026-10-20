@@ -1,0 +1,8 @@
+.plan-usage-panel{background:#fff;border:1px solid #e3e5ec;border-radius:24px;padding:24px;margin-bottom:24px}
+.plan-usage-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.plan-usage-heading h2{font-size:20px;margin:0}
+.plan-usage-counters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:20px 0}
+.plan-usage-counters p{margin:8px 0}.plan-usage-counters progress{width:100%;accent-color:#006c49}
+.plan-usage-counters small{display:block;line-height:1.5;color:#536377}
+.plan-usage-inline{font-size:12px;color:#536377;margin:0 0 8px;line-height:1.4}
+@media(max-width:600px){.plan-usage-counters{grid-template-columns:1fr}.plan-usage-panel{padding:18px}.plan-usage-inline{font-size:11px;margin:0 0 5px}}

@@ -215,8 +215,7 @@ export default function PantryWorkspace({
     <div className="page-enter pantry-workspace">
       <div className="pantry-heading">
         <div className="page-title">
-          <h1>¿Qué hay en tu cocina?</h1>
-          <p>Añade los ingredientes que tienes. Nosotros ponemos las ideas.</p>
+          <h1>Mi Despensa</h1>
         </div>
         <section
           className="pantry-compact-banner"
@@ -233,7 +232,7 @@ export default function PantryWorkspace({
           <div>
             <button className="btn primary" onClick={() => onImport("text")}>
               <Icon name="plus" size={16} />
-              Agregar por texto
+              Agregar manualmente
             </button>
             <button className="btn secondary" onClick={() => onImport("image")}>
               <Icon name="camera" size={16} />
@@ -262,7 +261,7 @@ export default function PantryWorkspace({
             aria-pressed={view === "pantry"}
             onClick={() => setView("pantry")}
           >
-            En mi despensa ({pantry.length})
+            Mi despensa ({pantry.length})
           </button>
           <button
             aria-pressed={view === "catalog"}
@@ -408,16 +407,9 @@ export default function PantryWorkspace({
           <p>
             {search || category !== "Todos"
               ? "Prueba otra búsqueda o categoría."
-              : "Agrega alimentos por texto, con Nutri-Vision o desde el catálogo."}
+              : "Agrega alimentos manualmente, con Nutri-Vision o desde el catálogo."}
           </p>
         </div>
-      )}
-      {pantry.length > 0 && (
-        <p className="pantry-expiry-note">
-          <Icon name="info" size={16} />
-          Las fechas son editables. Los ingredientes sin datos de compra o
-          conservación quedan sin estimación.
-        </p>
       )}
       {editing && (
         <ExpiryEditor

@@ -624,7 +624,15 @@
     grid-template-columns: 1fr;
     gap: 28px;
   }
-  .landing-bowl-photo { max-width: 350px; justify-self: center; }
+  .landing-bowl-photo {
+    position: static;
+    inset: auto;
+    transform: none;
+    width: min(100%, 320px);
+    height: auto;
+    aspect-ratio: 1;
+    justify-self: center;
+  }
   .landing-app-preview img { width: min(100%, 260px); }
 }
 .landing-bottom-cta .landing-eyebrow {

@@ -8,9 +8,9 @@ import { preparePhoto, prefersCamera } from "./nutri-vision.js";
 import "./pantry-import.css";
 
 const blank = () => ({ name: "", category: "Otros", animal: false, meat: false, allergens: [] });
-export default function PantryImport({ ref, catalog, onSave, hideIntro = false }) {
+export default function PantryImport({ ref, catalog, onSave, usage, onUsageChange, hideIntro = false }) {
   const dialog = useRef(null), request = useRef(null), photoVersion = useRef(0);
-  const [mode, setMode] = useState("text"), [text, setText] = useState("");
+  const [mode, setMode] = useState("text");
   const [photo, setPhoto] = useState(null), [items, setItems] = useState([]);
   const [status, setStatus] = useState(""), [error, setError] = useState("");
   const [confirmed, setConfirmed] = useState(false), [resultReady, setResultReady] = useState(false);
@@ -32,7 +32,8 @@ export default function PantryImport({ ref, catalog, onSave, hideIntro = false }
     if (status === "saving") return;
     request.current?.abort(); request.current = null; photoVersion.current++;
     setStatus(""); setDragging(false);
-    setMode(next); setItems([]); setText(""); setPhoto(null); setError(""); setConfirmed(false); setResultReady(false);
+    setMode(next); setItems(next === 'text' ? [blank()] : []); setPhoto(null); setError(""); setConfirmed(false); setResultReady(next === 'text');
+    onUsageChange?.();
     dialog.current.showModal();
     // This must stay in the click handler, not an effect or timer.
     if (next === "image" && prefersCamera()) pickPhoto(camera);
@@ -53,10 +54,11 @@ export default function PantryImport({ ref, catalog, onSave, hideIntro = false }
     setConfirmed(false);
   }
   async function analyze() {
+    if (mode !== 'image' || !photo) return;
     const controller = new AbortController(); request.current = controller;
     setStatus("analyzing"); setError(""); setItems([]); setConfirmed(false); setResultReady(false);
     try {
-      const result = await pantryRequest("analyze", mode === "text" ? { text } : { image: photo.image }, controller.signal);
+      const result = await pantryRequest("analyze", { image: photo.image }, controller.signal);
       if (controller.signal.aborted) return;
       setItems(result.items.map(item => {
         const existing = findIngredient(item.name, catalog);
@@ -64,20 +66,20 @@ export default function PantryImport({ ref, catalog, onSave, hideIntro = false }
       }));
       setResultReady(true);
     } catch (e) { if (!controller.signal.aborted) setError(e.message); }
-    finally { if (request.current === controller) { request.current = null; setStatus(""); } }
+    finally { onUsageChange?.(); if (request.current === controller) { request.current = null; setStatus(""); } }
   }
   async function save(event) {
     event.preventDefault(); setStatus("saving"); setError("");
     try {
-      await onSave(items, { mode, preview: photo?.preview }); setItems([]); setPhoto(null); setText(""); dialog.current.close();
+      await onSave(items, { mode, preview: photo?.preview }); setItems([]); setPhoto(null); dialog.current.close();
     } catch (e) { setError(e.message); }
     finally { setStatus(""); }
   }
   return <>
     {!hideIntro && <section className="panel pantry-import-intro">
-      <div><h2>Agrega lo que tienes</h2><p>Escribe tu lista o usa Nutri-Vision. Revisa los ingredientes antes de guardarlos.</p></div>
+      <div><h2>Agrega lo que tienes</h2><p>Agrega alimentos manualmente o usa Nutri-Vision. Revisa los ingredientes antes de guardarlos.</p></div>
       <div className="pantry-import-actions">
-        <button className="btn primary" onClick={() => open("text")}>Agregar por texto</button>
+        <button className="btn primary" onClick={() => open("text")}>Agregar manualmente</button>
         <button className="btn secondary" onClick={() => open("image")}>Usar Nutri-Vision</button>
       </div>
     </section>}
@@ -89,7 +91,7 @@ export default function PantryImport({ ref, catalog, onSave, hideIntro = false }
         <button type="button" className="nutri-vision-close" aria-label="Cerrar" disabled={status === "saving"} onClick={close}><Icon name="close" size={22} /></button>
       </div>
       <fieldset disabled={busy} className="pantry-import-source">
-        {mode === "text" ? <label>¿Qué ingredientes tienes?<textarea rows={3} maxLength={2000} value={text} onChange={e => setText(e.target.value)} placeholder="Tengo papas, zanahorias, dos huevos y aceite de oliva…" /></label> : <>
+        {mode === "text" ? <p> </p> : <>
           <button type="button" className={`nutri-vision-dropzone ${dragging ? "is-dragging" : ""}`} onClick={() => pickPhoto(gallery)}
             aria-label={photo ? "Cambiar la foto de Nutri-Vision" : "Elegir una foto para Nutri-Vision"}
             onDragOver={e => { e.preventDefault(); if (!busy) setDragging(true); }}
@@ -111,17 +113,21 @@ export default function PantryImport({ ref, catalog, onSave, hideIntro = false }
             <button type="button" className="text-btn" onClick={() => pickPhoto(gallery)}>Elegir de galería</button>
           </div>
         </>}
-        <button className="btn primary nutri-vision-identify" type="button" onClick={analyze} disabled={mode === "text" ? !text.trim() : !photo}>Identificar ingredientes</button>
+        {mode === 'image' && <>
+          {usage && <p className="microcopy" role="status">Nutri-Vision: {usage.vision.used} de {usage.vision.limit} análisis usados este mes.{usage.vision.pending > 0 ? ` ${usage.vision.pending} en curso.` : ''}</p>}
+          <button className="btn primary nutri-vision-identify" type="button" onClick={analyze} disabled={!photo || usage?.vision.remaining === 0}>Identificar ingredientes</button>
+          {usage?.vision.remaining === 0 && <p className="microcopy">Tu cupo se renueva el {new Date(usage.vision.resetsAt).toLocaleDateString('es-SV', { timeZone: usage.timezone })}. Puedes agregar los alimentos manualmente.</p>}
+        </>}
         {mode === "image" ? <button className="text-btn nutri-vision-manual" type="button" onClick={() => open("text")}>¿Prefieres escribir? <strong>Agregar manualmente</strong></button> :
-          <button className="text-btn nutri-vision-manual" type="button" onClick={() => { setItems(list => [...list, blank()]); setResultReady(true); setConfirmed(false); }} disabled={items.length >= 20}>Agregar uno manualmente</button>}
-        <p className="microcopy nutri-vision-privacy">{mode === "text" ? "Al identificar ingredientes mediante texto, este se comparte con nuestros socios únicamente con el propósito descrito." : "Al identificar ingredientes mediante fotos, estas se comparten con nuestros socios únicamente con el propósito descrito."}</p>
+          <button className="text-btn nutri-vision-manual" type="button" onClick={() => { setItems(list => [...list, blank()]); setResultReady(true); setConfirmed(false); }} disabled={items.length >= 20}>Agregar otro alimento</button>}
+        {mode === 'image' && <p className="microcopy nutri-vision-privacy">Al identificar ingredientes mediante fotos, estas se comparten con nuestros socios únicamente con el propósito descrito.</p>}
       </fieldset>
       {status && <p role="status">{status === "saving" ? "Guardando en tu despensa…" : status === "photo" ? "Preparando la foto…" : "Identificando ingredientes…"}</p>}
       {error && <p className="pantry-import-error" role="alert">{error}</p>}
-      {resultReady && !items.length && <p>No hay ingredientes para agregar. Prueba otra lista, una foto más clara o agrega uno manualmente.</p>}
+      {resultReady && !items.length && <p>No hay ingredientes para agregar. Agrega uno manualmente{mode === 'image' ? ' o prueba una foto más clara' : ''}.</p>}
       {!!items.length && <form onSubmit={save}>
         <h3>Revisa lo que vas a agregar</h3>
-        <p className="microcopy">Puedes corregir nombres o quitar alimentos. Verifica el tipo y los alérgenos con las etiquetas; una foto puede no mostrar todos los ingredientes.</p>
+        <p className="microcopy">Puedes corregir nombres o quitar alimentos. Verifica el tipo y los alérgenos con las etiquetas.</p>
         <fieldset disabled={busy} className="pantry-review">
           {items.map((item, index) => {
             const existing = findIngredient(item.name, catalog);

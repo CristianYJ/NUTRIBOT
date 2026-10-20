@@ -6,7 +6,7 @@ El recorrido es sencillo: **Landing → Correo electrónico → Registro o inici
 
 Es una aplicación web adaptable a móvil y PC, con modo local y [despliegue en Oracle con HTTPS](docs/ORACLE.md). En HTTPS puede [instalarse como PWA desde el QR](docs/PWA.md), con icono y ventana independiente. Necesita conexión con el servidor; el APK es una etapa posterior.
 
-Los [planes de usuario](docs/PLANS.md) preparan las asignaciones Básico, NutriPro y NutriPro+, con historial administrativo. Esta etapa no incluye cobros ni restricciones de funciones por plan. Las migraciones 004 y 005 requieren un despliegue revisado en el servidor compartido.
+Los [planes de usuario](docs/PLANS.md) son Básico, NutriPro y NutriMax, con historial administrativo y cuotas por cuenta para generar recetas y analizar fotos. Básico incluye 4 generaciones semanales y 1 análisis de Nutri-Vision al mes. Agregar alimentos manualmente es gratuito y no usa IA. No hay cobros ni modalidad anual. La migración 006 requiere un despliegue revisado en el servidor compartido.
 
 ## Instalar desde cero en otra PC
 
@@ -50,7 +50,7 @@ npm run db:init
 
 El primer comando crea el usuario limitado `nutribot_app`, la base `nutribot_project` y otra separada para pruebas, `nutribot_project_test`. Guarda automáticamente la conexión en `.env`. El segundo crea las tablas y carga el catálogo inicial sin duplicarlo. Si encuentra nombres ocupados por otro propietario, se detiene sin modificarlos.
 
-El esquema actual es la **versión 5**. Incluye sesiones, historial de chats, fechas de despensa, planes y asociaciones con alimentos de USDA. `db:init` aplica las migraciones pendientes. Si ya tienes una instalación, sigue [actualizar una instalación existente](docs/POSTGRESQL.md#actualizar-una-instalación-existente) para conservar los datos.
+El esquema actual es la **versión 6**. Incluye sesiones, historial de chats, fechas de despensa, planes, consumo por cuenta y asociaciones con alimentos de USDA. `db:init` aplica las migraciones pendientes. Si ya tienes una instalación, sigue [actualizar una instalación existente](docs/POSTGRESQL.md#actualizar-una-instalación-existente) para conservar los datos.
 
 La app usa su propio usuario, no el administrador. Puedes retirar la contraseña de `.env.postgres-admin` después de preparar las bases. Para una instalación personalizada o un error de conexión, consulta [PostgreSQL y DBeaver](docs/POSTGRESQL.md).
 

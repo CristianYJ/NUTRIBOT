@@ -1,0 +1,12 @@
+.meal-feedback{padding:24px 0;border-top:1px solid #e0e5ec;border-bottom:1px solid #e0e5ec;margin:24px 0}
+.meal-feedback h3{font-size:18px;margin:0 0 8px}.meal-feedback p{font-size:13px;line-height:1.6;color:#63716e;margin:8px 0 16px}
+.meal-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.meal-actions .text-btn{font-size:12px;padding:8px 0}
+.meal-stars{display:flex;gap:4px}.meal-stars button{display:grid;place-items:center;min-width:44px;min-height:44px;border-radius:10px;color:#7d877e}
+.meal-stars svg{width:32px;height:32px;stroke:currentColor;fill:transparent;stroke-width:1.6}.meal-stars .filled{color:#a86a00}.meal-stars .filled svg{fill:#f7c657}
+.meal-stars button:hover{background:#fff3d7}.meal-stars button:focus-visible{outline:2px solid #006c49;outline-offset:2px}
+.daily-energy{margin:20px 0 12px;padding:28px 16px;border-radius:22px;background:linear-gradient(135deg,#e2f8ec,#f4f2ff);text-align:center}
+.daily-energy strong{display:block;font-size:42px;line-height:1.2;letter-spacing:-1px;color:#006c49}.daily-energy>span{display:block;margin-top:8px;font-size:13px;color:#52645d}
+.daily-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:18px 0}.daily-metrics>div{display:grid;gap:6px;background:#f7f7fc;border-radius:13px;padding:13px}
+.daily-metrics span,.daily-metrics small{font-size:11px;color:#5a6d62}.daily-metrics strong{font-size:20px;color:#173b2b}.daily-metrics strong small{font-weight:400}
+.daily-nutrition .review-note{font-size:12px;line-height:1.6}.daily-meal-list{border-top:1px solid #e5e9e6;padding-top:14px;font-size:13px}.daily-meal-list summary{cursor:pointer;color:#006c49}
+.daily-meal-list>div{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #eef0ef}.daily-meal-list small{display:block;font-size:11px;color:#63716e;margin-top:4px}.daily-meal-list .text-btn{font-size:12px}

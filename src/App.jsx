@@ -13,8 +13,11 @@ import { newId } from "./ids.js";
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import PantryImport from "./PantryImport.jsx";
+import PlanUsage, { usePlanUsage } from './PlanUsage.jsx';
 import RecipePantryImpact from "./RecipePantryImpact.jsx";
 import CulinaryHeader from "./CulinaryHeader.jsx";
+import {useMeals, MealFeedback} from './MealTracking.jsx';
+import HomeDashboard from "./HomeDashboard.jsx";
 import AssistantWorkspace from "./AssistantWorkspace.jsx";
 import NutritionPanel from "./NutritionPanel.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
@@ -162,6 +165,8 @@ export default function App() {
 }
 
 function Workspace({ initial, onSignedOut }) {
+  const { usage, usageError, refreshUsage } = usePlanUsage();
+  const meals = useMeals();
   const [loggingOut, setLoggingOut] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [ingredients, setIngredients] = useState(initial.ingredients);
@@ -204,7 +209,6 @@ function Workspace({ initial, onSignedOut }) {
   const [feedback, setFeedback] = useState(initial?.feedback || {});
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Todos");
-  const [recipeTab, setRecipeTab] = useState("Explorar");
   const [meal, setMeal] = useState("Todas");
   const selected = allRecipes.find(recipe => recipe.id === navigation.recipeId) || null;
   const [servings, setServings] = useState(1);
@@ -271,11 +275,11 @@ function Workspace({ initial, onSignedOut }) {
       setChatHistory((previous) =>
         offset
           ? [
-              ...previous,
-              ...result.items.filter(
-                (item) => !previous.some((existing) => existing.id === item.id),
-              ),
-            ]
+            ...previous,
+            ...result.items.filter(
+              (item) => !previous.some((existing) => existing.id === item.id),
+            ),
+          ]
           : result.items,
       );
       setHistoryOffset(result.nextOffset);
@@ -317,13 +321,13 @@ function Workspace({ initial, onSignedOut }) {
         id
           ? await readConversation("/" + id)
           : {
-              id: newId(),
-              revision: 0,
-              messages: [],
-              draft: "",
-              maxTime: 30,
-              busy: false,
-            },
+            id: newId(),
+            revision: 0,
+            messages: [],
+            draft: "",
+            maxTime: 30,
+            busy: false,
+          },
       );
       return true;
     } catch (problem) {
@@ -537,6 +541,7 @@ function Workspace({ initial, onSignedOut }) {
         request.current = null;
         setBusy(false);
       }
+      refreshUsage();
     }
   }
   async function reset() {
@@ -567,6 +572,7 @@ function Workspace({ initial, onSignedOut }) {
       setSaved(state.saved);
       setGenerated(state.generated);
       setFeedback(state.feedback);
+      meals.refresh().catch(() => {});
       setMessages([]);
       setMessage("");
       setMaxTime(30);
@@ -656,11 +662,6 @@ function Workspace({ initial, onSignedOut }) {
           onLogout={logout}
           loggingOut={loggingOut}
           onConnect={() => setPhoneOpen(true)}
-          onFavorites={() => {
-            go("recipes");
-            setRecipeTab("Guardadas");
-            setMeal("Todas");
-          }}
           onSearchIngredient={(query) => {
             go("pantry");
             setCategory("Todos");
@@ -671,35 +672,35 @@ function Workspace({ initial, onSignedOut }) {
           {(persistence.error ||
             persistence.status === "saving" ||
             chatPersistence.saving) && (
-            <div
-              className={`storage-status ${persistence.status}`}
-              role={persistence.error ? "alert" : "status"}
-            >
-              <span>
-                {persistence.error
-                  ? persistence.error.message
-                  : persistence.status === "saving"
-                    ? "Guardando cambios…"
-                    : chatPersistence.saving
-                      ? "Guardando conversación…"
-                      : ""}
-              </span>
-              {persistence.error &&
-                (persistence.error.code === "STATE_CONFLICT" ? (
-                  <button onClick={persistence.discardAndReload}>
-                    Descartar cambios pendientes y recargar
-                  </button>
-                ) : (
-                  <button onClick={() => persistence.flush().catch(() => {})}>
-                    Reintentar guardado
-                  </button>
-                ))}
-            </div>
-          )}
+              <div
+                className={`storage-status ${persistence.status}`}
+                role={persistence.error ? "alert" : "status"}
+              >
+                <span>
+                  {persistence.error
+                    ? persistence.error.message
+                    : persistence.status === "saving"
+                      ? "Guardando cambios…"
+                      : chatPersistence.saving
+                        ? "Guardando conversación…"
+                        : ""}
+                </span>
+                {persistence.error &&
+                  (persistence.error.code === "STATE_CONFLICT" ? (
+                    <button onClick={persistence.discardAndReload}>
+                      Descartar cambios pendientes y recargar
+                    </button>
+                  ) : (
+                    <button onClick={() => persistence.flush().catch(() => { })}>
+                      Reintentar guardado
+                    </button>
+                  ))}
+              </div>
+            )}
           {chatPersistence.error && (
             <div className="chat-save-error" role="alert">
               <span>{chatPersistence.error.message}</span>
-              <button onClick={() => chatPersistence.flush().catch(() => {})}>
+              <button onClick={() => chatPersistence.flush().catch(() => { })}>
                 Reintentar guardar chat
               </button>
               <button
@@ -714,48 +715,12 @@ function Workspace({ initial, onSignedOut }) {
           )}
           <main>
             {page === "home" && (
-              <div className="page-enter simple-home">
-                <div className="page-title">
-                  <h1>¿Qué cocinamos hoy?</h1>
-                  <p>
-                    Genera recetas con los ingredientes que tienes y los filtros
-                    de tu perfil.
-                  </p>
-                </div>
-                <section className="panel start-cooking">
-                  <Icon name="chef" size={38} />
-                  <h2>Tu cocina, en tres pasos</h2>
-                  <ol className="start-steps">
-                    <li>
-                      <button className="text-btn" onClick={() => go("pantry")}>
-                        Elige tus ingredientes
-                      </button>
-                      <span>{pantry.length} en tu despensa</span>
-                    </li>
-                    <li>
-                      <button
-                        className="text-btn"
-                        onClick={() => go("profile")}
-                      >
-                        Revisa tus preferencias y alergias
-                      </button>
-                      <span>{profile.diet}</span>
-                    </li>
-                    <li>
-                      <span>Pide una receta a Nutribot</span>
-                      <span>La IA usa tu despensa y tus filtros.</span>
-                    </li>
-                  </ol>
-                  {button("Pedir una receta", () => go("assistant"), "spark")}
-                </section>
-                <button
-                  className="text-btn saved-shortcut"
-                  onClick={() => go("recipes")}
-                >
-                  <Icon name="book" size={18} /> Ver mis recetas ·{" "}
-                  {generated.length} generadas
-                </button>
-              </div>
+              <HomeDashboard tracker={meals} profile={profile} pantry={pantry} dates={pantryDates}
+                ingredients={ingredients} recipes={allRecipes} saved={saved}
+                usage={usage} usageError={usageError} onNavigate={go}
+                onOpenRecipe={openRecipe} onSave={toggleSave} onImport={openPantryImport}
+                onAsk={(text) => { setMessage(text); go("assistant"); }}
+                onFavorites={() => { go("recipes"); setMeal("Favoritas"); }} />
             )}
             {page === "pantry" && (
               <PantryWorkspace
@@ -775,6 +740,7 @@ function Workspace({ initial, onSignedOut }) {
             )}
             {page === "assistant" && (
               <AssistantWorkspace
+                usage={usage}
                 profile={profile}
                 pantry={pantry}
                 ingredients={ingredients}
@@ -805,27 +771,10 @@ function Workspace({ initial, onSignedOut }) {
             {page === "recipes" && (
               <div className="page-enter">
                 <div className="page-title">
-                  <div className="eyebrow">IDEAS QUE DAN GUSTO</div>
-                  <h1>Tu pequeño recetario</h1>
-                  <p>
-                    Encuentra inspiración y guarda lo que te gustaría volver a
-                    cocinar.
-                  </p>
-                </div>
-                <div className="tabs">
-                  {["Explorar", "Guardadas"].map((t) => (
-                    <button
-                      key={t}
-                      className={recipeTab === t ? "active" : ""}
-                      onClick={() => setRecipeTab(t)}
-                    >
-                      {t}
-                      {t === "Guardadas" && <span>{saved.length}</span>}
-                    </button>
-                  ))}
+                  <h1>Mis Recetas Guardadas</h1>
                 </div>
                 <div className="filter-row">
-                  {["Todas", "Desayuno", "Almuerzo", "Cena"].map((c) => (
+                  {["Todas", "Favoritas", "Desayuno", "Almuerzo", "Cena"].map((c) => (
                     <button
                       key={c}
                       className={meal === c ? "selected" : ""}
@@ -841,7 +790,7 @@ function Workspace({ initial, onSignedOut }) {
                     title="Sugerencias en pausa"
                     action={button("Revisar perfil", () => go("profile"))}
                   >
-                    Hay alimentos en “Otros alimentos que evito” que no se pudieron reconocer. Tus recetas guardadas se conservan.
+                    Hay alimentos en “Otros alimentos que evito” que no se pudieron reconocer.
                   </Empty>
                 ) : (
                   <>
@@ -850,9 +799,7 @@ function Workspace({ initial, onSignedOut }) {
                         .filter(
                           (r) =>
                             matchesProfile(r, profile, ingredients) &&
-                            (recipeTab !== "Guardadas" ||
-                              saved.includes(r.id)) &&
-                            (meal === "Todas" || r.category === meal),
+                            (meal === "Todas" || (meal === "Favoritas" ? saved.includes(r.id) : r.category === meal)),
                         )
                         .map((r) => (
                           <RecipeCard key={r.id} recipe={r} />
@@ -861,29 +808,24 @@ function Workspace({ initial, onSignedOut }) {
                     {!allRecipes.some(
                       (r) =>
                         matchesProfile(r, profile, ingredients) &&
-                        (recipeTab !== "Guardadas" || saved.includes(r.id)) &&
-                        (meal === "Todas" || r.category === meal),
+                        (meal === "Todas" || (meal === "Favoritas" ? saved.includes(r.id) : r.category === meal)),
                     ) && (
-                      <Empty
-                        icon="heart"
-                        title={
-                          recipeTab === "Guardadas"
-                            ? "Aquí van tus próximas favoritas"
-                            : "No hay coincidencias"
-                        }
-                      >
-                        Guarda una receta con el corazón o prueba otra
-                        categoría. Tus filtros de perfil siguen aplicándose.
-                      </Empty>
-                    )}
+                        <Empty
+                          icon="heart"
+                          title={
+                            meal === "Favoritas"
+                              ? "Aquí van tus próximas favoritas"
+                              : "No hay coincidencias"
+                          }
+                        >
+                          {meal === "Favoritas" ? "Guarda una receta tocando el corazón." : "Prueba otra categoría o pide una receta en el chat."}
+                        </Empty>
+                      )}
                   </>
                 )}
                 <div className="quiet-note">
                   <Icon name="info" size={15} />
                   <span>
-                    Las recetas de Gemini se distinguen de los ejemplos del
-                    catálogo. Verifica etiquetas y posibles trazas de alérgenos;
-                    los filtros no certifican seguridad alimentaria.
                     {profile.medicalNotes?.trim() && " Las indicaciones escritas de tu profesional no se verifican automáticamente."}
                   </span>
                 </div>
@@ -892,13 +834,9 @@ function Workspace({ initial, onSignedOut }) {
             {page === "profile" && (
               <div className="page-enter">
                 <div className="page-title">
-                  <div className="eyebrow">CADA PERSONA, UNA COCINA</div>
-                  <h1>Hagámoslo a tu manera</h1>
-                  <p>
-                    Cuéntanos tus preferencias para dar forma a tus próximas
-                    recetas.
-                  </p>
+                  <h1>Mi Perfil</h1>
                 </div>
+                <PlanUsage usage={usage} error={usageError} onRefresh={refreshUsage} />
                 <ProfileForm
                   catalog={ingredients}
                   profile={profile}
@@ -913,13 +851,9 @@ function Workspace({ initial, onSignedOut }) {
                   <div>
                     <h3 id="profile-privacy-title">Privacidad de tus datos</h3>
                     <p>
-                      El perfil, la despensa y las recetas se guardan en la base
-                      de datos del servidor, asociados a tu cuenta.
-                      Al generar, se envían a Google tu mensaje, los
-                      ingredientes y los filtros alimentarios. Correo,
-                      contraseña, nombre, fecha de nacimiento, peso, estatura e
-                      indicaciones del perfil no se envían a Google. Usa datos
-                      ficticios en las pruebas.
+                      Tu perfil, despensa y recetas se guardan en nuestros servidores.
+                      Al generar tus recetas algunos datos se comparten con nuestros colaboradores.
+                      Para mas informacion revisa nuestra <a href="#">politica de privacidad</a>
                     </p>
                   </div>
                   <button
@@ -992,6 +926,8 @@ function Workspace({ initial, onSignedOut }) {
       </div>
       <PhoneConnection open={phoneOpen} onClose={() => setPhoneOpen(false)} />
       <PantryImport
+        usage={usage}
+        onUsageChange={refreshUsage}
         catalog={ingredients}
         onSave={addPantry}
         ref={pantryImport}
@@ -1091,7 +1027,7 @@ function Workspace({ initial, onSignedOut }) {
                     <span>
                       {Number.isFinite(selected.grams?.[i]) && selected.grams[i] > 0
                         ? <>{Number((selected.grams[i] * servings).toFixed(2)).toLocaleString("es")} g de {ingredientById[id].name.toLowerCase()}
-                            <small className="ingredient-base-amount">Por persona: {selected.amounts[i]}</small></>
+                          <small className="ingredient-base-amount">Por persona: {selected.amounts[i]}</small></>
                         : <>{selected.amounts[i]}{servings > 1 && <strong className="multiplier"> × {servings}</strong>}</>}
 
                     </span>
@@ -1130,28 +1066,10 @@ function Workspace({ initial, onSignedOut }) {
                   </button>
                 ))}
               </div>
-              <div className="feedback">
-                <div>
-                  <strong>¿Te gustaría prepararla?</strong>
-                  <p>Tu opinión ayuda a mejorar el proyecto.</p>
-                </div>
-                <button
-                  className={`btn ${feedback[selected.id] ? "primary" : "secondary"}`}
-                  onClick={() => {
-                    setFeedback((f) => ({
-                      ...f,
-                      [selected.id]: !f[selected.id],
-                    }));
-                    setToast("Opinión actualizada; comprobando guardado…");
-                  }}
-                >
-                  <Icon name="thumbs" size={17} />
-                  {feedback[selected.id] ? "¡Sí, me gusta!" : "Me gusta"}
-                </button>
-              </div>
+              <MealFeedback key={`meal-${selected.id}`} recipe={selected} tracker={meals} />
               <p className="microcopy">
-                Revisa las etiquetas de los productos y las posibles trazas de
-                alérgenos. Esta receta no ha sido validada por un profesional.
+                Recuerda siempre revisar las etiquetas de los productos y las posibles trazas de
+                alérgenos.
               </p>
             </div>
           </>
@@ -1167,9 +1085,7 @@ function Workspace({ initial, onSignedOut }) {
         <h2 id="reset-title">¿Volvemos al inicio?</h2>
         <p>
           Se restaurarán las preferencias y la despensa de tu cuenta, y se
-          borrarán sus recetas guardadas y su chat. El cambio también se verá en
-          tus otros dispositivos. Conservarás tu acceso, nombre y fecha de
-          nacimiento.
+          borrarán sus recetas guardadas y el chat.
         </p>
         <div className="actions">
           <button
@@ -1222,8 +1138,7 @@ function ProfileForm({ profile, onSave, catalog }) {
       <div className="profile-form-grid">
         <section className="panel form-panel">
           <div className="form-section-title">
-            <span>01</span>
-            <h2>Un poco sobre ti</h2>
+            <h2>Datos Personales</h2>
           </div>
           <label>
             ¿Cómo te llamas?
@@ -1266,74 +1181,68 @@ function ProfileForm({ profile, onSave, catalog }) {
             </select>
           </label>
           <details className="profile-optional">
-            <summary>Datos personales opcionales</summary>
-            <p className="microcopy">Puedes pedir recetas sin completar estos datos.</p>
-          <label>
-            Fecha de nacimiento <span className="optional">opcional</span>
-            <input
-              type="date"
-              autoComplete="bday"
-              max={todayDate()}
-              min="1900-01-01"
-              value={draft.birthDate || ""}
-              onChange={(event) => field("birthDate", event.target.value)}
-            />
-          </label>
-          {ageFromBirthDate(draft.birthDate) !== null && (
-            <p className="profile-age">
-              Edad: {ageFromBirthDate(draft.birthDate)} años
+            <summary>Datos personales</summary>
+            <label>
+              Fecha de nacimiento <span className="optional">opcional</span>
+              <input
+                type="date"
+                autoComplete="bday"
+                max={todayDate()}
+                min="1900-01-01"
+                value={draft.birthDate || ""}
+                onChange={(event) => field("birthDate", event.target.value)}
+              />
+            </label>
+            {ageFromBirthDate(draft.birthDate) !== null && (
+              <p className="profile-age">
+                Edad: {ageFromBirthDate(draft.birthDate)} años
+              </p>
+            )}
+            <div className="field-row">
+              <label>
+                Peso <span className="optional">opcional</span>
+                <div className="input-unit">
+                  <input
+                    type="number"
+                    min="20"
+                    max="400"
+                    step="0.1"
+                    value={draft.weight}
+                    onChange={(e) => field("weight", e.target.value)}
+                    placeholder="70"
+                    aria-label="Peso en kilogramos"
+                  />
+                  <span>kg</span>
+                </div>
+              </label>
+              <label>
+                Estatura <span className="optional">opcional</span>
+                <div className="input-unit">
+                  <input
+                    type="number"
+                    min="100"
+                    max="250"
+                    step="1"
+                    value={draft.height}
+                    onChange={(e) => field("height", e.target.value)}
+                    placeholder="170"
+                    aria-label="Estatura en centímetros"
+                  />
+                  <span>cm</span>
+                </div>
+              </label>
+            </div>
+            <p className="microcopy">
+              Estos datos se guardan en tu cuenta. Nutribot no calcula
+              necesidades calóricas ni prescribe dietas.
             </p>
-          )}
-          <div className="field-row">
-            <label>
-              Peso <span className="optional">opcional</span>
-              <div className="input-unit">
-                <input
-                  type="number"
-                  min="20"
-                  max="400"
-                  step="0.1"
-                  value={draft.weight}
-                  onChange={(e) => field("weight", e.target.value)}
-                  placeholder="70"
-                  aria-label="Peso en kilogramos"
-                />
-                <span>kg</span>
-              </div>
-            </label>
-            <label>
-              Estatura <span className="optional">opcional</span>
-              <div className="input-unit">
-                <input
-                  type="number"
-                  min="100"
-                  max="250"
-                  step="1"
-                  value={draft.height}
-                  onChange={(e) => field("height", e.target.value)}
-                  placeholder="170"
-                  aria-label="Estatura en centímetros"
-                />
-                <span>cm</span>
-              </div>
-            </label>
-          </div>
-          <p className="microcopy">
-            Estos datos se guardan en tu cuenta. Nutribot no calcula
-            necesidades calóricas ni prescribe dietas.
-          </p>
           </details>
         </section>
         <section className="panel form-panel">
           <div className="form-section-title">
-            <span>02</span>
-            <h2>Lo que debemos considerar</h2>
+            <h2>Restricciones</h2>
           </div>
           <label>Alergias y restricciones</label>
-          <p className="microcopy">
-            Selecciona las que correspondan. También puedes excluir alimentos
-            por nombre en el campo de abajo.
-          </p>
           <div className="allergy-options">
             {allergyOptions.map((a) => (
               <button
@@ -1364,42 +1273,42 @@ function ProfileForm({ profile, onSave, catalog }) {
           <details className="profile-optional">
             <summary>Indicaciones y límites opcionales{(draft.maxSaturatedFatG || draft.maxSodiumMg || draft.maxSugarG) ? " · Hay límites activos" : ""}</summary>
             <p className="microcopy">Solo si tu profesional te dio indicaciones. Puedes dejarlo vacío para cocinar con tus preferencias y alergias.</p>
-          <label>
-            Indicaciones de mi profesional{" "}
-            <span className="optional">opcional</span>
-            <textarea
-              rows={3}
-              maxLength={1000}
-              placeholder="Anota aquí las indicaciones de tu profesional. No incluyas datos identificativos."
-              value={draft.medicalNotes}
-              onChange={(e) => field("medicalNotes", e.target.value)}
-            />
-          </label>
-          <p className="microcopy">Límites opcionales por persona y por comida. Úsalos solo si ya te indicaron una cifra concreta. Nutribot los comprueba cuando hay cantidades y datos USDA completos.</p>
-          <div className="field-row">
-            <label>Grasa saturada máxima (g)
-              <input type="number" min="0.01" max="100" step="0.01" value={draft.maxSaturatedFatG || ""} onChange={(e) => field("maxSaturatedFatG", e.target.value)} placeholder="Sin límite" />
+            <div className="review-note">
+              <Icon name="info" size={18} />
+              <p>
+                {profileRestrictions(draft, catalog).reason ||
+                  "Las recetas respetan las alergias y los alimentos que evitas. Escribe nombres separados por comas; te avisaremos si alguno necesita aclaración."}
+              </p>
+            </div>
+            <label>
+              Indicaciones de mi profesional{" "}
+              <span className="optional">opcional</span>
+              <textarea
+                rows={3}
+                maxLength={1000}
+                placeholder="Anota aquí las indicaciones de tu profesional. No incluyas datos identificativos."
+                value={draft.medicalNotes}
+                onChange={(e) => field("medicalNotes", e.target.value)}
+              />
             </label>
-            <label>Sodio máximo (mg)
-              <input type="number" min="0.01" max="10000" step="0.01" value={draft.maxSodiumMg || ""} onChange={(e) => field("maxSodiumMg", e.target.value)} placeholder="Sin límite" />
+            <p className="microcopy">Límites opcionales por persona y por comida. Úsalos solo si ya te indicaron una cifra concreta.</p>
+            <div className="field-row">
+              <label>Grasa saturada máxima (g)
+                <input type="number" min="0.01" max="100" step="0.01" value={draft.maxSaturatedFatG || ""} onChange={(e) => field("maxSaturatedFatG", e.target.value)} placeholder="Sin límite" />
+              </label>
+              <label>Sodio máximo (mg)
+                <input type="number" min="0.01" max="10000" step="0.01" value={draft.maxSodiumMg || ""} onChange={(e) => field("maxSodiumMg", e.target.value)} placeholder="Sin límite" />
+              </label>
+            </div>
+            <label>Azúcares totales máximos (g)
+              <input type="number" min="0.01" max="200" step="0.01" value={draft.maxSugarG || ""} onChange={(e) => field("maxSugarG", e.target.value)} placeholder="Sin límite" />
             </label>
-          </div>
-          <label>Azúcares totales máximos (g)
-            <input type="number" min="0.01" max="200" step="0.01" value={draft.maxSugarG || ""} onChange={(e) => field("maxSugarG", e.target.value)} placeholder="Sin límite" />
-          </label>
           </details>
-          <div className="review-note">
-            <Icon name="info" size={18} />
-            <p>
-              {profileRestrictions(draft, catalog).reason ||
-                "Las recetas respetan las alergias y los alimentos que evitas. Escribe nombres separados por comas; te avisaremos si alguno necesita aclaración."}
-            </p>
-          </div>
         </section>
       </div>
       <div className="form-actions">
         <button type="submit" className="btn primary">
-          Guardar mi perfil
+          Guarda
           <Icon name="check" size={18} />
         </button>
       </div>

@@ -59,23 +59,10 @@ export default function NutritionPanel({ recipe, servings, onValidation }) {
           <small>{values[key] == null ? 'Sin verificar' : unit}</small>
         </div>)}
       </div>
-      <p className="microcopy">Estimación con datos USDA y las cantidades de la receta. Los valores pueden variar según el alimento utilizado.</p>
       {!data.nutrition.complete && <div className="review-note">
-        <p>{gaps.length ? `Faltan datos completos de: ${gaps.join(', ')}.` : 'Faltan datos para completar el cálculo.'} Los totales incompletos aparecen como «Sin verificar»; no se cuentan los datos faltantes como cero.</p>
+        <p>{gaps.length ? `Faltan datos completos de: ${gaps.join(', ')}.` : 'Faltan datos para completar el cálculo.'}</p>
       </div>}
-      {data.referenceNotes?.length > 0 && <details className="usda-references">
-        <summary>Alimentos usados para la estimación</summary>
-        <ul>{data.referenceNotes.map(note => <li key={note}>{note}</li>)}</ul>
-      </details>}
-      {!data.nutrition.complete && data.ingredients?.some(item => !item.usda || Object.values(item.usda.nutrients).some(value => value === null)) &&
-        <NutritionClarification ingredientIds={data.ingredients.filter(item => !item.usda || Object.values(item.usda.nutrients).some(value => value === null)).map(item => item.ingredientId)} onContinue={() => setRetry(value => value + 1)} />}
-      <details className="usda-references">
-        <summary>Fuentes USDA de esta receta</summary>
-        <ul>{data.ingredients?.filter(item => item.usda).map(item => <li key={item.ingredientId}>
-          <strong>{item.name}</strong>: {item.usda.description} · <a href={`https://fdc.nal.usda.gov/food-details/${item.usda.fdcId}/nutrients`} target="_blank" rel="noreferrer">FDC {item.usda.fdcId}</a>
-        </li>)}</ul>
-      </details>
-      {data.lookup?.unavailable && <p className="microcopy">No se pudieron consultar todos los alimentos USDA en este momento.</p>}
+      {data.lookup?.unavailable && <p className="microcopy">No se pudieron consultar todos los alimentos en este momento.</p>}
       {Object.entries(data.nutrition.checks).filter(([, status]) => status !== 'within').map(([key, status]) => <p className="review-note" key={key}>
         {checks[key]}: {status === 'exceeds' ? 'supera el límite indicado' : 'no verificable con los datos actuales'}.
       </p>)}

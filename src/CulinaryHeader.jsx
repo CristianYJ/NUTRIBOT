@@ -12,7 +12,6 @@ export default function CulinaryHeader({
   onNavigate,
   onSearchIngredient,
   onOpenRecipe,
-  onFavorites,
   onLogout,
   loggingOut,
   onConnect,
@@ -127,10 +126,6 @@ export default function CulinaryHeader({
             {label}
           </button>
         ))}
-        <button onClick={() => choose(onFavorites)}>
-          <Icon name="heart" size={16} />
-          <span>Favoritos</span>
-        </button>
       </nav>
       <div className="culinary-header-actions">
         <AccountMenu

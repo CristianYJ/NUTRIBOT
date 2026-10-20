@@ -141,6 +141,20 @@
   gap: 65px;
   padding-block: 100px 105px;
 }
+.landing-app-preview {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.landing-app-preview img {
+  display: block;
+  width: min(100%, 290px);
+  height: auto;
+  border: 7px solid #182826;
+  border-radius: 34px;
+  box-shadow: 0 24px 48px #143b3026;
+}
 .landing-eyebrow {
   display: inline-flex;
   align-items: center;
@@ -527,6 +541,21 @@
   border: 2px solid #0ac28e;
   box-shadow: 0 8px 20px #00a07414;
 }
+.landing-plans .landing-plan-max {
+  border-color: #91b6e5;
+}
+.landing-plan-max h3,
+.landing-plan-max .landing-price {
+  color: #245fa6;
+}
+.landing-plan-terms {
+  max-width: 850px;
+  margin: 24px auto 0;
+  color: #65758a;
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
 .landing-plan-badge {
   position: absolute;
   top: -12px;
@@ -565,12 +594,38 @@
   font-size: 12px;
 }
 .landing-bottom-cta {
+  position: relative; /* Necesario para anclar la imagen adentro */
+  overflow: hidden;   /* Recorta todo lo que sobresalga del borde verde */
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.8fr);
+  align-items: center;
+  gap: 40px;
   margin-block: 45px 70px;
   padding: 50px 55px;
   background: linear-gradient(120deg, #00a678, #00775c);
   border-radius: 26px;
   box-shadow: 0 12px 20px #075c3120;
   color: white;
+}
+
+.landing-bowl-photo {
+  position: absolute;
+  right: 55px; /* Alineado con el padding derecho del contenedor */
+  top: 50%;
+  transform: translateY(-50%); /* Lo centra verticalmente */
+  width: 320px; /* Tamaño grande (ajústalo a tu gusto, ej. 300px - 380px) */
+  height: 320px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.landing-bottom-copy { min-width: 0; }
+@media (max-width: 800px) {
+  .landing-bottom-cta {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .landing-bowl-photo { max-width: 350px; justify-self: center; }
+  .landing-app-preview img { width: min(100%, 260px); }
 }
 .landing-bottom-cta .landing-eyebrow {
   color: #e0fff3;
@@ -795,3 +850,4 @@
     transition: none;
   }
 }
+

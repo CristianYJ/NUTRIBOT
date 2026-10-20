@@ -75,9 +75,9 @@ test("public HTTP authentication sets Secure cookies, disables legacy claiming a
       createSession: async () => {},
       hasLegacyProfile: async () => { throw Error("Public requests cannot claim local profiles"); },
     },
-    forProfile: () => ({}),
+    forProfile: () => ({ reserveUsage: async () => 'test-reservation', finishUsage: async () => {} }),
   };
-  const server = createAppServer({ network, store, apiKey: "test-only", analyze: async () => { calls++; return { ingredients: [] }; } });
+  const server = createAppServer({ network, store, apiKey: "test-only", analyze: async () => { calls++; return { items: [] }; } });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   async function send(path, patch = {}, body) {
@@ -114,7 +114,7 @@ test("public HTTP authentication sets Secure cookies, disables legacy claiming a
     // Two people behind Caddy have separate limits; spoofed forwarding headers cannot reset them.
     for (const ip of ["198.51.100.20", "198.51.100.21"]) {
       for (let n = 0; n < 7; n++) {
-        const response = await send("/api/pantry/analyze", { ...authenticated, "x-nutribot-csrf": csrfToken, "x-nutribot-client": ip, "x-forwarded-for": `203.0.113.${n}` }, { text: "arroz" });
+        const response = await send("/api/pantry/analyze", { ...authenticated, "x-nutribot-csrf": csrfToken, "x-nutribot-client": ip, "x-forwarded-for": `203.0.113.${n}` }, { image: { mimeType: 'image/png', data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' } });
         assert.equal(response.status, n < 6 ? 200 : 429);
       }
     }

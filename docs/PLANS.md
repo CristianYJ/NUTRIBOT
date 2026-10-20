@@ -1,47 +1,65 @@
 # Planes de usuario
 
-Esta etapa prepara la asignación e insignia de los planes **Básico**, **NutriPro** y **NutriPro+**. Todavía no implementa pagos, suscripciones con vencimiento ni límites de funciones por plan. Esas reglas deben definirse antes de añadir cobros o permisos diferenciados.
+La implementación ofrece tres niveles. No incluye cobros, renovación de suscripciones ni modalidad anual. Los planes premium se asignan administrativamente para pruebas.
 
-## Datos y seguridad
+| Función | Básico | NutriPro | NutriMax |
+| --- | --- | --- | --- |
+| Generaciones de recetas por semana | 4 | 35 | 100 |
+| Análisis de fotos con Nutri-Vision por mes | 1 | 15 | 60 |
+| Agregar alimentos manualmente, sin IA | Incluido | Incluido | Incluido |
+| Perfil, alergias, restricciones, catálogo, favoritos e historial | Incluido | Incluido | Incluido |
 
-- `plans`: catálogo de tres códigos estables: `basico`, `nutripro`, `nutripro_plus`.
-- `profiles.plan_code`: clave foránea obligatoria, un plan actual por cuenta. Las cuentas existentes y nuevas empiezan en `basico`.
-- `profile_plan_history`: asignación inicial y cambios, con origen, destino, fecha, rol PostgreSQL y motivo. Un trigger registra inserciones y cambios reales; guardar el mismo plan no duplica el historial.
-- `GET /api/state` devuelve `profile.plan = { code, name }` de la cuenta autenticada. La insignia no concede permisos.
-- El registro y la edición de perfil no aceptan cambios de plan. No hay un endpoint público ni selector para autoconcederse NutriPro.
-- La edición administrativa requiere acceso a la base de datos; `changed_by` registra el rol de DB, no identifica a una persona si varias usan el mismo rol. Un panel administrativo futuro debe incorporar roles de administrador y auditoría de la persona responsable.
+Las cuotas están definidas en `src/plan-catalog.js` y se comprueban en el servidor. Se conservan los límites técnicos generales de almacenamiento y de solicitudes por minuto. La nutrición USDA disponible y los filtros alimentarios siguen incluidos en todos los planes; no se anuncian funciones premium sin implementar.
 
-## Migración y despliegue
+## Cómo se cuenta
 
-`server/postgres/004_user_plans.sql` se aplica una sola vez por el migrador habitual al iniciar la versión nueva o ejecutar `npm run db:init`. Se conserva el contenido de las cuentas; no hay reinicio ni borrado de despensas/conversaciones. Las pruebas usan una base separada terminada en `_test` y esquemas temporales.
+- Una generación es una solicitud que termina con recetas válidas y guardadas. Si devuelve dos alternativas, cuenta como una generación. Pedir más alternativas cuenta como otra solicitud.
+- Errores, preguntas de aclaración, respuestas sin recetas y preparaciones pendientes de completar su nutrición no consumen cuota semanal.
+- Una foto consume un uso cuando devuelve al menos un alimento identificado, aunque luego el usuario cierre el formulario sin guardar. Los errores y resultados vacíos no consumen cuota mensual.
+- La semana empieza el lunes a las 00:00; el mes, el día 1 a las 00:00, en `America/El_Salvador` (UTC−6). Los cupos no se acumulan.
+- El consumo pertenece a la cuenta. Se conserva al cerrar sesión, reiniciar el servidor, restaurar el perfil o cambiar de plan. Un cambio de plan modifica el límite del período actual, sin borrar usos previos.
+- Las operaciones reservan un uso durante un máximo de cinco minutos. Un bloqueo de fila de perfil impide superar el cupo mediante solicitudes simultáneas. Las reservas fallidas se liberan y las abandonadas caducan. Guardar recetas y confirmar su consumo se realiza en una sola transacción.
+- Los consumos anteriores a instalar la migración 006 no se descuentan retroactivamente. Los contadores nuevos empiezan en cero.
 
-**Oracle necesita un despliegue manual revisado para esta versión.** El actualizador instalado detectará el cambio en `server/database.js` y las migraciones, lo bloqueará y conservará la versión actual. No desactivar ni saltarse esa protección.
+## Datos y acceso
 
-Antes de desplegar: verificar las pruebas de PostgreSQL en CI, respaldar la base y comprobar el respaldo, detener el timer del actualizador y coordinar una ventana de mantenimiento. Aplicar la nueva versión y la migración con el rol dueño de la aplicación; verificar cuentas, planes y salud HTTPS antes de establecer la nueva versión como base del actualizador y reactivar el timer. El código anterior rechaza la versión 4 del esquema: no hacer un rollback automático a ese código tras migrar. Preparar previamente la recuperación compatible; restaurar una copia de DB puede perder escrituras posteriores al respaldo.
+- `plans`: catálogo con los códigos estables `basico`, `nutripro`, `nutripro_plus`. El último se muestra como **NutriMax**, conservando las claves foráneas e historial existentes.
+- `profiles.plan_code`: clave foránea, un plan actual por cuenta. Las cuentas nuevas empiezan en Básico.
+- `profile_plan_history`: asignaciones y cambios administrativos auditados mediante trigger.
+- `plan_usage`: reservas y usos confirmados por perfil, función y período.
+- `GET /api/plan`: devuelve el plan, usados, reservas pendientes, disponibles y próxima renovación de la cuenta autenticada. Se muestra en Perfil, chat y Nutri-Vision.
+- El registro y la edición de perfil no permiten elevar el plan. No existe un endpoint público para concederse premium. El servidor utiliza el perfil autenticado, nunca un plan enviado por el navegador.
+- `POST /api/pantry/analyze` solo admite imágenes; rechaza el antiguo análisis por texto. La entrada manual usa `/api/pantry/add` y permanece disponible al agotar el cupo.
 
-La preparación de estos archivos no ejecuta la migración en Oracle ni asigna planes premium a cuentas reales.
+## Pruebas locales y migración
 
-## Asignación administrativa desde terminal
+La migración `server/postgres/006_plan_usage.sql` añade el registro de consumo y cambia el nombre visible de NutriPro+ a NutriMax. Conserva las cuentas, recetas, conversaciones y asociaciones de planes.
 
-Después de migrar, desde la carpeta del proyecto con las credenciales de DB configuradas. Primero revisar la vista previa:
-
-```sh
-npm run plans:assign -- --email usuario@ejemplo.com --plan nutripro --reason "Asignación autorizada para la demostración"
-```
-
-Solo con `--apply` se guarda el cambio:
-
-```sh
-npm run plans:assign -- --email usuario@ejemplo.com --plan nutripro --reason "Asignación autorizada para la demostración" --apply
-```
-
-En el paquete de Oracle también está disponible `server/manage-plans.js`; se ejecuta con las variables de DB del servidor. No copiar contraseñas al comando ni al repositorio. El comando no crea cuentas, no migra el esquema y no modifica datos sin `--apply`. Aumenta la revisión del perfil para que un formulario anterior no sobrescriba cambios. El usuario ve su plan actualizado al recargar.
-
-## Comprobación
+Con PostgreSQL local configurado, detener el servidor de desarrollo anterior y ejecutar:
 
 ```sh
 npm run check
 npm run test:postgres
+npm run db:backup
+npm run db:init
+npm run db:validate
+npm run dev
 ```
 
-Se verifica asignación por defecto, historial, vista previa, persistencia, aislamiento entre cuentas, rechazo de planes inválidos y que ni el registro ni una actualización HTTP del perfil puedan elevar el plan.
+La base de pruebas debe ser distinta de la aplicación y terminar en `_test`. Las pruebas crean esquemas temporales y cubren concurrencia, aislamiento, errores, reinicios, restauración del perfil, cambio de plan y renovación de períodos, sin llamadas reales a Gemini o USDA.
+
+Recorrido manual: abrir Perfil y consultar el cupo; agregar un alimento manualmente; revisar el contador de Nutri-Vision; generar recetas y comprobar el consumo. Los análisis reales de fotos y las recetas reales sí llaman a los proveedores configurados.
+
+## Asignación administrativa para pruebas
+
+Desde la carpeta del proyecto, con las credenciales locales de PostgreSQL configuradas:
+
+```sh
+npm run plans:assign -- --email usuario@ejemplo.com --plan nutripro --reason "Prueba local autorizada"
+```
+
+Este comando solo muestra una vista previa. Agregar `--apply` guarda el cambio. Se aceptan `basico`, `nutripro` y `nutrimax`; `nutrimax` se resuelve al código histórico `nutripro_plus`. El cambio conserva consumo e historial, aumenta la revisión del perfil y se ve al recargar la aplicación.
+
+## Servidor compartido
+
+Estos cambios se preparan localmente y no despliegan nada en Oracle. La migración 006 requiere un despliegue revisado con respaldo: el actualizador protege cambios de DB y migraciones. No omitir esa protección. El código anterior acepta como máximo la versión 5 del esquema, por lo que no se debe revertir solo el código después de migrar a la 6. Preparar una recuperación compatible antes del despliegue.

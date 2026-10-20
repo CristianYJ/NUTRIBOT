@@ -9,7 +9,7 @@ import { profileRestrictions } from "../src/profile-rules.js";
 const item = { name: "Cebolla", category: "Vegetales", animal: false, meat: false, allergens: [] };
 const photo = { mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=" };
 test("text/image validation rejects oversized, mismatched and unsupported input", () => {
-  assert.equal(pantryParts({ text: "  dos cebollas  " })[0].text, "dos cebollas");
+  assert.throws(() => pantryParts({ text: "dos cebollas" }), { code: 'MANUAL_ONLY' });
   assert.deepEqual(pantryParts({ image: photo })[1].inlineData, photo);
   for (const raw of [{}, { text: "x".repeat(2001) }, { image: { ...photo, mimeType: "image/jpeg" } }, { image: { ...photo, data: "x".repeat(4194305) } }, { image: { mimeType: "image/svg+xml", data: "PHN2Zz4=" } }])
     assert.throws(() => pantryParts(raw));
@@ -50,7 +50,9 @@ test("pantry API is POST-only, origin protected and analyzes without saving", as
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
     assert.equal((await fetch(base + "/api/pantry/analyze")).status, 405);
-    const send = (headers = {}) => fetch(base + "/api/pantry/analyze", { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify({ text: "cebolla" }) });
+    const send = (headers = {}, body = { image: photo }) => fetch(base + "/api/pantry/analyze", { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+    assert.equal((await send({}, { text: 'cebolla' })).status, 400);
+    assert.equal(analyses, 0);
     assert.equal((await send({ Origin: "https://evil.example" })).status, 403);
     assert.deepEqual((await (await send()).json()).items, [item]);
     assert.equal(analyses, 1); assert.equal(writes, 0);

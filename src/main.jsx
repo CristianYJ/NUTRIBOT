@@ -21,3 +21,4 @@ createRoot(document.getElementById("root")).render(
 import "./pantry-chat.css";
 import "./landing.css";
 import "./mobile-chat.css";
+import "./chat-composer.css";

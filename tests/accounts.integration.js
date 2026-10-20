@@ -34,7 +34,7 @@ test("plans default to Basic, audit administrative changes, isolate users and su
   assert.deepEqual((await account.getState()).profile.plan, { code: "basico", name: "Básico" });
   assert.deepEqual((await f.store.getState()).profile.plan, { code: "basico", name: "Básico" });
   const catalog = (await f.sql.query("SELECT name FROM plans ORDER BY code")).rows.map(row => row.name);
-  assert.deepEqual(catalog, ["Básico", "NutriPro", "NutriPro+"]);
+  assert.deepEqual(catalog, ["Básico", "NutriPro", "NutriMax"]);
   const countHistory = async () => Number((await f.sql.query("SELECT count(*) AS n FROM profile_plan_history WHERE profile_id=$1", [id])).rows[0].n);
   assert.equal(await countHistory(), 1);
   const change = { email: "plan@example.test", plan: "nutripro", reason: "Asignación de prueba" };
@@ -46,12 +46,12 @@ test("plans default to Basic, audit administrative changes, isolate users and su
   assert.equal((await account.getState()).profile.plan.code, "nutripro");
   assert.equal((await assignPlan(f.sql, { ...change, apply: true })).applied, false);
   assert.equal(await countHistory(), 2);
-  await assignPlan(f.sql, { ...change, plan: "nutripro_plus", apply: true });
+  await assignPlan(f.sql, { ...change, plan: "nutrimax", apply: true });
   const current = await account.getState();
   await account.saveState({ ...writable(current), profile: { ...current.profile,
     plan: { code: "basico" }, plan_code: "basico" } });
   const reset = await account.reset(current.revision + 1);
-  assert.deepEqual(reset.profile.plan, { code: "nutripro_plus", name: "NutriPro+" });
+  assert.deepEqual(reset.profile.plan, { code: "nutripro_plus", name: "NutriMax" });
   assert.equal((await f.store.getState()).profile.plan.code, "basico");
   assert.equal((await (await f.reopen()).forProfile(id).getState()).profile.plan.code, "nutripro_plus");
   await assert.rejects(assignPlan(f.sql, { ...change, plan: "admin", apply: true }), { code: "INVALID_PLAN" });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import pg from "pg";
 import { openDatabase } from "../server/database.js";
 import { postgresOptions } from "../server/postgres-config.js";
@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    5,
+    7,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -372,8 +372,127 @@ test("HTTP uses PostgreSQL restrictions, persists asynchronous results, and reje
   });
   assert.equal(response.status, 200);
   assert.equal((await f.store.getState()).generated.length, 1);
-  assert.equal((await send("/api/plan", "GET")).status, 404);
+  const usage = await (await send("/api/plan", "GET")).json();
+  assert.equal(usage.recipes.used, 1);
+  assert.equal(usage.recipes.remaining, 3);
   assert.equal((await f.store.summary()).generated, 1);
+});
+
+test('plan quotas serialize concurrent reservations across connections and survive reset', async t => {
+  const f = await fixture(t), other = await f.reopen();
+  const attempts = await Promise.allSettled(Array.from({length: 8}, (_, n) => (n % 2 ? other : f.store).reserveUsage('recipes')));
+  const tokens = attempts.filter(r => r.status === 'fulfilled').map(r => r.value);
+  assert.equal(tokens.length, 4);
+  assert(attempts.filter(r => r.status === 'rejected').every(r => r.reason.code === 'PLAN_LIMIT'));
+  assert.equal((await f.store.getUsage()).recipes.pending, 4);
+  await other.finishUsage(tokens[0], false);
+  const replacement = await f.store.reserveUsage('recipes');
+  for (const token of [...tokens.slice(1), replacement]) await f.store.finishUsage(token, true);
+  // Cleanup after a successful HTTP request must not erase the charged usage.
+  await other.finishUsage(replacement, false);
+  await f.store.reset((await f.store.getState()).revision);
+  const after = await (await f.reopen()).getUsage();
+  assert.equal(after.recipes.used, 4);
+  assert.equal(after.recipes.pending, 0);
+  await assert.rejects(other.reserveUsage('recipes'), {code: 'PLAN_LIMIT'});
+  await f.sql.query("UPDATE profiles SET plan_code='nutripro' WHERE id=1");
+  assert.equal((await other.getUsage()).recipes.remaining, 31);
+  await f.sql.query("UPDATE profiles SET plan_code='nutripro_plus' WHERE id=1");
+  const max = await other.getUsage();
+  assert.equal(max.plan.name, 'NutriMax');
+  assert.equal(max.recipes.remaining, 96);
+  assert.equal(max.vision.limit, 60);
+  await f.sql.query("UPDATE profiles SET plan_code='basico' WHERE id=1");
+  await assert.rejects(other.reserveUsage('recipes'), {code: 'PLAN_LIMIT'});
+  // Only the disposable test schema is altered to simulate previous periods.
+  await f.sql.query("UPDATE plan_usage SET period_start=period_start-7 WHERE feature='recipes'");
+  assert.equal((await other.getUsage()).recipes.remaining, 4);
+});
+
+test('photo quota is monthly, isolated by account, and releases expired reservations', async t => {
+  const f = await fixture(t);
+  const id = Number((await f.sql.query("INSERT INTO profiles(name,goal,diet) VALUES('Otra cuenta','Comer más variado','Sin preferencia') RETURNING id")).rows[0].id);
+  const other = f.store.forProfile(id);
+  const token = await f.store.reserveUsage('vision');
+  await assert.rejects(f.store.reserveUsage('vision'), {code: 'PLAN_LIMIT'});
+  const otherToken = await other.reserveUsage('vision');
+  await assert.rejects(other.finishUsage(token, true), {code: 'USAGE_EXPIRED'});
+  await other.finishUsage(otherToken, true);
+  await f.sql.query("UPDATE plan_usage SET created_at=now()-interval '10 minutes',expires_at=now()-interval '5 minutes' WHERE id=$1", [token]);
+  const replacement = await f.store.reserveUsage('vision');
+  await f.store.finishUsage(replacement, true);
+  assert.equal((await f.store.getUsage()).vision.used, 1);
+  await assert.rejects(f.store.reserveUsage('vision'), {code:'PLAN_LIMIT'});
+  await f.sql.query("UPDATE plan_usage SET period_start=(period_start-interval '1 month')::date WHERE profile_id=1 AND feature='vision'");
+  assert.equal((await f.store.getUsage()).vision.remaining, 1);
+  assert.equal((await other.getUsage()).vision.remaining, 0);
+});
+
+test('recipe storage and usage commit atomically; clarification and failed storage are free', async t => {
+  const f = await fixture(t);
+  let token = await f.store.reserveUsage('recipes');
+  await f.store.saveGenerated({type:'conversation',text:'¿Para cuántas personas?',recipes:[]}, 0, token);
+  assert.equal((await f.store.getUsage()).recipes.remaining, 4);
+  token = await f.store.reserveUsage('recipes');
+  await f.sql.query("UPDATE plan_usage SET created_at=now()-interval '10 minutes',expires_at=now()-interval '5 minutes' WHERE id=$1", [token]);
+  await assert.rejects(f.store.saveGenerated(result(), 0, token), {code:'USAGE_EXPIRED'});
+  assert.equal((await f.store.getState()).generated.length, 0);
+  assert.equal((await f.sql.query("SELECT count(*)::int n FROM generation_events WHERE outcome='success'")).rows[0].n, 0);
+  token = await f.store.reserveUsage('recipes');
+  const generated = result();
+  generated.recipes.push(result().recipes[0]);
+  await f.store.saveGenerated(generated, 0, token);
+  assert.equal((await f.store.getState()).generated.length, 2);
+  assert.equal((await f.store.getUsage()).recipes.used, 1);
+});
+
+async function quotaHttp(t, options = {}) {
+  const f = await fixture(t);
+  const server = createAppServer({authentication:false,requireCompleteNutrition:false,store:f.store,...options});
+  await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
+  const post = async (route, body) => {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}${route}`, {
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+    });
+    return {status:response.status,body:await response.json()};
+  };
+  return {...f,post};
+}
+
+test('HTTP photo analysis rejects text, charges only nonempty success, and keeps manual entry available', async t => {
+  let calls = 0;
+  const item = {name:'Cebolla',category:'Vegetales',animal:false,meat:false,allergens:[]};
+  const f = await quotaHttp(t, {analyze:async () => { calls++; return {items:calls === 1 ? [] : [item]}; }});
+  const photo = {image:{mimeType:'image/png',data:Buffer.from([137,80,78,71,13,10,26,10,0]).toString('base64')}};
+  assert.equal((await f.post('/api/pantry/analyze',{text:'Tengo cebolla'})).body.error,'MANUAL_ONLY');
+  assert.equal(calls,0);
+  assert.equal((await f.post('/api/pantry/analyze',photo)).status,200);
+  assert.equal((await f.store.getUsage()).vision.remaining,1);
+  assert.equal((await f.post('/api/pantry/analyze',photo)).status,200);
+  assert.equal((await f.post('/api/pantry/analyze',photo)).body.error,'PLAN_LIMIT');
+  assert.equal(calls,2);
+  assert.equal((await f.post('/api/pantry/add',{revision:0,confirmed:true,items:[item]})).status,200);
+  assert.equal((await f.store.getUsage()).vision.used,1);
+});
+
+test('HTTP generation failures and clarifications release quota; exhausted accounts never call AI', async t => {
+  let calls = 0;
+  const f = await quotaHttp(t, {generate:async () => {
+    calls++;
+    if (calls === 1) throw new Error('Synthetic provider failure');
+    if (calls === 2) return {type:'conversation',text:'¿Para cuántas personas?',recipes:[]};
+    return result();
+  }});
+  const prompt = {revision:0,message:'Quiero arroz con tomate para dos personas',maxTime:30};
+  assert.equal((await f.post('/api/recipes/suggest',prompt)).status,503);
+  assert.equal((await f.store.getUsage()).recipes.pending,0);
+  assert.equal((await f.post('/api/recipes/suggest',prompt)).body.type,'conversation');
+  assert.equal((await f.store.getUsage()).recipes.used,0);
+  assert.equal((await f.post('/api/recipes/suggest',prompt)).body.type,'success');
+  for(let i=0;i<3;i++) await f.store.finishUsage(await f.store.reserveUsage('recipes'),true);
+  assert.equal((await f.post('/api/recipes/suggest',prompt)).body.error,'PLAN_LIMIT');
+  assert.equal(calls,3);
 });
 test("HTTP reports unavailable PostgreSQL without leaking database error details", async (t) => {
   const server = createAppServer({ requireCompleteNutrition: false, authentication: false,
@@ -395,4 +514,48 @@ test("HTTP reports unavailable PostgreSQL without leaking database error details
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test('consumed meals snapshot one serving, deduplicate retries, isolate accounts and preserve nutrition when rated',async t=>{
+  const f=await fixture(t),id=randomUUID();
+  const state=await f.store.getState(),bowl=state.recipes.find(r=>r.id==='bowl');
+  const nutrients={kcal:100,carbs:12,fiber:2,protein:4,fat:3,saturatedFat:1,sugars:2,sodium:50};
+  for(const ingredientId of bowl.ingredients){
+    await f.store.setRecipeGrams('bowl',ingredientId,100);
+    await f.store.setIngredientUsda(ingredientId,{fdcId:12345,description:'Synthetic test food',dataType:'Foundation',nutrients});
+  }
+  const bodies={recipeId:'bowl',servings:12,nutrition:{kcal:999999},eatenAt:'2000-01-01',rating:5};
+  await Promise.all([f.store.recordMeal(id,bodies),f.store.recordMeal(id,bodies)]);
+  let today=await f.store.getTodayMeals();
+  assert.equal(today.meals.length,1);assert.equal(today.meals[0].rating,null);
+  assert.equal(today.totals.kcal,bowl.ingredients.length*100);assert.equal(today.meals[0].servings,1);
+  assert.equal(today.date,(await f.sql.query("SELECT to_char(now() AT TIME ZONE 'America/El_Salvador','YYYY-MM-DD') AS date")).rows[0].date);
+  // A later USDA correction does not rewrite the historical meal snapshot.
+  await f.store.setIngredientUsda(bowl.ingredients[0],{fdcId:12345,description:'Updated test food',dataType:'Foundation',nutrients:{...nutrients,kcal:800}});
+  await f.store.rateMeal(id,4);assert.equal((await f.store.getTodayMeals()).totals.kcal,today.totals.kcal);
+  assert.equal((await (await f.reopen()).getTodayMeals()).meals[0].rating,4);
+  assert.throws(()=>f.store.rateMeal(id,6),{code:'INVALID_RATING'});
+  const otherId=await f.store.auth.register({name:'Another test user',email:'meals@example.test',password:'Una frase larga de prueba 2026',birthDate:'2000-01-01'},false);
+  const other=f.store.forProfile(otherId);
+  assert.equal((await other.getTodayMeals()).meals.length,0);
+  await assert.rejects(other.rateMeal(id,5),{code:'NOT_FOUND'});
+  await other.removeMeal(id);assert.equal((await f.store.getTodayMeals()).meals.length,1);
+  const generated=result();await f.store.saveGenerated(generated,0);
+  await assert.rejects(other.recordMeal(randomUUID(),{recipeId:generated.recipes[0].id}),{code:'NOT_FOUND'});
+  // The same recipe eaten again is an explicit second meal, not a rating change.
+  const second=randomUUID();await f.store.recordMeal(second,{recipeId:'bowl'});
+  assert.equal((await f.store.getTodayMeals()).meals.length,2);
+  await f.sql.query("UPDATE meal_log SET meal_date=meal_date-1 WHERE id=$1",[second]);
+  assert.equal((await f.store.getTodayMeals()).meals.length,1);
+  await f.store.removeMeal(id);assert.equal((await f.store.getTodayMeals()).totals.kcal,0);
+  await f.store.recordMeal(randomUUID(),{recipeId:'bowl'});
+  await f.store.reset((await f.store.getState()).revision);
+  assert.equal(Number((await f.sql.query('SELECT count(*) AS n FROM meal_log WHERE profile_id=1')).rows[0].n),0);
+});
+
+test('meal log stores unknown nutrients honestly and ignores client totals',async t=>{
+  const f=await fixture(t);
+  await f.store.recordMeal(randomUUID(),{recipeId:'bowl',nutrition:{kcal:123}});
+  const today=await f.store.getTodayMeals();
+  assert.equal(today.complete,false);assert.equal(today.totals.kcal,null);assert.equal(today.missing.kcal,1);
 });

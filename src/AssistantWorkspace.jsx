@@ -1,6 +1,7 @@
 import NutritionClarification from "./NutritionClarification.jsx";
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
+import ChatComposer from './ChatComposer.jsx';
 import RecipePantryImpact from "./RecipePantryImpact.jsx";
 import { availability, matchesProfile } from "./engine.js";
 
@@ -91,6 +92,7 @@ function ChatRecipe({ recipe, pantry, saved, onOpen, onSave, ingredients, servin
 }
 
 export default function AssistantWorkspace({
+  usage,
   profile,
   pantry,
   ingredients,
@@ -374,91 +376,9 @@ export default function AssistantWorkspace({
             )}
           </div>
           <div className={`culinary-composer-area${messages.length ? " has-messages" : ""}`}>
-            <div className="culinary-suggestions">
-              <span>
-                <Icon name="sun" size={14} />
-                SUGERENCIAS
-              </span>
-              <button
-                disabled={busy}
-                onClick={() => generate("¿Qué puedo cocinar con lo que tengo?")}
-              >
-                🍽️ Una idea para hoy
-              </button>
-              <button
-                disabled={busy}
-                onClick={() =>
-                  generate("Sugiere una receta rápida con mi despensa")
-                }
-              >
-                ⚡ Algo rápido
-              </button>
-              <button
-                disabled={busy}
-                onClick={() => generate("Quiero aprovechar mis vegetales")}
-              >
-                🌱 Mis vegetales
-              </button>
-            </div>
-            <form
-              className="culinary-composer"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (message.trim() && !busy) generate(message.trim());
-              }}
-            >
-              <div className="culinary-compose-input">
-                <textarea
-                  aria-label="Mensaje para Nutribot"
-                  placeholder={compact ? "¿Qué cocinamos hoy?" : "Escribe lo que tienes en mente… ¿qué cocinamos hoy?"}
-                  value={message}
-                  maxLength={500}
-                  rows={2}
-                  disabled={busy}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (
-                      e.key === "Enter" &&
-                      !e.shiftKey &&
-                      !e.nativeEvent.isComposing
-                    ) {
-                      e.preventDefault();
-                      if (message.trim() && !busy) generate(message.trim());
-                    }
-                  }}
-                />
-                <button
-                  className="culinary-send"
-                  type="submit"
-                  aria-label="Enviar mensaje"
-                  disabled={busy || !message.trim()}
-                >
-                  <Icon name="send" size={20} />
-                </button>
-              </div>
-              <div className="culinary-compose-tools">
-                <div>
-                  <button type="button" className="culinary-compose-icon" disabled={busy} onClick={() => onImport("image")} aria-label="Usar Nutri-Vision: subir o tomar foto" title="Usar Nutri-Vision">
-                    <Icon name="camera" size={21} />
-                  </button>
-                  <button type="button" className="culinary-compose-icon" disabled={busy} onClick={() => onImport("text")} aria-label="Agregar alimentos" title="Agregar alimentos">
-                    <Icon name="plus" size={21} />
-                  </button>
-                </div>
-                <label>
-                  <Icon name="clock" size={16} />
-                  <select
-                    aria-label="Tiempo máximo"
-                    value={maxTime}
-                    onChange={(e) => setMaxTime(Number(e.target.value))}
-                  >
-                    <option value={15}>Hasta 15 min</option>
-                    <option value={30}>Hasta 30 min</option>
-                    <option value={60}>Hasta 60 min</option>
-                  </select>
-                </label>
-              </div>
-            </form>
+            <ChatComposer usage={usage} busy={busy} message={message} setMessage={setMessage}
+              maxTime={maxTime} setMaxTime={setMaxTime} generate={generate}
+              onImport={onImport} compact={compact} />
             <p className="culinary-privacy">
               <Icon name="shield" size={13} />
               {compact ? "Tus consultas se comparten con nuestros socios para generar recetas." : "Las consultas se envían a nuestros socios para generar recetas más ricas y variadas para ti."}

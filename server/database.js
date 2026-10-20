@@ -24,6 +24,8 @@ import {
 import { postgresOptions } from "./postgres-config.js";
 import { calculateRecipeNutrition } from "./nutrition.js";
 import { estimatedGrams } from "./auto-nutrition.js";
+import { mealStore } from './meals.js';
+import { createPlanUsage } from './plan-usage.js';
 
 export async function openDatabase(options = {}) {
   const { schema = "nutribot", ...connection } = options;
@@ -328,7 +330,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 5) throw new Error("Esquema de una versión posterior");
+      if (version > 7) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -398,35 +400,20 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/005_usda_nutrition.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(5)');
       }
+      if (version < 6) {
+        await c.query(readFileSync(new URL('./postgres/006_plan_usage.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(6)');
+      }
+      if (version < 7) {
+        await c.query(readFileSync(new URL('./postgres/007_meal_log.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(7)');
+      }
     });
   } catch (error) {
     await pool.end();
     throw error;
   }
-  const store = {
-    auth: createAuthStore(pool, transaction),
-    ...conversationStore(transaction,profileId,readRecipes),
-    provider: "postgresql",
-    async health() {
-      await pool.query("SELECT 1");
-      return true;
-    },
-    getState: () => transaction(readState, true),
-    getIngredientNutritionItems(ids) {
-      if (!Array.isArray(ids) || ids.length > 28 || ids.some((id) => typeof id !== 'string' || !id || id.length > 60))
-        throw new AppError('INVALID_INGREDIENT', 'Lista de ingredientes inválida.');
-      return transaction(async (c) => (await c.query(
-        `SELECT i.id AS ingredient_id,i.name,u.fdc_id,u.description,u.data_type,u.nutrients
-         FROM ingredients i LEFT JOIN ingredient_usda_links u ON u.ingredient_id=i.id AND u.profile_id=$2
-         WHERE i.id=ANY($1::varchar[]) AND (i.profile_id IS NULL OR i.profile_id=$2)
-         ORDER BY array_position($1::varchar[],i.id)`, [ids, profileId()])).rows.map((row) => ({
-          ingredientId: row.ingredient_id, name: row.name,
-          usda: row.fdc_id === null ? null : { fdcId: Number(row.fdc_id), description: row.description, dataType: row.data_type, nutrients: row.nutrients },
-        })), true);
-    },
-    getRecipeNutrition(recipeId, servings = 1) {
-      if (typeof recipeId !== 'string' || recipeId.length > 100 || !recipeId) throw new AppError('INVALID_RECIPE', 'Receta inválida.');
-      return transaction(async (c) => {
+  async function readRecipeNutrition(c,recipeId,servings = 1) {
         const profile = (await c.query(`SELECT max_saturated_fat_g,max_sodium_mg,max_sugar_g FROM profiles WHERE id=${profileId()}`)).rows[0];
         const rows = (await c.query(
           `SELECT ri.ingredient_id,i.name,ri.amount,r.source,COALESCE(o.grams_per_person,ri.grams_per_person) AS grams_per_person,
@@ -451,7 +438,36 @@ export async function openDatabase(options = {}) {
           maxSodiumMg: profile.max_sodium_mg,
           maxSugarG: profile.max_sugar_g,
         }) };
-      }, true);
+  }
+  const usage = createPlanUsage({ transaction, profileId });
+  const store = {
+    ...mealStore({transaction,profileId,readRecipeNutrition}),
+    getUsage: usage.getUsage,
+    reserveUsage: usage.reserveUsage,
+    finishUsage: usage.finishUsage,
+    auth: createAuthStore(pool, transaction),
+    ...conversationStore(transaction,profileId,readRecipes),
+    provider: "postgresql",
+    async health() {
+      await pool.query("SELECT 1");
+      return true;
+    },
+    getState: () => transaction(readState, true),
+    getIngredientNutritionItems(ids) {
+      if (!Array.isArray(ids) || ids.length > 28 || ids.some((id) => typeof id !== 'string' || !id || id.length > 60))
+        throw new AppError('INVALID_INGREDIENT', 'Lista de ingredientes inválida.');
+      return transaction(async (c) => (await c.query(
+        `SELECT i.id AS ingredient_id,i.name,u.fdc_id,u.description,u.data_type,u.nutrients
+         FROM ingredients i LEFT JOIN ingredient_usda_links u ON u.ingredient_id=i.id AND u.profile_id=$2
+         WHERE i.id=ANY($1::varchar[]) AND (i.profile_id IS NULL OR i.profile_id=$2)
+         ORDER BY array_position($1::varchar[],i.id)`, [ids, profileId()])).rows.map((row) => ({
+          ingredientId: row.ingredient_id, name: row.name,
+          usda: row.fdc_id === null ? null : { fdcId: Number(row.fdc_id), description: row.description, dataType: row.data_type, nutrients: row.nutrients },
+        })), true);
+    },
+    getRecipeNutrition(recipeId, servings = 1) {
+      if (typeof recipeId !== 'string' || recipeId.length > 100 || !recipeId) throw new AppError('INVALID_RECIPE', 'Receta inválida.');
+      return transaction(c => readRecipeNutrition(c,recipeId,servings),true);
     },
     setRecipeGrams(recipeId, ingredientId, grams) {
       if (typeof recipeId !== 'string' || recipeId.length > 100 || typeof ingredientId !== 'string' || ingredientId.length > 60 || typeof grams !== 'number' || !Number.isFinite(grams) || grams <= 0 || grams > 5000)
@@ -574,7 +590,7 @@ export async function openDatabase(options = {}) {
         return readState(c);
       });
     },
-    saveGenerated(result, expected) {
+    saveGenerated(result, expected, usageToken) {
       return transaction(async (c) => {
         await checkRevision(c, expected);
         const count = Number(
@@ -595,12 +611,14 @@ export async function openDatabase(options = {}) {
           `INSERT INTO generation_events(profile_id,model,outcome,recipe_count) VALUES(${profileId()},$1,$2,$3)`,
           [result.model || "unknown", result.type, result.recipes.length],
         );
+        await usage.complete(c, usageToken, result.type === 'success' && result.recipes.length > 0);
       });
     },
     reset(expected) {
       return transaction(async (c) => {
         await checkRevision(c, expected);
         for (const table of [
+          "meal_log",
           "recipe_gram_overrides",
           "ingredient_usda_links",
           "meal_plans",
@@ -701,7 +719,7 @@ export async function openDatabase(options = {}) {
       transaction(
         async (c) => ({
           provider: "postgresql",
-          schemaVersion: 5,
+          schemaVersion: 7,
           ingredients: Number(
             (await c.query("SELECT count(*) AS n FROM ingredients")).rows[0].n,
           ),
@@ -755,6 +773,13 @@ export async function openDatabase(options = {}) {
     const scoped = { provider: store.provider };
     for (const name of [
       "health",
+      "getTodayMeals",
+      "recordMeal",
+      "rateMeal",
+      "removeMeal",
+      "getUsage",
+      "reserveUsage",
+      "finishUsage",
       "getState",
       "saveState",
       "addPantry",

@@ -95,11 +95,14 @@ export function DailyNutrition({tracker,onProfile}) {
   const [selectedDate,setSelectedDate]=useState(null);
   const data=current?.week?.find(day=>day.date===selectedDate) || current;
   const isToday=data?.date===current?.date;
+  const selectedDay=data ? new Date(data.date+'T12:00:00Z') : null;
+  const capitalize=text=>text.charAt(0).toUpperCase()+text.slice(1);
+  const dateTitle=isToday || !selectedDay ? 'Hoy' : `${capitalize(selectedDay.toLocaleDateString('es-SV',{weekday:'long',timeZone:'UTC'}))} ${selectedDay.getUTCDate()} ${capitalize(selectedDay.toLocaleDateString('es-SV',{month:'short',timeZone:'UTC'}).replace(/\.$/,''))}.`;
   const [page,setPage]=useState(0);
   const slider=useRef(null);
   const amount=key=>data.missing[key]===data.meals.length && data.meals.length ? '—' : number(data.knownTotals[key]);
   return <section className="dashboard-plan daily-nutrition" aria-label="Nutrición del día seleccionado">
-    <div className="dashboard-section-heading"><div><h2>{isToday || !data ? 'Hoy' : ` ${data.date.split('-').reverse().join('/')}`}</h2></div></div>
+    <div className="dashboard-section-heading"><div><h2>{dateTitle}</h2></div></div>
     {error && <p className="review-note" role="alert">{error} <button className="text-btn" disabled={busy} onClick={()=>tracker.refresh().catch(()=>{})}>Actualizar</button></p>}
     {!data && !error && <p role="status">Consultando tus comidas…</p>}
     {data && <>
@@ -117,6 +120,12 @@ export function DailyNutrition({tracker,onProfile}) {
         </div>)}</div>
         <div className="energy-total"><strong>{amount('kcal')} Kcal</strong></div>
         <EnergyRing data={data} goal={current.goalKcal} />
+      </div>
+      <div className="nutrient-carousel" ref={slider} tabIndex={0} role="region" aria-label="Nutrientes del día seleccionado" onScroll={event=>setPage(Math.round(event.currentTarget.scrollLeft/event.currentTarget.clientWidth))}>
+        {[metrics.slice(0,3),metrics.slice(3)].map((group,index)=><div className="daily-metrics" key={index}>{group.map(([key,label,unit])=><div key={key}>
+          <span>{label}</span><strong>{amount(key)} <small>{unit}</small></strong>
+          {data.missing[key]>0 && <small>Datos incompletos</small>}
+        </div>)}</div>)}
       </div>
       <div className="nutrient-pagination">{[0,1].map(index=><button key={index} aria-label={index===0 ? 'Ver carbohidratos, proteína y grasa' : 'Ver fibra, azúcares y sodio'} aria-pressed={page===index} onClick={()=>slider.current?.scrollTo({left:slider.current.clientWidth*index,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'})}><span /></button>)}</div>
       {!data.complete && <p className="review-note">Faltan datos nutricionales en algunas comidas.</p>}

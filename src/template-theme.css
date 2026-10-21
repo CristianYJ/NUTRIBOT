@@ -12,8 +12,8 @@
   --mint: #d9f7e8;
 }
 body { background: #faf8ff; }
-button, input, select, textarea { font-family: "Be Vietnam Pro", sans-serif; }
-h1, h2, h3, .brand { font-family: "Space Grotesk", sans-serif; font-weight: 700; }
+button, input, select, textarea { font-family: "Outfit", sans-serif; }
+h1, h2, h3, .brand { font-family: "Satoshi", sans-serif; font-weight: 700; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline-color: #0c956b; }
 .culinary-shell { display: block; min-height: 100dvh; background: #faf8ff; padding: 0; }
 .culinary-shell .main-area { min-width: 0; width: 100%; }
@@ -185,7 +185,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .start-cooking > svg { background: #d4f3e3; border-radius: 14px; padding: 12px; width: 60px; height: 60px; }
 .start-steps { list-style: none; counter-reset: steps; padding-left: 0; }
 .start-steps li { counter-increment: steps; padding: 14px 0 14px 48px; position: relative; }
-.start-steps li::before { content: counter(steps, decimal-leading-zero); position: absolute; left: 0; top: 12px; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: #e4f6ec; color: #006c49; font: 600 12px "Space Grotesk", sans-serif; }
+.start-steps li::before { content: counter(steps, decimal-leading-zero); position: absolute; left: 0; top: 12px; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: #e4f6ec; color: #006c49; font: 600 12px "Satoshi", sans-serif; }
 .recipe-dialog, .reset-dialog, .pantry-import-dialog { background: #fff; color: #131b2e; border-color: #dfe7e3; border-radius: 24px; }
 .pantry-import-dialog textarea, .pantry-import-dialog input:not([type=checkbox]), .pantry-import-dialog select { border-color: #dbe3df; background: #fafbff; }
 .pantry-import-dialog input[type=checkbox] { accent-color: var(--green); }

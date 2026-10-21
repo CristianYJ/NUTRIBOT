@@ -18,7 +18,7 @@ const checks = {
   maxSugarG: 'Azúcares totales',
 };
 
-export default function NutritionPanel({ recipe, servings, onValidation }) {
+export default function NutritionPanel({ recipe, servings, onValidation, onCalories }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [mode, setMode] = useState('total');
@@ -27,16 +27,18 @@ export default function NutritionPanel({ recipe, servings, onValidation }) {
   useEffect(() => {
     const controller = new AbortController();
     setData(null);
+    onCalories?.(null);
     setError('');
     onValidation(false);
     nutritionRequest('GET', `recipes/${recipe.id}?servings=${servings}`, undefined, controller.signal)
       .then((value) => {
         setData(value);
+        onCalories?.(value.nutrition.perPerson.kcal ?? null);
         onValidation(Object.values(value.nutrition.checks).every((check) => check === 'within'));
       })
       .catch((problem) => { if (!controller.signal.aborted) setError(problem.message); });
     return () => controller.abort();
-  }, [recipe.id, servings, onValidation, retry]);
+  }, [recipe.id, servings, onValidation, onCalories, retry]);
 
   const values = mode === 'total' ? data?.nutrition.total : data?.nutrition.perPerson;
   const gaps = data?.ingredients?.filter(item => !item.usda || !Number.isFinite(item.gramsPerPerson) || item.gramsPerPerson <= 0 ||
@@ -55,8 +57,8 @@ export default function NutritionPanel({ recipe, servings, onValidation }) {
       <div className="usda-cards">
         {metrics.map(([key, label, unit]) => <div className="usda-card" key={key}>
           <span>{label}</span>
-          <strong>{values[key] == null ? '—' : values[key]}</strong>
-          <small>{values[key] == null ? 'Sin verificar' : unit}</small>
+          <strong>{values[key] == null ? '—' : <>{values[key]} <small>{unit}</small></>}</strong>
+          {values[key] == null && <small>Sin verificar</small>}
         </div>)}
       </div>
       {!data.nutrition.complete && <div className="review-note">

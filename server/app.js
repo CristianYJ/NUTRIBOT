@@ -26,6 +26,7 @@ const mime = {
   ".jpeg": "image/jpeg",
   ".webmanifest": "application/manifest+json; charset=utf-8",
   ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
 };
 const json = (res, status, body) => {
   res.writeHead(status, {
@@ -103,6 +104,10 @@ export function createAppServer({
         return json(res, 200, await store.getUsage());
       }
       if (url.pathname === '/api/meals/today' && req.method === 'GET') return json(res,200,await store.getTodayMeals());
+      if (url.pathname === '/api/meals/goal') {
+        if(req.method!=='PUT') throw new AppError('METHOD_NOT_ALLOWED','Utiliza PUT.',405);
+        return json(res,200,await store.setNutritionGoal((await readJson(req)).kcal));
+      }
       const mealRoute = url.pathname.match(/^\/api\/meals\/([^/]+)$/);
       if (mealRoute) {
         if (req.method === 'PUT') return json(res,200,await store.recordMeal(mealRoute[1],await readJson(req)));

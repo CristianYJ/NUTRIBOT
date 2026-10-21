@@ -54,7 +54,7 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
     } catch (problem) {
       setError(
         problem.message ||
-          "No pudimos conectar. Comprueba que Nutribot siga abierto en la PC.",
+          "No pudimos conectar.",
       );
     } finally {
       setBusy(false);
@@ -78,11 +78,6 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                 ? "Crea tu cuenta en NutriBot"
                 : "Bienvenido a NutriBot"}
             </h1>
-            <p>
-              Tu asistente de cocina inteligente.
-              <br />
-              Una cocina con más posibilidades.
-            </p>
           </div>
           {step !== "email" && (
             <div className="auth-email-summary">
@@ -229,10 +224,6 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                               setClaimLegacy(event.target.checked)
                             }
                           />
-                          <span>
-                            Vincular a esta cuenta el perfil, la despensa y las
-                            recetas que ya están en esta PC.
-                          </span>
                         </label>
                       )}
                     </>
@@ -272,22 +263,7 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
               <span className="auth-back-arrow" aria-hidden="true">←</span>
             </a>
           </p>
-          {canClaimLegacy && step !== "register" && (
-            <p className="auth-existing">
-              <Icon name="shield" size={16} />
-              Al crear tu primera cuenta puedes conservar los datos que ya
-              tienes en esta PC.
-            </p>
-          )}
-          <p className="auth-storage">
-            Cada cuenta tiene su propia despensa. Tus datos se guardan en el
-            servidor de Nutribot.
-          </p>
         </section>
-        <div className="auth-footer-note">
-          <Icon name="leaf" size={19} />
-          <span>Menos dudas. Más ideas con lo que tienes.</span>
-        </div>
       </main>
       <footer className="auth-footer">© 2026 NutriBot</footer>
     </div>

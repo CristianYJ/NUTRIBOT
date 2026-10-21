@@ -37,6 +37,9 @@ export function validateState(raw, catalog = ingredients) {
   validateRevision(raw?.revision);
   if (
     !p ||
+    !['','male','female'].includes(p.calorieSex ?? '') ||
+    !['','low','light','moderate','high'].includes(p.calorieActivity ?? '') ||
+    (p.calorieEstimateEligible !== undefined && typeof p.calorieEstimateEligible !== 'boolean') ||
     !string(p.name, 35) ||
     !p.name.trim() ||
     (p.birthDate !== undefined && p.birthDate !== "" && ageFromBirthDate(p.birthDate) === null) ||
@@ -74,6 +77,9 @@ export function validateState(raw, catalog = ingredients) {
     profile: {
       name: p.name.trim(),
       ...(p.birthDate !== undefined ? { birthDate: p.birthDate } : {}),
+      calorieSex:p.calorieSex ?? '',
+      calorieActivity:p.calorieActivity ?? '',
+      calorieEstimateEligible:p.calorieEstimateEligible ?? false,
       weight: p.weight,
       height: p.height,
       maxSaturatedFatG: p.maxSaturatedFatG ?? "",

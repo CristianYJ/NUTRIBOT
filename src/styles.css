@@ -1,6 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+@import url("/fonts/fonts.css");
 :root {
-  font-family: "Be Vietnam Pro", sans-serif;
+  font-family: "Outfit", sans-serif;
   color: #29352a;
   background: #f1f0eb;
   font-synthesis: none;
@@ -68,8 +68,8 @@ p {
 }
 h1,
 h2,
-h3 {
-  font-family: "Space Grotesk", sans-serif;
+h3, h4, h5, h6 {
+  font-family: "Satoshi", sans-serif;
 }
 h1 {
   font-size: 34px;
@@ -133,7 +133,7 @@ button:active {
   gap: 9px;
   align-items: center;
   font:
-    800 30px "Space Grotesk",
+    800 30px "Satoshi",
     sans-serif;
   letter-spacing: -1.4px;
 }
@@ -1649,7 +1649,7 @@ main {
 }
 .nutrition-grid strong {
   font:
-    650 22px "Space Grotesk",
+    650 22px "Satoshi",
     sans-serif;
   display: block;
 }
@@ -2707,8 +2707,23 @@ main {
 .usda-card { min-height: 87px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; padding: 9px 4px; border-radius: 8px; text-align: center; background: #eef2e8; }
 .usda-card:nth-child(n+5) { background: #e3edda; }
 .usda-card span { font-size: 10px; color: #4f6444; }
-.usda-card strong { font: 650 20px "Space Grotesk", sans-serif; color: #253b27; }
+.usda-card strong { font: 650 20px "Satoshi", sans-serif; color: #253b27; }
 .usda-card small { font-size: 9px; color: #607352; }
 @media (max-width: 620px) {
   .usda-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Recipe sheet: rounded content, quick facts and a shared preparation panel. */
+.detail-content {position:relative;margin-top:-24px;border-radius:28px 28px 0 0;background:#f8f9f7;}
+.detail-meta.recipe-summary {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;border:0;padding:18px 0;margin-bottom:8px;}
+.detail-meta.recipe-summary > span {display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px;padding:14px 8px;background:#fff;color:#151b23;border-radius:16px;box-shadow:0 3px 14px #14251d06;}
+.recipe-summary small {font-size:11px;}.recipe-summary strong {font-size:15px;}
+.recipe-method {padding:18px;margin:24px 0;border:1px solid #e4e9e5;border-radius:24px;background:#fff;}
+.recipe-method-tabs {display:flex;gap:6px;padding:5px;background:#edf1ed;border-radius:14px;margin-bottom:20px;}
+.recipe-method-tabs button {flex:1;border-radius:10px;padding:12px;color:#40534a;font-weight:600;}
+.recipe-method-tabs button[aria-selected="true"] {background:#fff;color:#006c49;box-shadow:0 2px 8px #173a2010;}
+.recipe-method [hidden] {display:none;}
+.usda-card strong small {font-size:12px;font-weight:400;white-space:nowrap;}
+@media(max-width:600px) {.detail-meta.recipe-summary {grid-template-columns:repeat(2,minmax(0,1fr));}.recipe-method {padding:14px;}.recipe-summary strong {font-size:14px;}}
+
+.recipe-dialog .detail-photo > .tag {background:#f8f9f7;}

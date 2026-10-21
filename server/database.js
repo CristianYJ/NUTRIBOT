@@ -72,7 +72,7 @@ export async function openDatabase(options = {}) {
   }
   async function writeProfile(c, p) {
     await c.query(
-      `UPDATE profiles SET name=$1,weight_kg=$2,height_cm=$3,goal=$4,diet=$5,exclusions=$6,medical_notes=$7,birth_date=$8,max_saturated_fat_g=$9,max_sodium_mg=$10,max_sugar_g=$11,updated_at=now() WHERE id=${profileId()}`,
+      `UPDATE profiles SET name=$1,weight_kg=$2,height_cm=$3,goal=$4,diet=$5,exclusions=$6,medical_notes=$7,birth_date=$8,max_saturated_fat_g=$9,max_sodium_mg=$10,max_sugar_g=$11,calorie_sex=$12,calorie_activity=$13,calorie_estimate_eligible=$14,updated_at=now() WHERE id=${profileId()}`,
       [
         p.name,
         p.weight === "" ? null : Number(p.weight),
@@ -85,6 +85,7 @@ export async function openDatabase(options = {}) {
         p.maxSaturatedFatG || null,
         p.maxSodiumMg || null,
         p.maxSugarG || null,
+        p.calorieSex || "",p.calorieActivity || "",p.calorieEstimateEligible ?? false,
       ],
     );
     await c.query(
@@ -231,7 +232,7 @@ export async function openDatabase(options = {}) {
   async function readState(c) {
     const p = (
       await c.query(
-        `SELECT id,name,weight_kg,height_cm,goal,diet,exclusions,medical_notes,max_saturated_fat_g,max_sodium_mg,max_sugar_g,revision,email,plan_code,(SELECT name FROM plans WHERE code=profiles.plan_code) AS plan_name,to_char(birth_date,'YYYY-MM-DD') AS birth_date FROM profiles WHERE id=${profileId()}`,
+        `SELECT id,name,weight_kg,height_cm,calorie_sex,calorie_activity,calorie_estimate_eligible,goal,diet,exclusions,medical_notes,max_saturated_fat_g,max_sodium_mg,max_sugar_g,revision,email,plan_code,(SELECT name FROM plans WHERE code=profiles.plan_code) AS plan_name,to_char(birth_date,'YYYY-MM-DD') AS birth_date FROM profiles WHERE id=${profileId()}`,
       )
     ).rows[0];
     const all = await readRecipes(c);
@@ -244,6 +245,7 @@ export async function openDatabase(options = {}) {
         age: ageFromBirthDate(p.birth_date),
         name: p.name,
         plan: { code: p.plan_code, name: p.plan_name },
+        calorieSex:p.calorie_sex,calorieActivity:p.calorie_activity,calorieEstimateEligible:p.calorie_estimate_eligible,
         weight: p.weight_kg === null ? "" : String(Number(p.weight_kg)),
         height: p.height_cm === null ? "" : String(Number(p.height_cm)),
         goal: p.goal,
@@ -330,7 +332,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 7) throw new Error("Esquema de una versión posterior");
+      if (version > 8) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -407,6 +409,10 @@ export async function openDatabase(options = {}) {
       if (version < 7) {
         await c.query(readFileSync(new URL('./postgres/007_meal_log.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(7)');
+      }
+      if (version < 8) {
+        await c.query(readFileSync(new URL('./postgres/008_nutrition_goal.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(8)');
       }
     });
   } catch (error) {
@@ -619,6 +625,7 @@ export async function openDatabase(options = {}) {
         await checkRevision(c, expected);
         for (const table of [
           "meal_log",
+          "nutrition_goals",
           "recipe_gram_overrides",
           "ingredient_usda_links",
           "meal_plans",
@@ -719,7 +726,7 @@ export async function openDatabase(options = {}) {
       transaction(
         async (c) => ({
           provider: "postgresql",
-          schemaVersion: 7,
+          schemaVersion: 8,
           ingredients: Number(
             (await c.query("SELECT count(*) AS n FROM ingredients")).rows[0].n,
           ),
@@ -774,6 +781,7 @@ export async function openDatabase(options = {}) {
     for (const name of [
       "health",
       "getTodayMeals",
+        "setNutritionGoal",
       "recordMeal",
       "rateMeal",
       "removeMeal",

@@ -18,5 +18,8 @@ export function kitchenOverview({ pantry, ingredients, dates, recipes, profile, 
     {name:'Lácteos',categories:['Lácteos'],icon:'pantry',color:'cream'},
     {name:'Granos y otros',categories:['Granos','Otros'],icon:'bag',color:'peach'},
   ].map(group => ({...group,count:foods.filter(item => group.categories.includes(item.category)).length}));
-  return {foods,soon,past,suggestions,groups};
+  const weekday=(new Date(today+'T00:00:00Z').getUTCDay()+6)%7;
+  const fortnight=foods.filter(item=>item.expiry.days>=0 && item.expiry.days<=13-weekday);
+  const urgent=foods.filter(item=>item.expiry.days>=0 && item.expiry.days<4);
+  return {foods,soon,past,suggestions,groups,fortnight,urgent};
 }

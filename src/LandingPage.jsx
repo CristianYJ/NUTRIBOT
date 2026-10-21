@@ -28,34 +28,26 @@ const benefits = [
   {
     icon: "user",
     tone: "mint",
-    label: "A tu manera",
     title: "Beneficio social",
     text: "Una cocina para cada persona. Organiza tus preferencias y filtros alimentarios en tu perfil y encuentra nuevas formas de combinar lo que tienes.",
-    tags: ["Preferencias personales", "Cuentas independientes"],
   },
   {
     icon: "pantry",
     tone: "amber",
-    label: "Finanzas del hogar",
     title: "Beneficio económico",
     text: "Antes de pensar en comprar más, revisa tu despensa. Mantén a la vista tus ingredientes y aprovecha los alimentos que ya forman parte de tu cocina.",
-    tags: ["Tu inventario a mano", "Más ideas con lo que tienes"],
   },
   {
     icon: "leaf",
     tone: "teal",
-    label: "Consumo consciente",
     title: "Beneficio ambiental",
     text: "Dale otra oportunidad a los ingredientes olvidados. Registra fechas de los envases o estimaciones de conservación para organizar mejor su uso.",
-    tags: ["Fechas editables", "Aprovechamiento de alimentos"],
   },
   {
-    icon: "spark",
+    icon: "mail",
     tone: "mint",
-    label: "Innovación IA",
     title: "Beneficio tecnológico",
-    text: "Reúne texto, reconocimiento de ingredientes en fotos y recetas con IA en una interfaz que te acompaña tanto en la PC como en el teléfono.",
-    tags: ["Nutri-Vision", "Recetas con Gemini"],
+    text: "Reconocimiento de ingredientes mediante fotos y recetas con IA en una interfaz que te acompaña tanto en la PC como en el teléfono.",
   },
 ];
 function Enter({ children = "Comenzar gratis", secondary = false }) {
@@ -135,28 +127,14 @@ export default function LandingPage({ brand }) {
         >
           <div className="landing-hero-copy">
             <h1 id="landing-title">
-              Cocina inteligente, aprovecha más y reduce el desperdicio
+              Cocina inteligente
             </h1>
             <p>
               Transforma los ingredientes de tu despensa en tu próxima comida.
-              NutriBot te ayuda a encontrar recetas con inteligencia artificial,
-              según lo que tienes y lo que te gusta.
+              NutriBot te ayuda a encontrar recetas en base a tus preferencias
+              y necesidades alimentarias. Gana control sobre tu alimentación con  de nuestra IA.
             </p>
             <Enter>Probar NutriBot</Enter>
-            <div className="landing-proof">
-              <span>
-                <Icon name="pantry" size={17} />
-                Tu despensa
-              </span>
-              <span>
-                <Icon name="camera" size={17} />
-                Nutri-Vision
-              </span>
-              <span>
-                <Icon name="chef" size={17} />
-                Paso a paso
-              </span>
-            </div>
           </div>
           <figure className="landing-app-preview">
             <img src="/images/landing/app-movil.jpeg" width="738" height="1600"
@@ -190,17 +168,9 @@ export default function LandingPage({ brand }) {
                       <Icon name={item.icon} size={26} />
                     </span>
                     <div>
-                      <span className={`landing-mini-label ${item.tone}`}>
-                        {item.label}
-                      </span>
                       <h3>{item.title}</h3>
                       <p>{item.text}</p>
                     </div>
-                  </div>
-                  <div className="landing-tags">
-                    {item.tags.map((tag) => (
-                      <span key={tag}>✓ {tag}</span>
-                    ))}
                   </div>
                 </article>
               ))}
@@ -311,10 +281,7 @@ export default function LandingPage({ brand }) {
           </div>
         </section>
         <section className="landing-section landing-width" id="planes">
-          <span className="landing-section-label">
-            Un plan para tu cocina
-          </span>
-          <h2>Elige cuánto quieres explorar en tu cocina</h2>
+          <h2>Tenemos un plan para cada persona</h2>
           <div className="landing-three landing-plans">
             <article className="landing-card">
               <h3>{planCatalog.basico.name}</h3>
@@ -378,11 +345,9 @@ export default function LandingPage({ brand }) {
         </section>
         <section className="landing-bottom-cta landing-width">
           <div className="landing-bottom-copy">
-          <h2>
-            Empieza hoy a cocinar
-          </h2>
-          <p>Crea tu cuenta y convierte tu despensa en nuevas posibilidades.</p>
-          <Enter secondary>Empezar con mi correo</Enter>
+            <h2>Empieza hoy a cocinar</h2>
+            <p>Crea tu cuenta y convierte tu despensa en nuevas posibilidades.</p>
+            <Enter secondary>Crear Cuenta Gratuita</Enter>
           </div>
           <img className="landing-bowl-photo" src="/images/landing/bowl.png"
             alt="Bowl de arroz, vegetales y pollo crujiente" loading="lazy" decoding="async" />

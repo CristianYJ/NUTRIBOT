@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    7,
+    8,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -527,6 +527,8 @@ test('consumed meals snapshot one serving, deduplicate retries, isolate accounts
   const bodies={recipeId:'bowl',servings:12,nutrition:{kcal:999999},eatenAt:'2000-01-01',rating:5};
   await Promise.all([f.store.recordMeal(id,bodies),f.store.recordMeal(id,bodies)]);
   let today=await f.store.getTodayMeals();
+  assert.equal(today.week.length,7);
+  assert.equal(today.week.find(d=>d.date===today.date).totals.kcal,today.totals.kcal);
   assert.equal(today.meals.length,1);assert.equal(today.meals[0].rating,null);
   assert.equal(today.totals.kcal,bowl.ingredients.length*100);assert.equal(today.meals[0].servings,1);
   assert.equal(today.date,(await f.sql.query("SELECT to_char(now() AT TIME ZONE 'America/El_Salvador','YYYY-MM-DD') AS date")).rows[0].date);
@@ -538,6 +540,7 @@ test('consumed meals snapshot one serving, deduplicate retries, isolate accounts
   const otherId=await f.store.auth.register({name:'Another test user',email:'meals@example.test',password:'Una frase larga de prueba 2026',birthDate:'2000-01-01'},false);
   const other=f.store.forProfile(otherId);
   assert.equal((await other.getTodayMeals()).meals.length,0);
+  assert.equal((await other.getTodayMeals()).week.reduce((n,d)=>n+d.count,0),0);
   await assert.rejects(other.rateMeal(id,5),{code:'NOT_FOUND'});
   await other.removeMeal(id);assert.equal((await f.store.getTodayMeals()).meals.length,1);
   const generated=result();await f.store.saveGenerated(generated,0);
@@ -558,4 +561,26 @@ test('meal log stores unknown nutrients honestly and ignores client totals',asyn
   await f.store.recordMeal(randomUUID(),{recipeId:'bowl',nutrition:{kcal:123}});
   const today=await f.store.getTodayMeals();
   assert.equal(today.complete,false);assert.equal(today.totals.kcal,null);assert.equal(today.missing.kcal,1);
+});
+
+test('calorie goal and estimate profile persist per account, while meal types survive recipe edits',async t=>{
+ const f=await fixture(t),state=await f.store.getState();
+ assert.equal((await f.store.getTodayMeals()).goalKcal,null);
+ await f.store.saveState({...writable(state),profile:{...state.profile,weight:'70',height:'175',birthDate:'1990-01-01',calorieSex:'male',calorieActivity:'light',calorieEstimateEligible:true}});
+ const profile=(await (await f.reopen()).getState()).profile;
+ assert.equal(profile.calorieSex,'male');assert.equal(profile.calorieActivity,'light');assert.equal(profile.calorieEstimateEligible,true);
+ assert.ok((await f.store.getTodayMeals()).suggestedKcal>0);
+ await f.store.setNutritionGoal(2200);
+ assert.equal((await (await f.reopen()).getTodayMeals()).goalKcal,2200);
+ for(const value of [0,-1,20001,1.2,'2000',NaN])assert.throws(()=>f.store.setNutritionGoal(value),{code:'INVALID_GOAL'});
+ const otherId=await f.store.auth.register({name:'Other goal',email:'goal@example.test',password:'A long test password 2026',birthDate:'1990-01-01'},false);
+ assert.equal((await f.store.forProfile(otherId).getTodayMeals()).goalKcal,null);
+ assert.equal((await f.store.forProfile(otherId).getTodayMeals()).suggestedKcal,null);
+ const id=randomUUID();await f.store.recordMeal(id,{recipeId:'bowl',mealType:'Cena'});
+ await f.sql.query("UPDATE recipes SET category='Desayuno' WHERE id='bowl'");
+ const day=await f.store.getTodayMeals();assert.equal(day.meals[0].mealType,'Cena');
+ assert.equal(day.byMeal.find(g=>g.type==='Cena').count,1);
+ assert.equal(day.week.find(d=>d.date===day.date).meals[0].mealType,'Cena');
+ assert.throws(()=>f.store.recordMeal(randomUUID(),{recipeId:'bowl',mealType:'invalid'}),{code:'INVALID_MEAL_TYPE'});
+ await f.store.setNutritionGoal(null);assert.equal((await f.store.getTodayMeals()).goalKcal,null);
 });

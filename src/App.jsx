@@ -1,3 +1,4 @@
+import {calorieActivities,calorieEstimate} from './calorie-estimate.js';
 import { recipeContext } from "./recipe-context.js";
 import { MAX_CHAT_MESSAGES } from "./conversation-limits.js";
 import PantryWorkspace from "./PantryWorkspace.jsx";
@@ -16,7 +17,7 @@ import PantryImport from "./PantryImport.jsx";
 import PlanUsage, { usePlanUsage } from './PlanUsage.jsx';
 import RecipePantryImpact from "./RecipePantryImpact.jsx";
 import CulinaryHeader from "./CulinaryHeader.jsx";
-import {useMeals, MealFeedback} from './MealTracking.jsx';
+import {useMeals, MealFeedback, CalorieGoal} from './MealTracking.jsx';
 import HomeDashboard from "./HomeDashboard.jsx";
 import AssistantWorkspace from "./AssistantWorkspace.jsx";
 import NutritionPanel from "./NutritionPanel.jsx";
@@ -212,6 +213,8 @@ function Workspace({ initial, onSignedOut }) {
   const [meal, setMeal] = useState("Todas");
   const selected = allRecipes.find(recipe => recipe.id === navigation.recipeId) || null;
   const [servings, setServings] = useState(1);
+  const [recipeTab, setRecipeTab] = useState("ingredients");
+  const [recipeCalories, setRecipeCalories] = useState(null);
   const [nutritionWithinLimits, setNutritionWithinLimits] = useState(false);
   const recipeClosing = useRef(false);
   const [checked, setChecked] = useState([]);
@@ -398,6 +401,8 @@ function Workspace({ initial, onSignedOut }) {
     setServings(navigation.servings || 1);
     setNutritionWithinLimits(false);
     setChecked([]);
+    setRecipeTab("ingredients");
+    setRecipeCalories(null);
   }, [navigation.recipeId, navigation.servings]);
   useEffect(() => {
     if (confirmReset) resetDialog.current?.showModal();
@@ -771,7 +776,7 @@ function Workspace({ initial, onSignedOut }) {
             {page === "recipes" && (
               <div className="page-enter">
                 <div className="page-title">
-                  <h1>Mis Recetas Guardadas</h1>
+                  <h1>Mis Recetas</h1>
                 </div>
                 <div className="filter-row">
                   {["Todas", "Favoritas", "Desayuno", "Almuerzo", "Cena"].map((c) => (
@@ -838,6 +843,7 @@ function Workspace({ initial, onSignedOut }) {
                 </div>
                 <PlanUsage usage={usage} error={usageError} onRefresh={refreshUsage} />
                 <ProfileForm
+                  tracker={meals}
                   catalog={ingredients}
                   profile={profile}
                   onSave={(p) => {
@@ -959,10 +965,7 @@ function Workspace({ initial, onSignedOut }) {
               >
                 <Icon name="close" />
               </button>
-              <Tag>
-                {selected.category} ·{" "}
-                {selected.source === "gemini" ? "Gemini" : "Ejemplo"}
-              </Tag>
+              <Tag>{selected.category}</Tag>
             </div>
             <div className="detail-content">
               <div className="detail-title">
@@ -977,19 +980,11 @@ function Workspace({ initial, onSignedOut }) {
                 </button>
               </div>
               <p>{selected.subtitle}</p>
-              <div className="detail-meta">
-                <span>
-                  <Icon name="clock" size={17} />
-                  {selected.time} minutos
-                </span>
-                <span>
-                  <Icon name="chef" size={17} />
-                  Fácil
-                </span>
-                <span>
-                  <Icon name="leaf" size={17} />
-                  {selected.vegan ? "Vegetal" : "Casera"}
-                </span>
+              <div className="detail-meta recipe-summary">
+                <span><small>Tiempo</small><strong>{selected.time} min</strong></span>
+                <span><small>Dificultad</small><strong>{selected.difficulty || 'Fácil'}</strong></span>
+                <span><small>Personas</small><strong>{servings}</strong></span>
+                <span><small>Calorías por persona</small><strong>{recipeCalories == null ? 'Sin verificar' : `${recipeCalories.toLocaleString('es-SV',{maximumFractionDigits:2})} kcal`}</strong></span>
               </div>
               {!matchesProfile(selected, profile, ingredients) && (
                 <div className="review-note">
@@ -997,6 +992,16 @@ function Workspace({ initial, onSignedOut }) {
                   preparación está deshabilitada.
                 </div>
               )}
+              <NutritionPanel key={selected.id} recipe={selected} servings={servings} onValidation={setNutritionWithinLimits} onCalories={setRecipeCalories} />
+              {(profile.maxSaturatedFatG || profile.maxSodiumMg || profile.maxSugarG) && !nutritionWithinLimits && (
+                <div className="review-note">Hay límites nutricionales en tu perfil. Esta receta aún no se pudo verificar o supera un límite; revisa el resultado antes de prepararla.</div>
+              )}
+              <section className="recipe-method">
+                <div className="recipe-method-tabs" role="tablist" aria-label="Preparación de la receta">
+                  <button id="recipe-ingredients-tab" role="tab" aria-selected={recipeTab==='ingredients'} aria-controls="recipe-ingredients-panel" onClick={()=>setRecipeTab('ingredients')}>Ingredientes</button>
+                  <button id="recipe-steps-tab" role="tab" aria-selected={recipeTab==='steps'} aria-controls="recipe-steps-panel" onClick={()=>setRecipeTab('steps')}>Pasos</button>
+                </div>
+                <div id="recipe-ingredients-panel" role="tabpanel" aria-labelledby="recipe-ingredients-tab" hidden={recipeTab!=='ingredients'}>
               <div className="serving-row">
                 <h3>Ingredientes</h3>
                 <label>
@@ -1037,10 +1042,8 @@ function Workspace({ initial, onSignedOut }) {
                   </li>
                 ))}
               </ul>
-              <NutritionPanel key={selected.id} recipe={selected} servings={servings} onValidation={setNutritionWithinLimits} />
-              {(profile.maxSaturatedFatG || profile.maxSodiumMg || profile.maxSugarG) && !nutritionWithinLimits && (
-                <div className="review-note">Hay límites nutricionales en tu perfil. Esta receta aún no se pudo verificar o supera un límite; revisa el resultado antes de prepararla.</div>
-              )}
+                </div>
+                <div id="recipe-steps-panel" role="tabpanel" aria-labelledby="recipe-steps-tab" hidden={recipeTab!=='steps'}>
               <h3 className="steps-heading">Manos a la cocina</h3>
               <div className="recipe-steps">
                 {selected.steps.map((step, i) => (
@@ -1066,6 +1069,8 @@ function Workspace({ initial, onSignedOut }) {
                   </button>
                 ))}
               </div>
+                </div>
+              </section>
               <MealFeedback key={`meal-${selected.id}`} recipe={selected} tracker={meals} />
               <p className="microcopy">
                 Recuerda siempre revisar las etiquetas de los productos y las posibles trazas de
@@ -1109,7 +1114,7 @@ function Workspace({ initial, onSignedOut }) {
   );
 }
 
-function ProfileForm({ profile, onSave, catalog }) {
+function ProfileForm({ profile, onSave, catalog, tracker }) {
   const [draft, setDraft] = useState(profile);
   function field(key, value) {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -1181,7 +1186,7 @@ function ProfileForm({ profile, onSave, catalog }) {
             </select>
           </label>
           <details className="profile-optional">
-            <summary>Datos personales</summary>
+            <summary>Datos personales y estimación de calorías</summary>
             <label>
               Fecha de nacimiento <span className="optional">opcional</span>
               <input
@@ -1232,11 +1237,16 @@ function ProfileForm({ profile, onSave, catalog }) {
                 </div>
               </label>
             </div>
-            <p className="microcopy">
-              Estos datos se guardan en tu cuenta. Nutribot no calcula
-              necesidades calóricas ni prescribe dietas.
-            </p>
+            <label>Sexo utilizado por la fórmula <span className="optional">opcional</span>
+              <select value={draft.calorieSex || ''} onChange={e=>field('calorieSex',e.target.value)}><option value="">Sin indicar</option><option value="female">Femenino</option><option value="male">Masculino</option></select>
+            </label>
+            <label>Nivel de actividad <span className="optional">opcional</span>
+              <select value={draft.calorieActivity || ''} onChange={e=>field('calorieActivity',e.target.value)}><option value="">Selecciona tu actividad</option>{calorieActivities.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select>
+            </label>
+            <label className="calorie-consent"><input type="checkbox" checked={draft.calorieEstimateEligible || false} onChange={e=>field('calorieEstimateEligible',e.target.checked)} />Quiero una estimación de mantenimiento. No estoy en embarazo ni lactancia y no necesito una pauta clínica específica.</label>
+            <p className="microcopy">Para adultos de 19 a 78 años. Estimación orientativa con Mifflin–St Jeor y actividad; no prescribe dietas ni cambia tu meta automáticamente. La sugerencia aparece abajo al completar estos datos. Guarda tu perfil para conservarlos.</p>
           </details>
+          <CalorieGoal tracker={tracker} suggestedKcal={calorieEstimate(draft,todayDate())} />
         </section>
         <section className="panel form-panel">
           <div className="form-section-title">

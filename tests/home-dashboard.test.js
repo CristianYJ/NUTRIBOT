@@ -22,3 +22,11 @@ test('dashboard respects unresolved exclusions and favors soon-dated foods over 
  assert.deepEqual(overview({recipes,dates:{tomate:{labelDate:'2026-10-19'}}}).suggestions.map(r=>r.id),['soon','fast']);
  assert.equal(overview({recipes,profile:{...initialProfile,exclusions:'alimento desconocido xyz'}}).suggestions.length,0);
 });
+
+test('expiry windows include today, exclude past/unknown, and stop at next Sunday',()=>{
+ const dates=['2026-12-29','2026-12-30','2027-01-02','2027-01-03','2027-01-10','2027-01-11',null];
+ const foods=dates.map((date,i)=>({id:String(i),name:String(i),category:'Otros'}));
+ const result=overview({today:'2026-12-30',ingredients:foods,pantry:foods.map(f=>f.id),dates:Object.fromEntries(dates.map((date,i)=>[i,date ? {labelDate:date} : {}]))});
+ assert.deepEqual(result.urgent.map(f=>f.id),['1','2']);
+ assert.deepEqual(result.fortnight.map(f=>f.id),['1','2','3','4']);
+});

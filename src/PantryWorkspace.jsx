@@ -45,7 +45,6 @@ function ExpiryEditor({ item, value, onSave, onClose }) {
         <Icon name="close" />
       </button>
       <span className="expiry-mark">
-        <Icon name="calendar" size={26} />
       </span>
       <h2 id="expiry-title">Vencimiento de {item.name}</h2>
       <p>
@@ -138,12 +137,7 @@ function ExpiryEditor({ item, value, onSave, onClose }) {
         )}
         <p className="expiry-help">
           La fecha del envase tiene prioridad. Una estimación no garantiza que
-          el alimento esté en buen estado; depende de su conservación. Las
-          referencias para refrigerados usan el plazo más corto de{" "}
-          <a href={expirySource} target="_blank" rel="noreferrer">
-            FoodSafety.gov
-          </a>
-          .
+          el alimento esté en buen estado; depende de su conservación.
         </p>
         {error && (
           <p role="alert" className="auth-error">

@@ -6,9 +6,9 @@
 .dashboard-welcome h1 { font-size: clamp(26px,3vw,38px); line-height: 1.23; letter-spacing: -.9px; margin: 15px 0 12px; }
 .dashboard-welcome h1 span { color: #006c49; }
 .dashboard-welcome p { color: #596a62; font-size: 14px; line-height: 1.7; margin: 0; }
-.dashboard-stats { display: flex; align-items: stretch; flex-shrink: 0; gap: 10px; padding: 12px; border-radius: 20px; background: #f2f3ffad; }
-.dashboard-stats > div { display: grid; place-items: center; gap: 4px; padding: 12px; min-width: 93px; background: #fff; border-radius: 14px; }
-.dashboard-stats strong { font-family: 'Space Grotesk',sans-serif; font-size: 26px; color: #006c49; }
+.dashboard-stats { display: flex; align-items: stretch; flex-shrink: 0; gap: 10px; padding: 12px; }
+.dashboard-stats > div { display: grid; place-items: center; gap: 4px; padding: 12px; min-width: 93px; }
+.dashboard-stats strong { font-family: 'Satoshi',sans-serif; font-size: 26px; color: #006c49; }
 .dashboard-stats span { font-size: 10px; color: #4a5953; }
 .dashboard-stats .warm strong { color: #ba7a00; }
 .dashboard-alert { display: flex; align-items: center; gap: 16px; padding: 20px 24px; border-radius: 20px; background: #fff; border: 1px solid #f0eff5; }
@@ -31,7 +31,7 @@
 .dashboard-categories { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; }
 .dashboard-category { display: flex; align-items: center; gap: 14px; padding: 20px; border-radius: 18px; background: #fff; border: 1px solid #f0eff5; }
 .dashboard-category > div { min-width: 0; display: grid; gap: 4px; }
-.dashboard-category strong { font-size: 20px; font-family: 'Space Grotesk',sans-serif; }
+.dashboard-category strong { font-size: 20px; font-family: 'Satoshi',sans-serif; }
 .dashboard-category > div > span { color: #63716e; font-size: 12px; }
 .dashboard-content { display: grid; grid-template-columns: minmax(0,1.45fr) minmax(280px,1fr); gap: 28px; align-items: start; }
 .dashboard-caption { color: #63716e; font-size: 12px; line-height: 1.6; margin: -5px 0 16px; }
@@ -65,7 +65,7 @@
 .dashboard-ring { position: relative; max-width: 220px; width: 100%; margin: 12px auto 20px; }
 .dashboard-ring svg { display: block; width: 100%; }
 .dashboard-ring > div { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 3px; }
-.dashboard-ring strong { font-family: 'Space Grotesk',sans-serif; font-size: 36px; line-height: 1.2; }
+.dashboard-ring strong { font-family: 'Satoshi',sans-serif; font-size: 36px; line-height: 1.2; }
 .dashboard-ring span { color: #63716e; font-size: 11px; line-height: 1.5; }
 .dashboard-quota { margin: 16px 0; }
 .dashboard-quota > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
@@ -116,3 +116,16 @@
   .dashboard-recipe-meta { flex-wrap: wrap; gap: 8px; }
   .dashboard-save { top: 10px; right: 10px; width: 30px; height: 30px; }
 }
+
+/* Full-width nutrition comes first, followed by pantry and recipes. */
+.home-dashboard > *, .daily-nutrition { min-width: 0; }
+.home-dashboard .dashboard-content { grid-template-columns: minmax(0,1fr); }
+.dashboard-stats { width: 100%; max-width: 800px; margin: 8px auto 24px; }
+.dashboard-stats > div { flex: 1; text-align: center; }
+
+.dashboard-stats .urgent strong, .dashboard-stats .urgent span { color: #aa352c; }
+.dashboard-expiry-note { margin: -16px 4px -12px; color: #63716e; font-size: 12px; }
+@media(min-width:1101px) { .dashboard-recipes { grid-template-columns:repeat(3,minmax(0,1fr)); } .dashboard-recipe { flex-direction:column; } .dashboard-recipe-picture { width:100%;height:180px; } }
+
+.dashboard-section-button {min-height:44px;flex-shrink:0;font-size:13px;padding:10px 16px;}
+@media(max-width:760px) { .dashboard-section-button {font-size:12px;padding:10px 12px;} }

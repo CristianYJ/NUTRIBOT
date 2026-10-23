@@ -402,6 +402,9 @@ export function createAppServer({
         res.writeHead(200, {
           "Content-Type":
             mime[path.extname(target)] || "application/octet-stream",
+          "Cache-Control": /^\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css|woff2|ttf|svg|png|jpe?g)$/.test(pathname)
+            ? "public, max-age=31536000, immutable"
+            : "no-store",
           "X-Content-Type-Options": "nosniff",
         });
         res.end(content);

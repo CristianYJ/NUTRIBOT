@@ -139,6 +139,10 @@ Certificado actual: vence el 8 de enero de 2027. A petición del usuario no se
 configura renovación automática porque el proyecto termina después de noviembre.
 El token de Hostinger usado para emitirlo ya no es necesario y se puede revocar.
 El despliegue conserva `/etc/caddy/certs` y `/etc/nutribot`.
+Al migrar a `nutribot.online`, Caddy debe obtener un certificado nuevo; el
+certificado anterior sirve solo para la redirección hasta su vencimiento.
+Consultar [DOMAIN-MIGRATION.md](DOMAIN-MIGRATION.md) antes de actualizar la URL
+pública o el comprobador de salud instalado en Oracle.
 
 ## Validación local
 

@@ -24,7 +24,7 @@ BASE = Path("/opt/nutribot")
 STATE = Path("/var/lib/nutribot-deploy")
 CURRENT = BASE / "current"
 RELEASES = BASE / "releases"
-DOMAIN = "nutribot.facheritossv.com"
+DOMAIN = "nutribot.online"
 MAX_ARCHIVE = 64 * 1024 * 1024
 MAX_EXPANDED = 256 * 1024 * 1024
 

@@ -61,7 +61,7 @@ export async function connectionInfo(port, deployment = null) {
   const urls = deployment ? [deployment.origin] : hosts.map(
     (host) => `http://${host}:${port}`,
   );
-  const installUrl = `${deployment?.origin || "https://nutribot.facheritossv.com"}/?install=1`;
+  const installUrl = `${deployment?.origin || "https://nutribot.online"}/?install=1`;
   return {
     hosts,
     origins: urls,

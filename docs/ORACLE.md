@@ -3,16 +3,17 @@
 ## Estado y alcance
 
 Actualización del despliegue: HTTPS y PostgreSQL ya se comprobaron en Oracle.
-El certificado se emitió mediante DNS-01, se carga desde `/etc/caddy/certs` y vence
-el 8 de enero de 2027. Se conserva el acceso limitado por IP; no hay renovación
-automática por decisión del usuario. El flujo colaborativo y la instalación del
+El certificado del dominio anterior se emitió mediante DNS-01, se carga desde
+`/etc/caddy/certs` y vence el 8 de enero de 2027. El dominio nuevo
+`nutribot.online` usa HTTPS automático de Caddy y requiere DNS y puertos 80/443
+públicos antes de activar esta plantilla. El flujo colaborativo y la instalación del
 actualizador se documentan en [CONTINUOUS-DEPLOYMENT.md](CONTINUOUS-DEPLOYMENT.md).
 La lista de preparación más abajo describe la instalación inicial; no repetir
 restauraciones ni creación de credenciales sobre el servidor existente.
 
 La base `nutribot_project` ya fue restaurada y verificada en PostgreSQL 18. El rol
 de ejecución es `nutribot_app`. Este paquete prepara la aplicación para
-`https://nutribot.facheritossv.com`; subirlo no inicia ni publica la aplicación.
+`https://nutribot.online`; subirlo no inicia ni publica la aplicación.
 La instalación del servicio, las credenciales, la autenticación PostgreSQL,
 Caddy y la conectividad HTTPS se deben comprobar en el servidor antes de publicar.
 
@@ -32,7 +33,8 @@ sin contraseña. Los usuarios ya migrados acceden con su correo y contraseña.
 
 ## Archivos preparados
 
-- `deploy/oracle/Caddyfile`: dominio, certificado DNS existente y proxy local.
+- `deploy/oracle/Caddyfile`: dominio nuevo con HTTPS automático, redirecciones
+  desde `www` y el dominio anterior, y proxy local.
 - `deploy/oracle/nutribot.service`: servicio Node con usuario de sistema `nutribot`,
   directorio `/opt/nutribot/current`, acceso de solo lectura a archivos del sistema
   y credenciales tomadas de `/etc/nutribot/nutribot.env`.
@@ -77,10 +79,11 @@ El árbol final debe pertenecer a root y ser legible, pero no modificable, por
    cargada, no con un secreto vacío. Arrancar servicios y comprobar sus registros
    sin mostrar credenciales. No desactivar SELinux; resolver reglas específicas
    si sus registros indican un bloqueo.
-6. Comprobar que el A del dominio es `159.54.144.45` y que no existe un AAAA
-   apuntando a otro servidor. Permitir TCP 80/443 en la lista de seguridad de OCI
-   y en la zona activa de firewalld. En OCI conservar únicamente las IP de origen
-   autorizadas (inicialmente `190.120.18.166/32`). Conservar SSH; no abrir 8787 ni 5432.
+6. Comprobar que el A de `nutribot.online` es `159.54.144.45` y que no existe un
+   AAAA apuntando a otro servidor. Para que Caddy obtenga un certificado y el
+   sitio sea accesible, permitir TCP 80/443 desde Internet en OCI y firewalld.
+   Conservar SSH restringido; no abrir 8787 ni 5432. Seguir el orden de
+   [DOMAIN-MIGRATION.md](DOMAIN-MIGRATION.md).
 7. Verificar HTTPS desde Internet, rechazo de archivos privados, login con una
    cuenta migrada, datos de esa cuenta, cierre de sesión, QR y una solicitud de IA.
    El paquete por sí solo no demuestra estas verificaciones.

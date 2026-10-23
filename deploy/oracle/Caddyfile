@@ -1,5 +1,4 @@
-nutribot.facheritossv.com {
-    tls /etc/caddy/certs/nutribot.crt /etc/caddy/certs/nutribot.key
+nutribot.online {
     encode zstd gzip
     request_body {
         max_size 6MB
@@ -9,4 +8,17 @@ nutribot.facheritossv.com {
         header_up X-Nutribot-Client {http.request.remote.host}
         header_up X-Nutribot-Protocol https
     }
+}
+
+www.nutribot.online {
+    redir https://nutribot.online{uri} permanent
+}
+
+nutribot.facheritossv.com {
+    tls /etc/caddy/certs/nutribot.crt /etc/caddy/certs/nutribot.key
+    redir https://nutribot.online{uri} permanent
+}
+
+www.nutribot.facheritossv.com {
+    redir https://nutribot.online{uri} permanent
 }

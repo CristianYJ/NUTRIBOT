@@ -3,7 +3,7 @@
 La PWA utiliza el mismo servidor, cuentas y base de datos que la web. El APK queda para una etapa posterior.
 
 1. En el menú del perfil, abre **Instalar en mi teléfono** y escanea el QR. El diálogo muestra solo el título y el código.
-2. El QR público abre `https://nutribot.facheritossv.com/?install=1` y muestra el aviso de instalación antes de iniciar sesión.
+2. El QR público abre `https://nutribot.online/?install=1` y muestra el aviso de instalación antes de iniciar sesión.
 3. Toca **Instalar NutriBot** y confirma en el navegador. Si no ofrece instalación directa, el aviso explica cómo usar el menú del navegador.
 4. Abre NutriBot desde su icono: verás una bienvenida de 1,6 segundos con el logo (puedes saltarla con **Continuar**) y luego el acceso. Si la sesión todavía es válida, entras a tu cuenta directamente.
 
@@ -26,7 +26,7 @@ Ejecutar `npm run check`. Después del merge y del despliegue de Oracle, comprob
 Comprobación desde Oracle, sin modificar el firewall:
 
 ```bash
-curl --fail --silent --show-error --resolve nutribot.facheritossv.com:443:127.0.0.1 https://nutribot.facheritossv.com/manifest.webmanifest
+curl --fail --silent --show-error --resolve nutribot.online:443:127.0.0.1 https://nutribot.online/manifest.webmanifest
 ```
 
 Referencias: [instalación de PWAs](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable), [solicitud de instalación](https://web.dev/learn/pwa/installation-prompt).

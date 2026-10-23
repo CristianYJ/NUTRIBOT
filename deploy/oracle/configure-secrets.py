@@ -48,7 +48,7 @@ def main():
     proxy_secret = secrets.token_hex(32)
     write_environment(targets[0], {
         "NODE_ENV": "production",
-        "PUBLIC_ORIGIN": "https://nutribot.facheritossv.com",
+        "PUBLIC_ORIGIN": "https://nutribot.online",
         "NUTRIBOT_PROXY_SECRET": proxy_secret,
         "PGHOST": "127.0.0.1", "PGPORT": "5432",
         "PGUSER": "nutribot_app", "PGPASSWORD": password,

@@ -18,3 +18,7 @@ nutribot.facheritossv.com {
     tls /etc/caddy/certs/nutribot.crt /etc/caddy/certs/nutribot.key
     redir https://nutribot.online{uri} permanent
 }
+
+www.nutribot.facheritossv.com {
+    redir https://nutribot.online{uri} permanent
+}

@@ -61,6 +61,25 @@ aplicación de nuevo en `nutribot.online`.
    sudo systemctl list-timers nutribot-deploy.timer --no-pager
    ```
 
-El certificado del dominio anterior vence el 8 de enero de 2027. Antes de esa
-fecha, renovarlo si se desea mantener la redirección o retirar el bloque
-antiguo de Caddy cuando ya no se necesite. Cloudflare se configurará después.
+## Redirección del dominio anterior
+
+Para que las direcciones antiguas lleguen al sitio nuevo, conservar registros
+DNS `A` para `nutribot.facheritossv.com` y
+`www.nutribot.facheritossv.com` apuntando a `159.54.144.45`. El registro
+`www.nutribot` se crea en la zona DNS de `facheritossv.com`, no en la de
+`nutribot.online`. Si hay un `AAAA` antiguo para cualquiera de esos nombres,
+retirarlo o corregirlo. Comprobar la resolución de ambos antes de activar en
+Oracle el bloque `www.nutribot.facheritossv.com` del Caddyfile.
+
+El bloque sin `www` utiliza el certificado ya instalado; su vencimiento debe
+verificarse y renovarse para mantener esa redirección. Caddy obtiene uno
+automáticamente para el nombre con `www` cuando DNS y puertos 80/443 funcionan.
+Validar la configuración y comprobar con `curl -I` que ambos nombres devuelven
+un `Location: https://nutribot.online/...` sin error TLS. Cloudflare se
+configurará después.
+
+Las PWA ya instaladas bajo el dominio anterior conservan su origen. La
+redirección puede abrir el sitio nuevo, pero no traslada automáticamente la
+instalación, la sesión ni los datos locales del navegador. Los usuarios deben
+iniciar sesión e instalar la PWA desde `nutribot.online` para tenerla asociada
+al dominio nuevo.

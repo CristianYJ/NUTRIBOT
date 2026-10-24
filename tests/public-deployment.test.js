@@ -63,6 +63,8 @@ test("public requests require the local authenticated HTTPS proxy and the exact 
   assert.equal(requestContext(request({ "x-nutribot-client": "2001:db8::20" }), network).secure, true);
   const navigation = { ...request({ "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" }), method: "GET" };
   assert.equal(requestContext(navigation, network).origin, origin);
+  assert.equal(requestContext({ ...navigation, headers: { ...navigation.headers, origin: "https://nutribot.facheritossv.com" } }, network).origin, origin);
+  assert.throws(() => requestContext(request({ origin: "https://nutribot.facheritossv.com" }), network), { code: "FORBIDDEN" });
   assert.throws(() => requestContext({ ...navigation, method: "POST" }, network), { code: "FORBIDDEN" });
 });
 

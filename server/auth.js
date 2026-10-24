@@ -59,7 +59,7 @@ export function requestContext(req, network = {}) {
     req.headers["sec-fetch-mode"] === "navigate" &&
     req.headers["sec-fetch-dest"] === "document";
   if (
-    (req.headers.origin && !origins.includes(req.headers.origin)) ||
+    (req.headers.origin && !origins.includes(req.headers.origin) && !publicNavigation) ||
     (req.headers["sec-fetch-site"] === "cross-site" && !publicNavigation)
   )
     throw new AppError("FORBIDDEN", "Origen no autorizado.", 403);

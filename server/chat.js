@@ -28,11 +28,15 @@ export function validateChat(raw) {
       );
     seen.add(message.id);
     const recipeIds = message.recipeIds || [];
+    const edamamRefs = message.edamamRefs || [];
     const names = message.ingredientNames || [];
     if (
       !Array.isArray(recipeIds) ||
       recipeIds.length > 2 ||
       recipeIds.some((id) => !string(id, 100)) ||
+      !Array.isArray(edamamRefs) || edamamRefs.length > 12 || edamamRefs.some(ref =>
+        !ref || typeof ref.uri !== 'string' || !/^http:\/\/www\.edamam\.com\/ontologies\/edamam\.owl#recipe_[a-zA-Z0-9_-]{1,100}$/.test(ref.uri) ||
+        !string(ref.title, 150)) ||
       !Array.isArray(names) ||
       names.length > 20 ||
       names.some((name) => !string(name, 80))
@@ -46,6 +50,7 @@ export function validateChat(raw) {
       role: message.role,
       text: message.text,
       recipeIds,
+      edamamRefs,
       ...(Array.isArray(message.nutritionIngredientIds) && message.nutritionIngredientIds.length <= 28 && message.nutritionIngredientIds.every(id => string(id, 60))
         ? { nutritionIngredientIds: message.nutritionIngredientIds } : {}),
       ...(Array.isArray(message.missingIngredients) && message.missingIngredients.length <= 14 && message.missingIngredients.every(id => string(id, 100))
@@ -57,7 +62,7 @@ export function validateChat(raw) {
       )
         ? message.type
         : "notice",
-      source: message.source === "gemini" ? "gemini" : "local",
+      source: ["gemini", "edamam"].includes(message.source) ? message.source : "local",
       ...(string(message.retryText, 500)
         ? { retryText: message.retryText }
         : {}),

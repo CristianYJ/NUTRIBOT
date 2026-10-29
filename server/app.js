@@ -11,6 +11,7 @@ import { profileRestrictions } from "../src/profile-rules.js";
 import { validateRevision } from "./state-validation.js";
 import { getUsdaFood, searchUsdaFoods, translateFoodQuery } from "./nutrition.js";
 import { resolveAutomaticUsdaLinks, nutritionReferenceNotes } from './auto-nutrition.js';
+import { createEdamam, edamamFilters, planEdamam, validateEdamamUri } from './edamam.js';
 
 const dist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -39,6 +40,10 @@ const json = (res, status, body) => {
 export function createAppServer({
   apiKey,
   usdaApiKey,
+  edamamAppId,
+  edamamAppKey,
+  edamamFetch = fetch,
+  edamamPlan = planEdamam,
   usdaFetch = fetch,
   model = "gemini-3.5-flash-lite",
   generate = generateWithGemini,
@@ -53,6 +58,7 @@ export function createAppServer({
     throw new Error("La autenticación requiere PostgreSQL actualizado.");
   const auth = authentication ? createAuthentication(rootStore) : null;
   const requests = new Map();
+  const edamam = createEdamam({ appId: edamamAppId, appKey: edamamAppKey, fetchImpl: edamamFetch });
   let active = 0;
   const handler = async (req, res) => {
     let store = rootStore;
@@ -61,7 +67,7 @@ export function createAppServer({
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "same-origin");
     if (network.public) {
-      res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+      res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
       res.setHeader("Strict-Transport-Security", "max-age=31536000");
     }
     try {
@@ -134,7 +140,8 @@ export function createAppServer({
         return json(res, 200, {
           configured: Boolean(apiKey),
           usdaConfigured: Boolean(usdaApiKey),
-          provider: "gemini",
+          edamamConfigured: Boolean(edamamAppId && edamamAppKey),
+          provider: edamamAppId && edamamAppKey ? "edamam" : "gemini",
           model,
           database: store?.provider || (store ? "sqlite" : "disabled"),
         });
@@ -165,6 +172,28 @@ export function createAppServer({
         requests.set(key, [...recent, now]);
         return json(res, 200, { foods: await searchUsdaFoods(url.searchParams.get('q'), usdaApiKey, usdaFetch) });
       }
+      if (url.pathname === '/api/edamam/favorites') {
+        if (req.method === 'GET') return json(res, 200, { items: await store.listEdamamFavorites() });
+        if (req.method === 'POST') { const body = await readJson(req, 1000); return json(res, 200, await store.saveEdamamFavorite(validateEdamamUri(body.uri), body.title)); }
+        if (req.method === 'DELETE') { const body = await readJson(req, 1000); return json(res, 200, await store.removeEdamamFavorite(validateEdamamUri(body.uri))); }
+        throw new AppError('METHOD_NOT_ALLOWED', 'Método no permitido.', 405);
+      }
+      if (url.pathname === '/api/edamam/detail' && req.method === 'GET') {
+        let recipe = await edamam.detail(validateEdamamUri(url.searchParams.get('uri')));
+        if (store?.getState) {
+          const state = await store.getState();
+          const required = edamamFilters({ profile: state.profile }).health;
+          if (required.some(label => !recipe.healthLabels.some(actual => actual.toLowerCase() === label)))
+            throw new AppError('PROFILE_RESTRICTION', 'Esta receta ya no coincide con las restricciones de tu perfil.', 409);
+          const limits = Object.entries({ saturatedFatG: state.profile.maxSaturatedFatG,
+            sodiumMg: state.profile.maxSodiumMg, sugarG: state.profile.maxSugarG }).filter(([, limit]) => Boolean(limit));
+          if (limits.some(([name, limit]) => recipe.nutrientsPerServing[name] != null && recipe.nutrientsPerServing[name] > Number(limit)))
+            throw new AppError('PROFILE_RESTRICTION', 'Esta receta supera un límite nutricional de tu perfil.', 409);
+          recipe = { ...recipe, nutritionLimitsUnverified: limits.some(([name]) => recipe.nutrientsPerServing[name] == null) };
+        }
+        return json(res, 200, { recipe });
+      }
+      if (url.pathname === '/api/edamam/shopping' && req.method === 'POST') { const body = await readJson(req, 1000); return json(res, 200, await edamam.shopping(body.uri, body.servings)); }
       const nutritionOptions = url.pathname.match(/^\/api\/nutrition\/ingredients\/([a-zA-Z0-9_-]+)\/options$/);
       if (nutritionOptions && req.method === 'GET') {
         const [item] = await store.getIngredientNutritionItems([nutritionOptions[1]]);
@@ -312,6 +341,11 @@ export function createAppServer({
           };
         }
         const input = parseInput(raw, state?.ingredients);
+        if (state) input.nutritionLimits = {
+          maxSaturatedFatG: state.profile.maxSaturatedFatG,
+          maxSodiumMg: state.profile.maxSodiumMg,
+          maxSugarG: state.profile.maxSugarG,
+        };
         // Resolve recipe references against this account, never client-supplied recipe text.
         const contextIds = new Set(input.history.flatMap(message => message.recipeIds));
         const eligible = new Set(eligibleIngredients(input));
@@ -349,19 +383,26 @@ export function createAppServer({
         try {
           usageToken = await reserveUsage('recipes');
           if (res.destroyed) return;
-          let result = await generate(input, {
-            apiKey,
-            model,
-            signal: controller.signal,
-          });
+          let result;
+          if (edamamAppId && edamamAppKey) {
+            const plan = await edamamPlan(input, { apiKey, model, signal: controller.signal });
+            if (plan.intent === 'recipe') {
+              const found = await edamam.search(input, plan, controller.signal);
+              result = { type: found.recipes.length ? 'success' : 'empty', source: 'edamam', recipes: [], externalRecipes: found.recipes,
+                text: found.recipes.length ? (plan.reply || 'Encontré estas recetas en Edamam para tu despensa.') : 'No encontré recetas que cumplan los filtros. Prueba con otros ingredientes o más tiempo.' };
+            } else result = { type: plan.intent === 'needs_review' ? 'review' : 'conversation', source: 'gemini', recipes: [], text: plan.reply || 'Cuéntame qué te gustaría cocinar.' };
+          } else result = await generate(input, { apiKey, model, signal: controller.signal });
           if (!res.destroyed) {
-            if (requireCompleteNutrition && store?.getIngredientNutritionItems) {
+            if (result.source !== 'edamam' && requireCompleteNutrition && store?.getIngredientNutritionItems) {
               result = await requireRecipeNutrition(result, store, usdaApiKey, usdaFetch, state.profile, input.message, input.mode);
             }
-            if (store?.screenGeneratedNutrition) result = await store.screenGeneratedNutrition(result, state.profile);
+            if (result.source !== 'edamam' && store?.screenGeneratedNutrition) result = await store.screenGeneratedNutrition(result, state.profile);
             // Only validated provider output enters history. An old response cannot
             // restore recipes after a reset or a change of profile in another tab.
-            if (store) await store.saveGenerated(result, state.revision, usageToken);
+            if (result.source === 'edamam') {
+              if (usageToken) await store.finishUsage(usageToken, result.externalRecipes.length > 0);
+              usageToken = null;
+            } else if (store) await store.saveGenerated(result, state.revision, usageToken);
             json(res, 200, result);
           }
         } finally {

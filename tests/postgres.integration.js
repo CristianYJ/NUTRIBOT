@@ -106,12 +106,24 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    8,
+    9,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
     6,
   );
+});
+
+test('Edamam favorites retain only URI and title, stay within each account and clear on reset', async t => {
+  const f = await fixture(t);
+  const uri = 'http://www.edamam.com/ontologies/edamam.owl#recipe_test123';
+  await f.store.saveEdamamFavorite(uri, 'Test recipe');
+  assert.deepEqual(await (await f.reopen()).listEdamamFavorites(), [{ uri, title: 'Test recipe' }]);
+  const otherId = await f.store.auth.register({ name: 'Other recipe', email: 'edamam-fav@example.test', password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  assert.deepEqual(await f.store.forProfile(otherId).listEdamamFavorites(), []);
+  const state = await f.store.getState();
+  await f.store.reset(state.revision);
+  assert.deepEqual(await f.store.listEdamamFavorites(), []);
 });
 
 test('USDA links and grams persist per recipe and enforce structured limits', async (t) => {

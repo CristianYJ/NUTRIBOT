@@ -275,7 +275,7 @@ export default function LandingPage({ brand }) {
               </span>
               <h3>Privacidad</h3>
               <p>
-                La privacidad es fundamental en NutriBot. Tu información es tratada con los más altos estándares de seguridad y confidencialidad. Los datos se procesan exclusivamente para mejorar tu experiencia culinaria, respetando siempre tu privacidad y tus preferencias. 
+                Para conversar y reconocer alimentos usamos Gemini. Para buscar recetas enviamos a Edamam la consulta de ingredientes y los filtros alimentarios que elegiste. Las claves de ambos servicios permanecen en el servidor. Evita escribir datos personales en el chat.
               </p>
             </article>
           </div>

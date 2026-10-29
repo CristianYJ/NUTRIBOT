@@ -20,6 +20,7 @@ import CulinaryHeader from "./CulinaryHeader.jsx";
 import {useMeals, MealFeedback, CalorieGoal} from './MealTracking.jsx';
 import HomeDashboard from "./HomeDashboard.jsx";
 import AssistantWorkspace from "./AssistantWorkspace.jsx";
+import { EdamamFavorites } from './EdamamRecipes.jsx';
 import NutritionPanel from "./NutritionPanel.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
@@ -778,6 +779,7 @@ function Workspace({ initial, onSignedOut }) {
                 <div className="page-title">
                   <h1>Mis Recetas</h1>
                 </div>
+                <EdamamFavorites />
                 <div className="filter-row">
                   {["Todas", "Favoritas", "Desayuno", "Almuerzo", "Cena"].map((c) => (
                     <button

@@ -332,7 +332,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 8) throw new Error("Esquema de una versión posterior");
+      if (version > 9) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -414,6 +414,10 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/008_nutrition_goal.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(8)');
       }
+      if (version < 9) {
+        await c.query(readFileSync(new URL('./postgres/009_edamam_favorites.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(9)');
+      }
     });
   } catch (error) {
     await pool.end();
@@ -459,6 +463,20 @@ export async function openDatabase(options = {}) {
       return true;
     },
     getState: () => transaction(readState, true),
+    listEdamamFavorites: () => transaction(async c => (await c.query(
+      'SELECT recipe_uri AS uri,title FROM edamam_favorites WHERE profile_id=$1 ORDER BY created_at DESC', [profileId()],
+    )).rows, true),
+    saveEdamamFavorite(uri, title) {
+      if (typeof title !== 'string' || !title.trim() || title.length > 150) throw new AppError('INVALID_RECIPE', 'El nombre de la receta no es válido.');
+      return transaction(async c => {
+        await c.query('INSERT INTO edamam_favorites(profile_id,recipe_uri,title) VALUES($1,$2,$3) ON CONFLICT(profile_id,recipe_uri) DO UPDATE SET title=EXCLUDED.title', [profileId(), uri, title.trim()]);
+        return { saved: true };
+      });
+    },
+    removeEdamamFavorite(uri) { return transaction(async c => {
+      await c.query('DELETE FROM edamam_favorites WHERE profile_id=$1 AND recipe_uri=$2', [profileId(), uri]);
+      return { saved: false };
+    }); },
     getIngredientNutritionItems(ids) {
       if (!Array.isArray(ids) || ids.length > 28 || ids.some((id) => typeof id !== 'string' || !id || id.length > 60))
         throw new AppError('INVALID_INGREDIENT', 'Lista de ingredientes inválida.');
@@ -630,6 +648,7 @@ export async function openDatabase(options = {}) {
           "ingredient_usda_links",
           "meal_plans",
           "favorites",
+          "edamam_favorites",
           "recipe_feedback",
           "generation_events",
         ])
@@ -726,7 +745,7 @@ export async function openDatabase(options = {}) {
       transaction(
         async (c) => ({
           provider: "postgresql",
-          schemaVersion: 8,
+          schemaVersion: 9,
           ingredients: Number(
             (await c.query("SELECT count(*) AS n FROM ingredients")).rows[0].n,
           ),
@@ -792,6 +811,9 @@ export async function openDatabase(options = {}) {
       "saveState",
       "addPantry",
       "saveGenerated",
+      "listEdamamFavorites",
+      "saveEdamamFavorite",
+      "removeEdamamFavorite",
       "getRecipeNutrition",
       "getIngredientNutritionItems",
       "setRecipeGrams",

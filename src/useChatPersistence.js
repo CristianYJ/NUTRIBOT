@@ -3,9 +3,10 @@ import { authenticatedFetch } from "./auth-api.js";
 
 export function encodeConversation({ messages, draft, maxTime, busy }) {
   return {
-    messages: messages.map(({ recipes, photo, ...message }) => ({
+    messages: messages.map(({ recipes, externalRecipes, photo, ...message }) => ({
       ...message,
       recipeIds: recipes?.map((recipe) => recipe.id) || message.recipeIds || [],
+      edamamRefs: externalRecipes?.map(({ uri, title }) => ({ uri, title })) || message.edamamRefs || [],
     })),
     draft,
     maxTime,

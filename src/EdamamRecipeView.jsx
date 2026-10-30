@@ -104,9 +104,9 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
         <div className="detail-photo edamam-detail-photo">
           {recipe.image ? <img src={recipe.image} alt="" referrerPolicy="no-referrer" /> : <span>🍽️</span>}
           <button className="detail-close" onClick={() => dialog.current?.close()} aria-label="Cerrar receta"><Icon name="close" /></button>
-          {meal && <span className="tag">{meal}</span>}
         </div>
         <div className="detail-content">
+          {meal && <span className="tag edamam-detail-meal">{meal}</span>}
           <div className="detail-title"><h2>{title}</h2><button className={`icon-button${saved ? ' saved' : ''}`} onClick={favorite} disabled={working} title={saved ? 'Quitar de Mis Recetas' : 'Guardar receta'} aria-label={saved ? 'Quitar receta guardada' : 'Guardar receta'} aria-pressed={saved}><Icon name="heart" /></button></div>
           <p>Receta de {recipe.source || 'Edamam'} · original para {number(recipe.servings)} porciones</p>
           <GlycemicBar value={recipe.glycemicIndex} />

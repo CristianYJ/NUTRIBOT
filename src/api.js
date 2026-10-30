@@ -52,10 +52,11 @@ export async function requestRecipe({ maxTime, message, mode, history, signal, r
       "El servidor no devolvió una respuesta válida. Comprueba que esté iniciado.",
     );
   }
-  if (!response.ok)
-    throw new Error(
-      result.text || "No se pudo generar la receta. Inténtalo de nuevo.",
-    );
+  if (!response.ok) {
+    const error = new Error(result.text || "No se pudo generar la receta. Inténtalo de nuevo.");
+    error.requestId = typeof result.requestId === 'string' ? result.requestId : null;
+    throw error;
+  }
   if (!Array.isArray(result.recipes) || typeof result.text !== "string")
     throw new Error("La respuesta del servidor no tiene el formato esperado.");
   return result;

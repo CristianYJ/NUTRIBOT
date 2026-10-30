@@ -275,7 +275,7 @@ export default function LandingPage({ brand }) {
               </span>
               <h3>Privacidad</h3>
               <p>
-                Para conversar y reconocer alimentos usamos Gemini. Para buscar recetas enviamos a Edamam la consulta de ingredientes y los filtros alimentarios que elegiste. Las claves de ambos servicios permanecen en el servidor. Evita escribir datos personales en el chat.
+                Para conversar y reconocer alimentos usamos Gemini. Para buscar recetas enviamos a Edamam la consulta de ingredientes y los filtros alimentarios que elegiste. Conservamos durante 30 días extractos limitados de consultas fallidas para diagnosticar errores. Las claves de ambos servicios permanecen en el servidor. Evita escribir datos personales en el chat.
               </p>
             </article>
           </div>

@@ -39,6 +39,7 @@ El paso anterior crea dos archivos privados sin sobrescribirlos si ya existen:
 | `.env` | En `GEMINI_API_KEY=`, tu clave de Google |
 | `.env` | En `USDA_API_KEY=`, tu clave gratuita de FoodData Central para los cálculos nutricionales |
 | `.env` | En `EDAMAM_APP_ID=` y `EDAMAM_APP_KEY=`, las credenciales de Recipe Search Enterprise Basic |
+| `.env` | En `NUTRIBOT_ADMIN_EMAIL=`, el correo de la cuenta que accederá al portal de diagnósticos |
 
 Si una contraseña contiene `#` o espacios, escríbela entre comillas. No compartas estos archivos ni pegues las credenciales en el código.
 
@@ -99,6 +100,7 @@ Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para trabajar en ramas y enviar camb
 - Contraseñas guardadas mediante hash scrypt con sal, sesiones revocables y fecha de nacimiento editable. La edad se calcula automáticamente. El cambio de contraseña está visible pero aún deshabilitado.
 - La IA recibe el mensaje culinario, ingredientes y filtros. Correo, contraseña, nombre, fecha de nacimiento, peso, estatura y notas médicas del perfil no se envían a Google. Evita escribir datos personales en el chat.
 - Con Edamam configurado, Gemini interpreta la conversación y Nutribot busca recetas de Edamam. Muestra ingredientes, nutrientes, índice glucémico si está disponible, lista de compras y enlace a la preparación de origen. Las favoritas guardan solo URI y nombre; consulta [integración de Edamam](docs/EDAMAM.md).
+- El [portal administrativo](docs/ADMIN.md) muestra resultados y causas de errores de los últimos 30 días para la cuenta autorizada. Las consultas de recetas en producción requieren Edamam; la generación anterior con Gemini queda fuera del flujo de usuarios.
 - Las indicaciones escritas del profesional se guardan sin bloquear todas las recetas; no se envían a Google ni se verifican automáticamente. Las exclusiones de alimentos no reconocidas y las solicitudes clínicas del chat sí pausan la generación. La app no interpreta tratamientos ni garantiza seguridad clínica o ausencia de alérgenos.
 - Nutribot busca primero recetas con la despensa. Si no encuentra una nueva, puede proponer una alternativa del catálogo e indicar qué ingredientes faltan. El botón **Generar más alternativas** evita los títulos ya generados para esa cuenta.
 - Para mostrar información nutricional, configura `USDA_API_KEY` en `.env` con una clave de [FoodData Central](https://fdc.nal.usda.gov/api-guide/) y reinicia el servidor. Al abrir una receta, Nutribot busca automáticamente las equivalencias USDA y suma calorías, carbohidratos, fibra, proteínas, grasas, grasas saturadas, azúcares y sal equivalente. Muestra la receta entera y permite cambiar a valores por persona. Las recetas del catálogo usan cantidades estimadas; las nuevas recetas generadas incluyen gramos por persona. Si falta un peso, una correspondencia fiable o un nutriente, ese valor se muestra como «Sin verificar». Los productos de marca y las diferencias de cocción pueden alterar los valores reales.

@@ -12,6 +12,11 @@ const fields = ['uri', 'label', 'image', 'source', 'url', 'yield', 'healthLabels
 const recipeUri = /^http:\/\/www\.edamam\.com\/ontologies\/edamam\.owl#recipe_[a-zA-Z0-9_-]{1,100}$/;
 const normalized = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const safeUrl = value => { try { const url = new URL(value); return url.protocol === 'https:' ? url.href : null; } catch { return null; } };
+export function requestedServings(message) {
+  if (/\b(?:solo para m[ií]|solo para uno|para m[ií])\b/i.test(message)) return 1;
+  const found = String(message || '').match(/\b(1[0-2]|[1-9])\s*(?:personas?|porciones?)\b/i);
+  return found ? Number(found[1]) : 0;
+}
 export function validateEdamamUri(uri) {
   if (typeof uri !== 'string' || !recipeUri.test(uri)) throw new AppError('INVALID_RECIPE', 'La referencia de Edamam no es válida.');
   return uri;
@@ -39,9 +44,10 @@ export async function planEdamam(input, { apiKey, model, signal, plan = generate
     maxCalories: { type: 'integer', minimum: 0, maximum: 2000 },
     maxIngredients: { type: 'integer', minimum: 0, maximum: 30 },
     maxGlycemicIndex: { type: 'integer', minimum: 0, maximum: 100 },
-  }, required: ['intent', 'reply', 'query', 'terms', 'excludedEnglish', 'mealType', 'cuisineType', 'dishType', 'maxCalories', 'maxIngredients', 'maxGlycemicIndex'] };
-  const { output } = await plan({ instruction: 'Eres el asistente de Nutribot. Conversa en español. Para buscar recetas, traduce a inglés 1 a 3 ingredientes principales de la despensa y forma una consulta breve en inglés. Traduce también las exclusiones indicadas; no las omitas. Usa filtros de tipo de comida, cocina, plato, calorías por porción, cantidad de ingredientes e índice glucémico solo si el usuario los pide expresamente; usa 0 cuando no los pide. No inventes recetas ni datos nutricionales. Si es charla general, responde sin buscar. Usa solo IDs presentes en la despensa. No hagas recomendaciones médicas.',
-    parts: [{ text: JSON.stringify({ message: input.message, history: input.history.slice(-4).map(({ role, text }) => ({ role, text })), pantry, maxTime: input.maxTime, diet: input.profile.diet, exclusions: input.profile.exclusions }) }], schema }, { apiKey, model, signal });
+    servings: { type: 'integer', minimum: 0, maximum: 12 },
+  }, required: ['intent', 'reply', 'query', 'terms', 'excludedEnglish', 'mealType', 'cuisineType', 'dishType', 'maxCalories', 'maxIngredients', 'maxGlycemicIndex', 'servings'] };
+  const { output } = await plan({ instruction: 'Eres el asistente de Nutribot. Conversa en español. Usa el historial para mantener la intención original cuando el usuario solo responda con un número de personas. Para buscar recetas, traduce a inglés 1 a 3 ingredientes principales de la despensa y forma una consulta breve en inglés. Traduce también las exclusiones indicadas; no las omitas. Usa filtros de tipo de comida, cocina, plato, calorías por porción, cantidad de ingredientes e índice glucémico solo si el usuario los pide expresamente; usa 0 cuando no los pide. Devuelve servings=0 si aún no se conoce el número de personas. No inventes recetas ni datos nutricionales. Si es charla general, responde sin buscar. Usa solo IDs presentes en la despensa. No hagas recomendaciones médicas.',
+    parts: [{ text: JSON.stringify({ message: input.message, history: input.history.slice(-4).map(({ role, text, servings }) => ({ role, text, servings: servings || undefined })), pantry, maxTime: input.maxTime, diet: input.profile.diet, exclusions: input.profile.exclusions }) }], schema }, { apiKey, model, signal });
   if (!output || !['recipe', 'conversation', 'out_of_scope', 'needs_review'].includes(output.intent)) throw new AppError('INVALID_AI_OUTPUT', 'Gemini no pudo interpretar la solicitud.', 502);
   const terms = (Array.isArray(output.terms) ? output.terms : []).filter(term => eligible.has(term.id) && input.pantry.includes(term.id) && /^[a-zA-Z -]{2,50}$/.test(term.english)).slice(0, 12);
   const fallback = pantry.slice(0, 2).map(item => ({ id: item.id, english: item.name }));
@@ -54,6 +60,8 @@ export async function planEdamam(input, { apiKey, model, signal, plan = generate
     maxCalories: Number.isInteger(output.maxCalories) && output.maxCalories >= 50 && output.maxCalories <= 2000 ? output.maxCalories : 0,
     maxIngredients: Number.isInteger(output.maxIngredients) && output.maxIngredients >= 1 && output.maxIngredients <= 30 ? output.maxIngredients : 0,
     maxGlycemicIndex: Number.isInteger(output.maxGlycemicIndex) && output.maxGlycemicIndex >= 1 && output.maxGlycemicIndex <= 100 ? output.maxGlycemicIndex : 0,
+    servings: requestedServings(input.message) || [...input.history].reverse().find(item => Number.isInteger(item.servings) && item.servings >= 1 && item.servings <= 12)?.servings ||
+      (Number.isInteger(output.servings) && output.servings >= 1 && output.servings <= 12 ? output.servings : 0),
     excludedEnglish: (Array.isArray(output.excludedEnglish) ? output.excludedEnglish : [])
       .filter(value => typeof value === 'string' && /^[a-zA-Z -]{2,60}$/.test(value)).slice(0, 12) };
 }
@@ -119,12 +127,16 @@ export function createEdamam({ appId, appKey, fetchImpl = fetch, now = Date.now 
       const requiredLabels = edamamFilters(input).health.map(normalized);
       const activeLimits = Object.entries({ saturatedFatG: input.nutritionLimits?.maxSaturatedFatG,
         sodiumMg: input.nutritionLimits?.maxSodiumMg, sugarG: input.nutritionLimits?.maxSugarG }).filter(([, limit]) => Boolean(limit));
+      const previous = new Set((input.history || []).flatMap(message => message.edamamRefs || []).map(ref => ref.uri));
       const recipes = (data.hits || []).filter(hit => requiredLabels.every(label =>
         (hit.recipe?.healthLabels || []).some(actual => normalized(actual) === label)))
         .map(hit => shapeRecipe(hit.recipe, plan.terms)).filter(Boolean)
+        .filter(recipe => !previous.has(recipe.uri))
         .filter(recipe => activeLimits.every(([name, limit]) => recipe.nutrientsPerServing[name] == null || recipe.nutrientsPerServing[name] <= Number(limit)))
         .map(recipe => ({ ...recipe, nutritionLimitsUnverified: activeLimits.some(([name]) => recipe.nutrientsPerServing[name] == null) }))
-        .filter(recipe => recipe.missing.length <= 2).sort((a, b) => a.missing.length - b.missing.length).slice(0, 20);
+        .filter(recipe => recipe.missing.length <= 2).sort((a, b) => a.missing.length - b.missing.length)
+        .filter((recipe, index, list) => list.findIndex(other => other.uri === recipe.uri || normalized(other.title) === normalized(recipe.title)) === index)
+        .slice(0, 2);
       return { recipes, count: Number(data.count) || 0 };
     },
     async detail(uri, signal) { const data = await call(lookupUrl(uri), { signal });

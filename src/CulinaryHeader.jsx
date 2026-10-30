@@ -15,6 +15,7 @@ export default function CulinaryHeader({
   onLogout,
   loggingOut,
   onConnect,
+  onAdmin,
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
@@ -134,6 +135,7 @@ export default function CulinaryHeader({
           onLogout={onLogout}
           loggingOut={loggingOut}
           onConnect={onConnect}
+          onAdmin={onAdmin}
         />
       </div>
     </header>

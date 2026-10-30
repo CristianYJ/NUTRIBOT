@@ -348,8 +348,8 @@ export default function AssistantWorkspace({
                       ingredients={ingredients}
                     />
                   ))}
-                  {m.externalRecipes?.map(recipe => <EdamamRecipeCard key={recipe.uri} initial={recipe} pantry={pantry} ingredients={ingredients} />)}
-                  {!m.externalRecipes?.length && m.edamamRefs?.map(ref => <EdamamRecipeCard key={ref.uri} reference={ref} pantry={pantry} ingredients={ingredients} />)}
+                  {m.externalRecipes?.map(recipe => <EdamamRecipeCard key={recipe.uri} initial={recipe} servings={m.servings} pantry={pantry} ingredients={ingredients} />)}
+                  {!m.externalRecipes?.length && m.edamamRefs?.map(ref => <EdamamRecipeCard key={ref.uri} reference={ref} servings={m.servings} pantry={pantry} ingredients={ingredients} />)}
                   {(m.externalRecipes?.length > 0 || m.edamamRefs?.length > 0) && <EdamamBadge />}
                   {m.role === "bot" && ["success", "empty"].includes(m.type) && (
                     <button className="btn secondary" disabled={busy} onClick={() =>

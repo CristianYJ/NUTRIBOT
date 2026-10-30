@@ -21,6 +21,7 @@ import {useMeals, MealFeedback, CalorieGoal} from './MealTracking.jsx';
 import HomeDashboard from "./HomeDashboard.jsx";
 import AssistantWorkspace from "./AssistantWorkspace.jsx";
 import { EdamamFavorites } from './EdamamRecipes.jsx';
+import AdminPortal from './AdminPortal.jsx';
 import NutritionPanel from "./NutritionPanel.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
@@ -167,6 +168,12 @@ export default function App() {
 }
 
 function Workspace({ initial, onSignedOut }) {
+  const [adminAccess, setAdminAccess] = useState(false);
+  useEffect(() => {
+    let active = true;
+    authenticatedFetch('/api/admin/access').then(response => { if (active && response.ok) setAdminAccess(true); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   const { usage, usageError, refreshUsage } = usePlanUsage();
   const meals = useMeals();
   const [loggingOut, setLoggingOut] = useState(false);
@@ -485,7 +492,7 @@ function Workspace({ initial, onSignedOut }) {
       ]);
     }
   }
-  async function generate(text = "¿Qué puedo cocinar con lo que tengo?", mode = "initial") {
+  async function generate(text = "¿Qué puedo cocinar con lo que tengo?", mode = "initial", timeOverride = null) {
     if (request.current || switchingChat) return;
     if (messages.length > MAX_CHAT_MESSAGES - 2) {
       setToast(
@@ -509,7 +516,7 @@ function Workspace({ initial, onSignedOut }) {
       if (controller.signal.aborted) return;
       const result = await requestRecipe({
         revision,
-        maxTime,
+        maxTime: timeOverride || maxTime,
         message: text,
         history: recipeContext(messages),
         mode,
@@ -535,7 +542,7 @@ function Workspace({ initial, onSignedOut }) {
           role: "bot",
           type: "error",
           source: "local",
-          text: error.message,
+          text: error.requestId ? `${error.message} Referencia: ${error.requestId.slice(0, 8)}.` : error.message,
           recipes: [],
           retryText: text,
           retryMode: mode,
@@ -668,6 +675,7 @@ function Workspace({ initial, onSignedOut }) {
           onLogout={logout}
           loggingOut={loggingOut}
           onConnect={() => setPhoneOpen(true)}
+          onAdmin={adminAccess ? () => go('admin') : null}
           onSearchIngredient={(query) => {
             go("pantry");
             setCategory("Todos");
@@ -720,6 +728,7 @@ function Workspace({ initial, onSignedOut }) {
             </div>
           )}
           <main>
+            {page === 'admin' && (adminAccess ? <AdminPortal /> : <div className="database-loading"><h1>Acceso administrativo</h1><p>Esta cuenta no tiene acceso al portal.</p></div>)}
             {page === "home" && (
               <HomeDashboard tracker={meals} profile={profile} pantry={pantry} dates={pantryDates}
                 ingredients={ingredients} recipes={allRecipes} saved={saved}

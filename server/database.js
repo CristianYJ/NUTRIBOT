@@ -26,6 +26,7 @@ import { calculateRecipeNutrition } from "./nutrition.js";
 import { estimatedGrams } from "./auto-nutrition.js";
 import { mealStore } from './meals.js';
 import { createPlanUsage } from './plan-usage.js';
+import { createAdminDiagnostics } from './admin-diagnostics.js';
 
 export async function openDatabase(options = {}) {
   const { schema = "nutribot", ...connection } = options;
@@ -332,7 +333,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 9) throw new Error("Esquema de una versión posterior");
+      if (version > 10) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -418,6 +419,10 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/009_edamam_favorites.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(9)');
       }
+      if (version < 10) {
+        await c.query(readFileSync(new URL('./postgres/010_admin_diagnostics.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(10)');
+      }
     });
   } catch (error) {
     await pool.end();
@@ -451,6 +456,7 @@ export async function openDatabase(options = {}) {
   }
   const usage = createPlanUsage({ transaction, profileId });
   const store = {
+    ...createAdminDiagnostics({ transaction, profileId, pool }),
     ...mealStore({transaction,profileId,readRecipeNutrition}),
     getUsage: usage.getUsage,
     reserveUsage: usage.reserveUsage,
@@ -745,7 +751,7 @@ export async function openDatabase(options = {}) {
       transaction(
         async (c) => ({
           provider: "postgresql",
-          schemaVersion: 9,
+          schemaVersion: 10,
           ingredients: Number(
             (await c.query("SELECT count(*) AS n FROM ingredients")).rows[0].n,
           ),
@@ -811,6 +817,7 @@ export async function openDatabase(options = {}) {
       "saveState",
       "addPantry",
       "saveGenerated",
+      "recordAdminEvent",
       "listEdamamFavorites",
       "saveEdamamFavorite",
       "removeEdamamFavorite",

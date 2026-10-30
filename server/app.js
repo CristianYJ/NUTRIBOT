@@ -1,5 +1,6 @@
 import { requireRecipeNutrition, nutritionQuestion, hasCompleteNutrients, referenceChoices } from './nutrition-readiness.js';
 import { createServer } from "node:http";
+import { randomUUID } from 'node:crypto';
 import { createAuthentication, requestContext } from "./auth.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -44,6 +45,7 @@ export function createAppServer({
   edamamAppKey,
   edamamFetch = fetch,
   edamamPlan = planEdamam,
+  adminEmail,
   usdaFetch = fetch,
   model = "gemini-3.5-flash-lite",
   generate = generateWithGemini,
@@ -62,6 +64,8 @@ export function createAppServer({
   let active = 0;
   const handler = async (req, res) => {
     let store = rootStore;
+    let session = null;
+    let recipeTrace = null;
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
@@ -80,7 +84,7 @@ export function createAppServer({
         url.pathname.startsWith("/api/") &&
         url.pathname !== "/api/health"
       ) {
-        const session = await auth.session(req);
+        session = await auth.session(req);
         if (!session)
           throw new AppError(
             "UNAUTHORIZED",
@@ -99,6 +103,20 @@ export function createAppServer({
         if (!["GET", "HEAD"].includes(req.method))
           auth.requireCsrf(req, session);
         store = rootStore.forProfile(session.profileId);
+      }
+      if (url.pathname.startsWith('/api/admin/')) {
+        if (!session || !await rootStore?.isAdmin?.(session.profileId, adminEmail))
+          throw new AppError('FORBIDDEN', 'Acceso administrativo no autorizado.', 403);
+        if (req.method !== 'GET') throw new AppError('METHOD_NOT_ALLOWED', 'Utiliza GET.', 405);
+        if (url.pathname === '/api/admin/access') return json(res, 200, { allowed: true });
+        if (url.pathname === '/api/admin/summary') return json(res, 200, {
+          ...await rootStore.adminSummary(),
+          providers: { gemini: Boolean(apiKey), edamam: Boolean(edamamAppId && edamamAppKey), usda: Boolean(usdaApiKey) },
+          model,
+        });
+        if (url.pathname === '/api/admin/events') return json(res, 200,
+          await rootStore.listAdminEvents({ outcome: url.searchParams.get('outcome') || 'error', offset: Number(url.searchParams.get('offset') || 0) }));
+        throw new AppError('NOT_FOUND', 'Ruta no encontrada.', 404);
       }
       const reserveUsage = async feature => {
         if (store?.reserveUsage) return store.reserveUsage(feature);
@@ -315,6 +333,9 @@ export function createAppServer({
             error: "METHOD_NOT_ALLOWED",
             text: "Utiliza POST para solicitar recetas.",
           });
+        recipeTrace = { requestId: randomUUID(), startedAt: Date.now(), stage: 'input', provider: edamamAppId && edamamAppKey ? 'edamam' : 'gemini' };
+        if (authentication && (!edamamAppId || !edamamAppKey))
+          throw new AppError('EDAMAM_UNCONFIGURED', 'Edamam aún no está configurado en este servidor. Pide al administrador que revise las claves.', 503);
         let raw = await readJson(req, 24000);
         let state;
         if (store) {
@@ -341,6 +362,9 @@ export function createAppServer({
           };
         }
         const input = parseInput(raw, state?.ingredients);
+        Object.assign(recipeTrace, { message: input.message,
+          previousMessage: [...input.history].reverse().find(item => item.role === 'user')?.text || null,
+          mode: input.mode, maxTime: input.maxTime, pantryCount: input.pantry.length });
         if (state) input.nutritionLimits = {
           maxSaturatedFatG: state.profile.maxSaturatedFatG,
           maxSodiumMg: state.profile.maxSodiumMg,
@@ -360,7 +384,11 @@ export function createAppServer({
           }));
         }
         const stopped = preflight(input);
-        if (stopped) return json(res, 200, stopped);
+        if (stopped) {
+          if (store?.recordAdminEvent) await store.recordAdminEvent({ ...recipeTrace, outcome: stopped.type, stage: 'preflight', recipeCount: 0, durationMs: Date.now() - recipeTrace.startedAt }).catch(() => {});
+          recipeTrace = null;
+          return json(res, 200, stopped);
+        }
         const now = Date.now(),
           ip = context.ip;
         for (const [key, times] of requests)
@@ -381,28 +409,40 @@ export function createAppServer({
         };
         res.on("close", cancel);
         try {
+          recipeTrace.stage = 'plan_limit';
           usageToken = await reserveUsage('recipes');
           if (res.destroyed) return;
           let result;
           if (edamamAppId && edamamAppKey) {
+            recipeTrace.stage = 'gemini_intent';
             const plan = await edamamPlan(input, { apiKey, model, signal: controller.signal });
-            if (plan.intent === 'recipe') {
+            if (plan.intent === 'recipe' && !plan.servings) {
+              result = { type: 'conversation', source: 'gemini', recipes: [],
+                text: '¿Para cuántas personas quieres cocinar? Puedes responder, por ejemplo, “2 personas”.' };
+            } else if (plan.intent === 'recipe') {
+              recipeTrace.stage = 'edamam_search';
               const found = await edamam.search(input, plan, controller.signal);
-              result = { type: found.recipes.length ? 'success' : 'empty', source: 'edamam', recipes: [], externalRecipes: found.recipes,
-                text: found.recipes.length ? (plan.reply || 'Encontré estas recetas en Edamam para tu despensa.') : 'No encontré recetas que cumplan los filtros. Prueba con otros ingredientes o más tiempo.' };
+              result = { type: found.recipes.length ? 'success' : 'empty', source: 'edamam', recipes: [], externalRecipes: found.recipes, servings: plan.servings,
+                text: found.recipes.length ? `Encontré ${found.recipes.length === 2 ? 'dos opciones distintas' : 'una opción'} para ${plan.servings} ${plan.servings === 1 ? 'persona' : 'personas'} en Edamam. Revisa los ingredientes y el enlace de preparación.` : 'No encontré recetas que cumplan los filtros. Prueba con otros ingredientes o más tiempo.' };
             } else result = { type: plan.intent === 'needs_review' ? 'review' : 'conversation', source: 'gemini', recipes: [], text: plan.reply || 'Cuéntame qué te gustaría cocinar.' };
-          } else result = await generate(input, { apiKey, model, signal: controller.signal });
+          } else { recipeTrace.stage = 'gemini_recipe'; result = await generate(input, { apiKey, model, signal: controller.signal }); }
           if (!res.destroyed) {
-            if (result.source !== 'edamam' && requireCompleteNutrition && store?.getIngredientNutritionItems) {
+            recipeTrace.stage = 'nutrition';
+            if (!(edamamAppId && edamamAppKey) && requireCompleteNutrition && store?.getIngredientNutritionItems) {
               result = await requireRecipeNutrition(result, store, usdaApiKey, usdaFetch, state.profile, input.message, input.mode);
             }
-            if (result.source !== 'edamam' && store?.screenGeneratedNutrition) result = await store.screenGeneratedNutrition(result, state.profile);
+            if (!(edamamAppId && edamamAppKey) && store?.screenGeneratedNutrition) result = await store.screenGeneratedNutrition(result, state.profile);
             // Only validated provider output enters history. An old response cannot
             // restore recipes after a reset or a change of profile in another tab.
-            if (result.source === 'edamam') {
-              if (usageToken) await store.finishUsage(usageToken, result.externalRecipes.length > 0);
+            recipeTrace.stage = 'save';
+            if (edamamAppId && edamamAppKey) {
+              if (usageToken) await store.finishUsage(usageToken, Boolean(result.externalRecipes?.length));
               usageToken = null;
             } else if (store) await store.saveGenerated(result, state.revision, usageToken);
+            if (store?.recordAdminEvent) await store.recordAdminEvent({ ...recipeTrace, provider: result.source, outcome: result.type,
+              stage: 'complete', recipeCount: result.externalRecipes?.length || result.recipes?.length || 0,
+              durationMs: Date.now() - recipeTrace.startedAt }).catch(() => {});
+            recipeTrace = null;
             json(res, 200, result);
           }
         } finally {
@@ -455,6 +495,11 @@ export function createAppServer({
       }
       json(res, 404, { error: "NOT_FOUND", text: "Ruta no encontrada." });
     } catch (error) {
+      if (recipeTrace && store?.recordAdminEvent) {
+        await store.recordAdminEvent({ ...recipeTrace, outcome: 'error', errorCode: error.code || 'INTERNAL_ERROR',
+          reasons: error.validationIssues?.map(issue => issue.reason) || [],
+          durationMs: Date.now() - recipeTrace.startedAt }).catch(() => {});
+      }
       if (!(error instanceof AppError) && store?.provider === "postgresql") {
         const constraint = [
           "23502",
@@ -475,6 +520,7 @@ export function createAppServer({
       if (!res.destroyed && !res.headersSent)
         json(res, error instanceof AppError ? error.status : 500, {
           error: error instanceof AppError ? error.code : "INTERNAL_ERROR",
+          ...(recipeTrace ? { requestId: recipeTrace.requestId } : {}),
           text:
             error instanceof AppError
               ? error.message

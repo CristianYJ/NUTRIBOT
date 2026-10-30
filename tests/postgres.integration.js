@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    9,
+    10,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -124,6 +124,21 @@ test('Edamam favorites retain only URI and title, stay within each account and c
   const state = await f.store.getState();
   await f.store.reset(state.revision);
   assert.deepEqual(await f.store.listEdamamFavorites(), []);
+});
+
+test('admin diagnostics retain a bounded trace and allow only the configured account', async t => {
+  const f = await fixture(t);
+  const id = await f.store.auth.register({ name: 'Administrator', email: 'admin@example.test', password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  assert.equal(await f.store.isAdmin(id, 'admin@example.test'), true);
+  assert.equal(await f.store.isAdmin(1, 'admin@example.test'), false);
+  await f.store.forProfile(id).recordAdminEvent({ requestId: randomUUID(), provider: 'gemini', outcome: 'error',
+    stage: 'gemini_recipe', errorCode: 'INVALID_AI_OUTPUT', reasons: ['UNDECLARED_SEASONING'],
+    message: '2 personas', previousMessage: 'Cena mexicana', pantryCount: 3, maxTime: 30, mode: 'initial', durationMs: 240 });
+  const events = await f.store.listAdminEvents();
+  assert.equal(events.items.length, 1);
+  assert.equal(events.items[0].accountId, id);
+  assert.deepEqual(events.items[0].reasons, ['UNDECLARED_SEASONING']);
+  assert.equal((await f.store.adminSummary()).errors24h, 1);
 });
 
 test('USDA links and grams persist per recipe and enforce structured limits', async (t) => {

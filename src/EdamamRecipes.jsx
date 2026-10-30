@@ -15,7 +15,7 @@ export function EdamamBadge() {
     <img src="https://developer.edamam.com/images/light.png" alt="Powered by Edamam" />
   </a>;
 }
-export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients = [], onFavoriteChanged, isFavorite = false }) {
+export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients = [], servings, onFavoriteChanged, isFavorite = false }) {
   const [recipe, setRecipe] = useState(initial || null);
   const [shopping, setShopping] = useState(null);
   const [error, setError] = useState('');
@@ -36,7 +36,7 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
   }
   async function makeShopping() {
     setWorking(true); setError('');
-    try { setShopping(await edamamRequest('shopping', 'POST', { uri, servings: Math.max(1, Math.min(12, Math.round(recipe.servings))) })); }
+    try { setShopping(await edamamRequest('shopping', 'POST', { uri, servings: servings || Math.max(1, Math.min(12, Math.round(recipe.servings))) })); }
     catch (e) { setError(e.message); } finally { setWorking(false); }
   }
   const nameFor = id => ingredients.find(item => item.id === id)?.name || id;
@@ -48,6 +48,8 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
       <h3>{title}</h3>
       {recipe ? <>
         <div className="edamam-recipe-facts">
+          {servings && <span>Para {servings} {servings === 1 ? 'persona' : 'personas'}</span>}
+          <span>Receta original: {recipe.servings} {recipe.servings === 1 ? 'porción' : 'porciones'}</span>
           {recipe.time != null && <span>{recipe.time} min</span>}
           {recipe.caloriesPerServing != null && <span>{recipe.caloriesPerServing} kcal/porción</span>}
           <span>Índice glucémico: {recipe.glycemicIndex == null ? 'no disponible' : recipe.glycemicIndex}</span>

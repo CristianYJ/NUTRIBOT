@@ -334,7 +334,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 13) throw new Error("Esquema de una versión posterior");
+      if (version > 14) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -436,6 +436,10 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/013_admin_daily_metrics.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(13)');
       }
+      if (version < 14) {
+        await c.query(readFileSync(new URL('./postgres/014_edamam_saved_meal.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(14)');
+      }
     });
   } catch (error) {
     await pool.end();
@@ -484,15 +488,22 @@ export async function openDatabase(options = {}) {
     },
     getState: () => transaction(readState, true),
     listEdamamFavorites: () => transaction(async c => (await c.query(
-      'SELECT recipe_uri AS uri,title FROM edamam_favorites WHERE profile_id=$1 ORDER BY created_at DESC', [profileId()],
+      'SELECT recipe_uri AS uri,title,meal FROM edamam_favorites WHERE profile_id=$1 ORDER BY created_at DESC', [profileId()],
     )).rows, true),
-    saveEdamamFavorite(uri, title) {
+    saveEdamamFavorite(uri, title, meal = null) {
       if (typeof title !== 'string' || !title.trim() || title.length > 150) throw new AppError('INVALID_RECIPE', 'El nombre de la receta no es válido.');
+      if (meal !== null && !['Desayuno', 'Almuerzo', 'Cena'].includes(meal)) throw new AppError('INVALID_RECIPE', 'La categoría de la receta no es válida.');
       return transaction(async c => {
-        await c.query('INSERT INTO edamam_favorites(profile_id,recipe_uri,title) VALUES($1,$2,$3) ON CONFLICT(profile_id,recipe_uri) DO UPDATE SET title=EXCLUDED.title', [profileId(), uri, title.trim()]);
+        await c.query('INSERT INTO edamam_favorites(profile_id,recipe_uri,title,meal) VALUES($1,$2,$3,$4) ON CONFLICT(profile_id,recipe_uri) DO UPDATE SET title=EXCLUDED.title, meal=COALESCE(EXCLUDED.meal,edamam_favorites.meal)', [profileId(), uri, title.trim(), meal]);
         return { saved: true };
       });
     },
+    classifyEdamamFavorites(items) { return transaction(async c => {
+      for (const item of items) {
+        if (!['Desayuno', 'Almuerzo', 'Cena'].includes(item.meal)) continue;
+        await c.query('UPDATE edamam_favorites SET meal=$3, title=$4 WHERE profile_id=$1 AND recipe_uri=$2 AND meal IS NULL', [profileId(), item.uri, item.meal, item.title]);
+      }
+    }); },
     removeEdamamFavorite(uri) { return transaction(async c => {
       await c.query('DELETE FROM edamam_favorites WHERE profile_id=$1 AND recipe_uri=$2', [profileId(), uri]);
       return { saved: false };

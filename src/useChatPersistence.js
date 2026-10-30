@@ -6,7 +6,7 @@ export function encodeConversation({ messages, draft, maxTime, busy }) {
     messages: messages.map(({ recipes, externalRecipes, photo, ...message }) => ({
       ...message,
       recipeIds: recipes?.map((recipe) => recipe.id) || message.recipeIds || [],
-      edamamRefs: externalRecipes?.map(({ uri, title, titleEs }) => ({ uri, title: titleEs || title })) || message.edamamRefs || [],
+      edamamRefs: externalRecipes?.map(({ uri, title, titleEs, meal }) => ({ uri, title: titleEs || title, ...(meal ? { meal } : {}) })) || message.edamamRefs || [],
     })),
     draft,
     maxTime,

@@ -45,7 +45,7 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
   const dialog = useRef(null);
   const uri = initial?.uri || reference?.uri;
   const title = presentation?.titleEs || recipe?.titleEs || reference?.title || recipe?.title || 'Receta';
-  const meal = recipe?.meal || reference?.meal || ({ Breakfast: 'Desayuno', Lunch: 'Almuerzo', Dinner: 'Cena' })[recipe?.mealTypes?.[0]] || null;
+  const meal = recipe?.meal || reference?.meal || presentation?.meal || ({ Breakfast: 'Desayuno', Lunch: 'Almuerzo', Dinner: 'Cena' })[recipe?.mealTypes?.[0]] || null;
   useEffect(() => { setRecipe(initial || null); setSaved(isFavorite); setShopping(null); setShoppingTranslations(null); setPresentation(null); setPresentationError(''); }, [initial, uri, isFavorite]);
   useEffect(() => {
     if (!prefetch || initial || !uri) return;
@@ -63,14 +63,14 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
       setTab('ingredients');
       dialog.current?.showModal();
       if (!presentation) {
-        request('presentation', 'POST', { title: current.title, ingredientLines: current.ingredientLines, time: current.time })
+        request('presentation', 'POST', { title: current.title, ingredientLines: current.ingredientLines, time: current.time, meal, mealTypes: current.mealTypes })
           .then(setPresentation).catch(e => setPresentationError(e.message));
       }
     } catch (e) { setError(e.message); } finally { setWorking(false); }
   }
   async function favorite() {
     setWorking(true); setError('');
-    try { await request('favorites', saved ? 'DELETE' : 'POST', { uri, title }); setSaved(!saved); onFavoriteChanged?.(); }
+    try { await request('favorites', saved ? 'DELETE' : 'POST', { uri, title, meal }); setSaved(!saved); onFavoriteChanged?.(); }
     catch (e) { setError(e.message); } finally { setWorking(false); }
   }
   async function makeShopping() {
@@ -90,7 +90,7 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
         {recipe?.image ? <img src={recipe.image} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="food-illustration">🍽️</span>}
         {meal && <span className="photo-label">{meal}</span>}
       </button>
-      <button className={`save-btn${saved ? ' saved' : ''}`} onClick={favorite} disabled={working} aria-label={`${saved ? 'Quitar de favoritas' : 'Guardar favorita'}: ${title}`} aria-pressed={saved}><Icon name="heart" size={19} /></button>
+      <button className={`save-btn${saved ? ' saved' : ''}`} onClick={favorite} disabled={working} title={saved ? 'Quitar de Mis Recetas' : 'Guardar receta'} aria-label={`${saved ? 'Quitar receta guardada' : 'Guardar receta'}: ${title}`} aria-pressed={saved}><Icon name="heart" size={19} /></button>
       <div className="recipe-copy">
         <div className="recipe-meta"><span><Icon name="clock" size={14} />{recipe?.time ? `${recipe.time} min` : 'Tiempo no indicado'}</span>{meal && <span>{meal}</span>}</div>
         <button className="title-link" onClick={open} disabled={working}><h3>{title}</h3></button>
@@ -107,7 +107,7 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
           {meal && <span className="tag">{meal}</span>}
         </div>
         <div className="detail-content">
-          <div className="detail-title"><h2>{title}</h2><button className={`icon-button${saved ? ' saved' : ''}`} onClick={favorite} disabled={working} aria-label={saved ? 'Quitar de favoritas' : 'Guardar favorita'} aria-pressed={saved}><Icon name="heart" /></button></div>
+          <div className="detail-title"><h2>{title}</h2><button className={`icon-button${saved ? ' saved' : ''}`} onClick={favorite} disabled={working} title={saved ? 'Quitar de Mis Recetas' : 'Guardar receta'} aria-label={saved ? 'Quitar receta guardada' : 'Guardar receta'} aria-pressed={saved}><Icon name="heart" /></button></div>
           <p>Receta de {recipe.source || 'Edamam'} · original para {number(recipe.servings)} porciones</p>
           <GlycemicBar value={recipe.glycemicIndex} />
           <div className="detail-meta recipe-summary">
@@ -147,11 +147,14 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
   </>;
 }
 
-export function EdamamFavorites({ meal = 'Todas', mealTracker }) {
+export function EdamamFavorites({ meal = 'Todas', mealTracker, localCount = 0 }) {
   const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const refresh = () => request('favorites').then(data => setItems(data.items)).catch(e => setError(e.message));
+  const refresh = () => request('favorites').then(data => { setItems(data.items); setError(''); }).catch(e => setError(e.message)).finally(() => setLoading(false));
   useEffect(() => { refresh(); }, []);
-  if (!['Todas', 'Favoritas'].includes(meal)) return null;
-  return <>{items.map((item, index) => <EdamamRecipeCard key={item.uri} reference={item} isFavorite prefetch={index < 3} onFavoriteChanged={refresh} mealTracker={mealTracker} />)}{error && <p role="alert">{error}</p>}</>;
+  const visible = items.filter(item => meal === 'Todas' || item.meal === meal);
+  return <>{visible.map((item, index) => <EdamamRecipeCard key={item.uri} reference={item} isFavorite prefetch={index < 3} onFavoriteChanged={refresh} mealTracker={mealTracker} />)}
+    {!loading && !error && !visible.length && !localCount && <p className="edamam-library-empty">No hay recetas en esta categoría. Guarda una receta con el corazón o prueba otra categoría.</p>}
+    {error && <p role="alert">{error}</p>}</>;
 }

@@ -735,7 +735,7 @@ function Workspace({ initial, onSignedOut }) {
                 usage={usage} usageError={usageError} onNavigate={go}
                 onOpenRecipe={openRecipe} onSave={toggleSave} onImport={openPantryImport}
                 onAsk={(text) => { setMessage(text); go("assistant"); }}
-                onFavorites={() => { go("recipes"); setMeal("Favoritas"); }} />
+                onFavorites={() => { go("recipes"); setMeal("Todas"); }} />
             )}
             {page === "pantry" && (
               <PantryWorkspace
@@ -790,7 +790,7 @@ function Workspace({ initial, onSignedOut }) {
                   <h1>Mis Recetas</h1>
                 </div>
                 <div className="filter-row">
-                  {["Todas", "Favoritas", "Desayuno", "Almuerzo", "Cena"].map((c) => (
+                  {["Todas", "Desayuno", "Almuerzo", "Cena"].map((c) => (
                     <button
                       key={c}
                       className={meal === c ? "selected" : ""}
@@ -811,33 +811,17 @@ function Workspace({ initial, onSignedOut }) {
                 ) : (
                   <>
                     <div className="recipe-grid library">
-                      <EdamamFavorites meal={meal} mealTracker={meals} />
+                      <EdamamFavorites meal={meal} mealTracker={meals} localCount={allRecipes.filter(r => matchesProfile(r, profile, ingredients) && (meal === "Todas" || r.category === meal)).length} />
                       {allRecipes
                         .filter(
                           (r) =>
                             matchesProfile(r, profile, ingredients) &&
-                            (meal === "Todas" || (meal === "Favoritas" ? saved.includes(r.id) : r.category === meal)),
+                            (meal === "Todas" || r.category === meal),
                         )
                         .map((r) => (
                           <RecipeCard key={r.id} recipe={r} />
                         ))}
                     </div>
-                    {!allRecipes.some(
-                      (r) =>
-                        matchesProfile(r, profile, ingredients) &&
-                        (meal === "Todas" || (meal === "Favoritas" ? saved.includes(r.id) : r.category === meal)),
-                    ) && (
-                        <Empty
-                          icon="heart"
-                          title={
-                            meal === "Favoritas"
-                              ? "Aquí van tus próximas favoritas"
-                              : "No hay coincidencias"
-                          }
-                        >
-                          {meal === "Favoritas" ? "Guarda una receta tocando el corazón." : "Prueba otra categoría o pide una receta en el chat."}
-                        </Empty>
-                      )}
                   </>
                 )}
                 <div className="quiet-note">

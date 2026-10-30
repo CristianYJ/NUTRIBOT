@@ -94,8 +94,30 @@ test('Mexican dinner follow-up asks servings, then returns two distinct Edamam o
   assert.deepEqual(second.externalRecipes.map(recipe => recipe.title), ['Mexican bowl', 'Chicken tacos']);
   assert.deepEqual(second.externalRecipes.map(recipe => recipe.titleEs), ['Tazón mexicano', 'Tacos de pollo']);
   assert.deepEqual(second.externalRecipes.map(recipe => recipe.meal), ['Cena', 'Cena']);
+  assert.deepEqual(encodeConversation({ messages: [{ id: 'm', role: 'bot', text: 'Opciones', externalRecipes: second.externalRecipes }], draft: '', maxTime: 30, busy: false }).messages[0].edamamRefs,
+    [{ uri, title: 'Tazón mexicano', meal: 'Cena' }, { uri: uri + 'two', title: 'Tacos de pollo', meal: 'Cena' }]);
   assert.equal(searches, 1);
   assert.equal(legacySaves, 0);
+});
+
+test('saved Edamam recipes get a meal category and keep it for library filters', async t => {
+  const items = [{ uri, title: 'Banana Oat Pancakes recipes', meal: null }];
+  const store = {
+    listEdamamFavorites: async () => items,
+    classifyEdamamFavorites: async changes => { items[0] = { ...items[0], ...changes[0] }; },
+    saveEdamamFavorite: async (savedUri, title, meal) => { items.push({ uri: savedUri, title, meal }); return { saved: true }; },
+  };
+  const server = createAppServer({ authentication: false, store, edamamAppId: 'id', edamamAppKey: 'key',
+    edamamChoices: async recipes => recipes.map(() => ({ titleEs: 'Panqueques de avena y banano', meal: 'Desayuno' })) });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  const base = `http://127.0.0.1:${server.address().port}/api/edamam/favorites`;
+  const listed = await (await fetch(base)).json();
+  assert.deepEqual(listed.items[0], { uri, title: 'Panqueques de avena y banano', meal: 'Desayuno' });
+  const saved = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri: uri + 'two', title: 'Tacos de pollo', meal: 'Cena' }) });
+  assert.equal(saved.status, 200);
+  assert.equal(items[1].meal, 'Cena');
 });
 test('authenticated deployment never falls back to deprecated Gemini recipe generation', async t => {
   let legacyCalls = 0;

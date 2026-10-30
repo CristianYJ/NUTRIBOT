@@ -36,7 +36,7 @@ export function validateChat(raw) {
       recipeIds.some((id) => !string(id, 100)) ||
       !Array.isArray(edamamRefs) || edamamRefs.length > 12 || edamamRefs.some(ref =>
         !ref || typeof ref.uri !== 'string' || !/^http:\/\/www\.edamam\.com\/ontologies\/edamam\.owl#recipe_[a-zA-Z0-9_-]{1,100}$/.test(ref.uri) ||
-        !string(ref.title, 150)) ||
+        !string(ref.title, 150) || (ref.meal != null && !['Desayuno', 'Almuerzo', 'Cena'].includes(ref.meal))) ||
       !Array.isArray(names) ||
       names.length > 20 ||
       names.some((name) => !string(name, 80))
@@ -50,7 +50,7 @@ export function validateChat(raw) {
       role: message.role,
       text: message.text,
       recipeIds,
-      edamamRefs,
+      edamamRefs: edamamRefs.map(({ uri, title, meal }) => ({ uri, title, ...(meal ? { meal } : {}) })),
       ...(Array.isArray(message.nutritionIngredientIds) && message.nutritionIngredientIds.length <= 28 && message.nutritionIngredientIds.every(id => string(id, 60))
         ? { nutritionIngredientIds: message.nutritionIngredientIds } : {}),
       ...(Array.isArray(message.missingIngredients) && message.missingIngredients.length <= 14 && message.missingIngredients.every(id => string(id, 100))

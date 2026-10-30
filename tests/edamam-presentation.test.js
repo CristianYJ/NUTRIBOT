@@ -4,14 +4,14 @@ import { presentEdamamRecipe, presentEdamamChoices } from '../server/edamam-pres
 import { hydrateEdamamMeals, summarizeMeals } from '../server/meals.js';
 
 test('Gemini translates Edamam ingredients without changing quantities and estimates difficulty', async () => {
-  const input = { title: 'Chicken rolls', ingredientLines: ['75g low-fat cheese', '3 flour tortillas'], time: 15 };
+  const input = { title: 'Chicken rolls', ingredientLines: ['75g low-fat cheese', '3 flour tortillas'], time: 15, meal: 'Almuerzo' };
   const result = await presentEdamamRecipe(input, { generate: async request => {
     assert.match(request.instruction, /no omitas alérgenos/i);
-    return { output: { titleEs: 'Rollitos de pollo', ingredientLinesEs: ['75 g de queso bajo en grasa', '3 tortillas de harina'], difficulty: 'Fácil' } };
+    return { output: { titleEs: 'Rollitos de pollo', meal: 'Cena', ingredientLinesEs: ['75 g de queso bajo en grasa', '3 tortillas de harina'], difficulty: 'Fácil' } };
   } });
-  assert.deepEqual(result, { titleEs: 'Rollitos de pollo', ingredientLinesEs: ['75 g de queso bajo en grasa', '3 tortillas de harina'], difficulty: 'Fácil' });
+  assert.deepEqual(result, { titleEs: 'Rollitos de pollo', meal: 'Almuerzo', ingredientLinesEs: ['75 g de queso bajo en grasa', '3 tortillas de harina'], difficulty: 'Fácil' });
   await assert.rejects(presentEdamamRecipe(input, { generate: async () => ({ output: {
-    titleEs: 'Rollitos de pollo', ingredientLinesEs: ['70 g de queso', '3 tortillas'], difficulty: 'Fácil',
+    titleEs: 'Rollitos de pollo', meal: 'Almuerzo', ingredientLinesEs: ['70 g de queso', '3 tortillas'], difficulty: 'Fácil',
   } }) }), { code: 'INVALID_AI_OUTPUT' });
 });
 

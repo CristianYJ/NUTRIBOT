@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    13,
+    14,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -114,11 +114,21 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   );
 });
 
-test('Edamam favorites retain only URI and title, stay within each account and clear on reset', async t => {
+test('Edamam saved recipes retain URI, title and meal without nutrition, stay within each account and clear on reset', async t => {
   const f = await fixture(t);
   const uri = 'http://www.edamam.com/ontologies/edamam.owl#recipe_test123';
-  await f.store.saveEdamamFavorite(uri, 'Test recipe');
-  assert.deepEqual(await (await f.reopen()).listEdamamFavorites(), [{ uri, title: 'Test recipe' }]);
+  await f.store.saveEdamamFavorite(uri, 'Test recipe', 'Desayuno');
+  assert.deepEqual(await (await f.reopen()).listEdamamFavorites(), [{ uri, title: 'Test recipe', meal: 'Desayuno' }]);
+  const placeholders = (await f.sql.query('SELECT nutrition_cache,nutrition_cache_source,nutrition_cache_updated_at FROM edamam_favorites WHERE recipe_uri=$1', [uri])).rows[0];
+  assert.deepEqual(placeholders, { nutrition_cache: null, nutrition_cache_source: null, nutrition_cache_updated_at: null });
+  const mealColumns = (await f.sql.query("SELECT column_name FROM information_schema.columns WHERE table_name='edamam_meal_log' AND column_name IN ('nutrition_snapshot','nutrition_source','nutrition_recorded_at') ORDER BY column_name")).rows;
+  assert.deepEqual(mealColumns.map(row => row.column_name), ['nutrition_recorded_at', 'nutrition_snapshot', 'nutrition_source']);
+  await f.store.classifyEdamamFavorites([{ uri, title: 'Receta de prueba', meal: 'Cena' }]);
+  assert.equal((await f.store.listEdamamFavorites())[0].meal, 'Desayuno');
+  const oldUri = 'http://www.edamam.com/ontologies/edamam.owl#recipe_old456';
+  await f.store.saveEdamamFavorite(oldUri, 'Old recipe');
+  await f.store.classifyEdamamFavorites([{ uri: oldUri, title: 'Receta anterior', meal: 'Cena' }]);
+  assert.deepEqual((await f.store.listEdamamFavorites())[0], { uri: oldUri, title: 'Receta anterior', meal: 'Cena' });
   const otherId = await f.store.auth.register({ name: 'Other recipe', email: 'edamam-fav@example.test', password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
   assert.deepEqual(await f.store.forProfile(otherId).listEdamamFavorites(), []);
   const state = await f.store.getState();
@@ -214,7 +224,7 @@ test('daily aggregate migration backfills available detailed metrics without acc
   await f.store.recordApiCall({ provider: 'edamam', operation: 'recipe_search',
     outcome: 'success', statusCode: 200, durationMs: 300 });
   await f.sql.query('DROP TABLE admin_daily_metrics');
-  await f.sql.query('DELETE FROM schema_migrations WHERE version=13');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14)');
   const reopened = await f.reopen();
   const rows = (await f.sql.query("SELECT source,category,outcome,total FROM admin_daily_metrics WHERE source='api'")).rows;
   assert.deepEqual(rows, [{ source: 'api', category: 'edamam', outcome: 'success', total: 1 }]);
@@ -682,7 +692,8 @@ test('Edamam meal events retain only URI and title, and stay isolated by account
   assert.equal(today.meals[0].nutrition,null);
   assert.equal(today.totals.kcal,null);
   const row=(await f.sql.query('SELECT * FROM edamam_meal_log WHERE id=$1',[id])).rows[0];
-  assert.deepEqual(Object.keys(row).sort(),['eaten_at','id','meal_date','meal_type','profile_id','recipe_title','recipe_uri'].sort());
+  assert.deepEqual(Object.keys(row).sort(),['eaten_at','id','meal_date','meal_type','nutrition_recorded_at','nutrition_snapshot','nutrition_source','profile_id','recipe_title','recipe_uri'].sort());
+  assert.equal(row.nutrition_snapshot, null);
   const otherId=await f.store.auth.register({name:'Another user',email:'edamam-meal@example.test',password:'A long test password 2026',birthDate:'2000-01-01'},false);
   assert.equal((await f.store.forProfile(otherId).getTodayMeals()).meals.length,0);
   await f.store.forProfile(otherId).removeMeal(id);

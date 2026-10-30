@@ -263,8 +263,28 @@ export function createAppServer({
         return json(res, 200, { foods: await searchUsdaFoods(url.searchParams.get('q'), usdaApiKey, trackedUsdaFetch) });
       }
       if (url.pathname === '/api/edamam/favorites') {
-        if (req.method === 'GET') return json(res, 200, { items: await store.listEdamamFavorites() });
-        if (req.method === 'POST') { const body = await readJson(req, 1000); return json(res, 200, await store.saveEdamamFavorite(validateEdamamUri(body.uri), body.title)); }
+        if (req.method === 'GET') {
+          let items = await store.listEdamamFavorites();
+          const uncategorized = items.filter(item => !item.meal).slice(0, 20);
+          if (uncategorized.length && store.classifyEdamamFavorites) {
+            try {
+              const choices = await edamamChoices(uncategorized, '', { apiKey, model, fetchImpl: trackedGeminiFetch });
+              await store.classifyEdamamFavorites(uncategorized.map((item, index) => ({ ...item, title: choices[index].titleEs, meal: choices[index].meal })));
+              items = await store.listEdamamFavorites();
+            } catch { /* Keep saved recipes visible in Todas if classification is unavailable. */ }
+          }
+          return json(res, 200, { items });
+        }
+        if (req.method === 'POST') {
+          const body = await readJson(req, 1000);
+          const uri = validateEdamamUri(body.uri);
+          let meal = body.meal || null;
+          if (!meal) {
+            try { meal = (await edamamChoices([{ title: body.title, mealTypes: [] }], '', { apiKey, model, fetchImpl: trackedGeminiFetch }))[0].meal; }
+            catch { /* A temporary classifier failure must not prevent saving. */ }
+          }
+          return json(res, 200, await store.saveEdamamFavorite(uri, body.title, meal));
+        }
         if (req.method === 'DELETE') { const body = await readJson(req, 1000); return json(res, 200, await store.removeEdamamFavorite(validateEdamamUri(body.uri))); }
         throw new AppError('METHOD_NOT_ALLOWED', 'Método no permitido.', 405);
       }

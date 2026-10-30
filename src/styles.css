@@ -2750,6 +2750,10 @@ main {
 .edamam-library-card .recipe-copy > p {min-height:1.5em;}
 .edamam-library-card .availability {margin-top:12px;}
 .edamam-detail-photo {background:#f0e2cb;}
+.edamam-dialog .edamam-detail-photo {z-index:2;overflow:visible;}
+.edamam-dialog .edamam-detail-photo > img {border-radius:24px 24px 0 0;}
+.edamam-dialog .edamam-detail-photo > .tag {bottom:8px;left:34px;z-index:3;}
+.edamam-library-empty {grid-column:1/-1;padding:24px;color:#63716e;text-align:center;}
 .edamam-glycemic {margin-top:22px;}
 .edamam-glycemic > div:first-child {display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#526057;margin-bottom:8px;}
 .edamam-glycemic strong {color:#142b21;}

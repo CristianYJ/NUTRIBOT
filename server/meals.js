@@ -1,5 +1,6 @@
 import {calorieEstimate} from '../src/calorie-estimate.js';
 import { AppError } from './recipes.js';
+import { validateEdamamUri } from './edamam.js';
 
 export const mealNutrients = ['kcal','carbs','fiber','protein','fat','saturatedFat','sugars','sodium','salt'];
 export function summarizeMeals(meals) {
@@ -30,6 +31,26 @@ export function summarizeWeek(date, meals) {
     return {date:key,count:entries.length,meals:entries,byMeal:summarizeMealTypes(entries),...summarizeMeals(entries)};
   });
 }
+export async function hydrateEdamamMeals(data, lookup, maxRecipes = 6, priorityDate = data.date) {
+  const prioritized = (data.week || []).find(day => day.date === priorityDate)?.meals || [];
+  const all = [...prioritized, ...(data.meals || []), ...(data.week || []).flatMap(day => day.meals || [])];
+  const uris = [...new Set(all.map(meal => meal.externalUri).filter(Boolean))];
+  const fetched = await Promise.allSettled(uris.slice(0,maxRecipes).map(uri => lookup(uri)));
+  const byUri = new Map(fetched.map((result,index) => [uris[index], result.status === 'fulfilled' ? result.value : null]));
+  const enrich = meal => {
+    const recipe = byUri.get(meal.externalUri);
+    if (!recipe) return meal;
+    const n = recipe.nutrientsPerServing || {};
+    const value = x => Number.isFinite(x) && x >= 0 ? x : null;
+    return {...meal,nutrition:{kcal:value(recipe.caloriesPerServing),carbs:value(n.carbohydratesG),fiber:value(n.fiberG),
+      protein:value(n.proteinG),fat:value(n.fatG),saturatedFat:value(n.saturatedFatG),sugars:value(n.sugarG),
+      sodium:value(n.sodiumMg),salt:Number.isFinite(n.sodiumMg) ? n.sodiumMg*2.5/1000 : null}};
+  };
+  const meals = data.meals.map(enrich);
+  const week = data.week?.map(day => { const entries = day.meals.map(enrich); return {...day,meals:entries,byMeal:summarizeMealTypes(entries),...summarizeMeals(entries)}; });
+  return {...data,meals,week,byMeal:summarizeMealTypes(meals),...summarizeMeals(meals),
+    externalNutritionPartial: uris.length > maxRecipes || fetched.some(result => result.status === 'rejected')};
+}
 function validateId(id) {
   if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
     throw new AppError('INVALID_MEAL','Registro de comida inválido.');
@@ -40,6 +61,8 @@ export function validateRating(rating) {
 }
 const publicMeal = row => ({id:row.id,recipeId:row.recipe_id,title:row.recipe_title,eatenAt:row.eaten_at,
   servings:1,rating:row.rating,mealType:row.nutrition_snapshot.mealType || row.category || null,classificationSource:row.nutrition_snapshot.mealType ? "recorded" : "recipe",nutrition:row.nutrition_snapshot.nutrition.perPerson});
+const publicEdamamMeal = row => ({id:row.id,recipeId:null,externalUri:row.recipe_uri,title:row.recipe_title,eatenAt:row.eaten_at,
+  servings:1,rating:null,mealType:row.meal_type,classificationSource:'recorded',nutrition:null});
 
 export function mealStore({transaction,profileId,readRecipeNutrition}) {
   const lock = c => c.query('SELECT id FROM profiles WHERE id=$1 FOR UPDATE',[profileId()]);
@@ -57,13 +80,18 @@ export function mealStore({transaction,profileId,readRecipeNutrition}) {
       return transaction(async c => {
         const date = (await c.query("SELECT to_char((now() AT TIME ZONE 'America/El_Salvador')::date,'YYYY-MM-DD') AS day")).rows[0].day;
         const meals = (await c.query('SELECT m.*,r.category FROM meal_log m JOIN recipes r ON r.id=m.recipe_id WHERE m.profile_id=$1 AND m.meal_date=$2 ORDER BY m.eaten_at DESC,m.id',[profileId(),date])).rows.map(publicMeal);
+        const edamamMeals = (await c.query('SELECT * FROM edamam_meal_log WHERE profile_id=$1 AND meal_date=$2 ORDER BY eaten_at DESC,id',[profileId(),date])).rows.map(publicEdamamMeal);
         const weekMeals = (await c.query(`SELECT m.*,r.category,to_char(m.meal_date,'YYYY-MM-DD') AS day FROM meal_log m JOIN recipes r ON r.id=m.recipe_id
           WHERE m.profile_id=$1 AND m.meal_date >= date_trunc('week',$2::date)::date
           AND m.meal_date < date_trunc('week',$2::date)::date + 7`,[profileId(),date])).rows.map(row=>({...publicMeal(row),date:row.day}));
+        const edamamWeek = (await c.query(`SELECT *,to_char(meal_date,'YYYY-MM-DD') AS day FROM edamam_meal_log
+          WHERE profile_id=$1 AND meal_date >= date_trunc('week',$2::date)::date
+          AND meal_date < date_trunc('week',$2::date)::date + 7`,[profileId(),date])).rows.map(row=>({...publicEdamamMeal(row),date:row.day}));
         const goalKcal=(await c.query('SELECT kcal FROM nutrition_goals WHERE profile_id=$1',[profileId()])).rows[0]?.kcal ?? null;
         const p=(await c.query("SELECT weight_kg,height_cm,to_char(birth_date,'YYYY-MM-DD') AS birth_date,calorie_sex,calorie_activity,calorie_estimate_eligible FROM profiles WHERE id=$1",[profileId()])).rows[0];
         const suggestedKcal=calorieEstimate({birthDate:p.birth_date,weight:p.weight_kg,height:p.height_cm,calorieSex:p.calorie_sex,calorieActivity:p.calorie_activity,calorieEstimateEligible:p.calorie_estimate_eligible},date);
-        return {date,goalKcal,suggestedKcal,timezone:'America/El_Salvador',meals,byMeal:summarizeMealTypes(meals),week:summarizeWeek(date,weekMeals),...summarizeMeals(meals)};
+        const today = [...meals,...edamamMeals].sort((a,b)=>new Date(b.eatenAt)-new Date(a.eatenAt));
+        return {date,goalKcal,suggestedKcal,timezone:'America/El_Salvador',meals:today,byMeal:summarizeMealTypes(today),week:summarizeWeek(date,[...weekMeals,...edamamWeek]),...summarizeMeals(today)};
       },true);
     },
     recordMeal(id,body) {
@@ -88,6 +116,24 @@ export function mealStore({transaction,profileId,readRecipeNutrition}) {
         return publicMeal(row);
       });
     },
+    recordEdamamMeal(id,body) {
+      validateId(id);
+      const uri = validateEdamamUri(body?.uri);
+      if (typeof body?.title !== 'string' || !body.title.trim() || body.title.length > 150)
+        throw new AppError('INVALID_RECIPE','Receta inválida.');
+      if (!mealTypes.includes(body?.mealType)) throw new AppError('INVALID_MEAL_TYPE','Selecciona desayuno, almuerzo o cena.');
+      return transaction(async c => {
+        await lock(c);
+        const existing = (await c.query('SELECT * FROM edamam_meal_log WHERE profile_id=$1 AND id=$2',[profileId(),id])).rows[0];
+        if (existing) {
+          if (existing.recipe_uri !== uri) throw new AppError('MEAL_CONFLICT','Ese registro pertenece a otra receta.',409);
+          return publicEdamamMeal(existing);
+        }
+        const row = (await c.query('INSERT INTO edamam_meal_log(profile_id,id,recipe_uri,recipe_title,meal_type) VALUES($1,$2,$3,$4,$5) RETURNING *',
+          [profileId(),id,uri,body.title.trim(),body.mealType])).rows[0];
+        return publicEdamamMeal(row);
+      });
+    },
     rateMeal(id,rating) {
       validateId(id); validateRating(rating);
       return transaction(async c => {
@@ -102,6 +148,7 @@ export function mealStore({transaction,profileId,readRecipeNutrition}) {
       return transaction(async c => {
         await lock(c);
         await c.query('DELETE FROM meal_log WHERE profile_id=$1 AND id=$2',[profileId(),id]);
+        await c.query('DELETE FROM edamam_meal_log WHERE profile_id=$1 AND id=$2',[profileId(),id]);
         return {removed:true};
       });
     },

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { landingSections, publicPage } from "../src/public-navigation.js";
+import { landingSections, privacySectionIds, publicPage } from "../src/public-navigation.js";
+import { jumpToPrivacySection } from "../src/privacy-navigation.js";
 import {
   acceptSession,
   accountRequest,
@@ -10,8 +11,25 @@ import {
 test("public sections stay on landing while account and protected routes require access", () => {
   for (const hash of ["", "#", ...landingSections.map((id) => "#" + id)])
     assert.equal(publicPage(hash), "landing");
+  assert.equal(publicPage("#politica-privacidad"), "privacy");
+  for (const id of privacySectionIds) assert.equal(publicPage("#" + id), "privacy");
   for (const hash of ["#auth", "#pantry", "#assistant", "#profile", "#recipes"])
     assert.equal(publicPage(hash), "auth");
+});
+
+test("privacy contents scroll to the section without leaving the privacy route", () => {
+  const actions = [];
+  const section = {
+    scrollIntoView: options => actions.push(["scroll", options.block]),
+    focus: options => actions.push(["focus", options.preventScroll]),
+  };
+  const context = {
+    doc: { getElementById: id => id === "datos" ? section : null },
+    navigation: { replaceState: (_state, _title, hash) => actions.push(["route", hash]) },
+  };
+  assert.equal(jumpToPrivacySection("datos", context), true);
+  assert.deepEqual(actions, [["route", "#politica-privacidad"], ["scroll", "start"], ["focus", true]]);
+  assert.equal(jumpToPrivacySection("pantry", context), false);
 });
 
 test("checking an email does not replace an existing session or its CSRF token", async (t) => {

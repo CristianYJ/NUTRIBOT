@@ -26,9 +26,11 @@ import { calculateRecipeNutrition } from "./nutrition.js";
 import { estimatedGrams } from "./auto-nutrition.js";
 import { mealStore } from './meals.js';
 import { createPlanUsage } from './plan-usage.js';
+import { createAdminDiagnostics } from './admin-diagnostics.js';
+import { createAdminAnalytics } from './admin-analytics.js';
 
 export async function openDatabase(options = {}) {
-  const { schema = "nutribot", ...connection } = options;
+  const { schema = "nutribot", adminEmail = '', ...connection } = options;
   if (!/^[a-z][a-z0-9_]{0,62}$/.test(schema))
     throw new Error("Esquema inválido");
   const pool = new pg.Pool(
@@ -332,7 +334,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 8) throw new Error("Esquema de una versión posterior");
+      if (version > 16) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -414,6 +416,39 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/008_nutrition_goal.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(8)');
       }
+      if (version < 9) {
+        await c.query(readFileSync(new URL('./postgres/009_edamam_favorites.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(9)');
+      }
+      if (version < 10) {
+        await c.query(readFileSync(new URL('./postgres/010_admin_diagnostics.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(10)');
+      }
+      if (version < 11) {
+        await c.query(readFileSync(new URL('./postgres/011_edamam_meals.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(11)');
+      }
+      if (version < 12) {
+        await c.query(readFileSync(new URL('./postgres/012_admin_api_metrics.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(12)');
+      }
+      if (version < 13) {
+        await c.query(readFileSync(new URL('./postgres/013_admin_daily_metrics.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(13)');
+      }
+      if (version < 14) {
+        await c.query(readFileSync(new URL('./postgres/014_edamam_saved_meal.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(14)');
+      }
+      if (version < 15) {
+        await c.query(readFileSync(new URL('./postgres/015_edamam_presentation_cache.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(15)');
+      }
+      if (version < 16) {
+        await c.query(readFileSync(new URL('./postgres/016_account_roles.sql', import.meta.url), 'utf8'));
+        if (adminEmail) await c.query("UPDATE profiles SET role_code='admin' WHERE email=$1", [adminEmail.trim().toLowerCase()]);
+        await c.query('INSERT INTO schema_migrations(version) VALUES(16)');
+      }
     });
   } catch (error) {
     await pool.end();
@@ -447,6 +482,8 @@ export async function openDatabase(options = {}) {
   }
   const usage = createPlanUsage({ transaction, profileId });
   const store = {
+    ...createAdminDiagnostics({ transaction, profileId, pool }),
+    ...createAdminAnalytics({ transaction }),
     ...mealStore({transaction,profileId,readRecipeNutrition}),
     getUsage: usage.getUsage,
     reserveUsage: usage.reserveUsage,
@@ -459,6 +496,43 @@ export async function openDatabase(options = {}) {
       return true;
     },
     getState: () => transaction(readState, true),
+    getEdamamPresentation(uri, kind, hash) { return transaction(async c => {
+      const row = (await c.query(
+        'SELECT title_es,ingredient_lines_es,difficulty,meal FROM edamam_presentation_cache WHERE recipe_uri=$1 AND kind=$2 AND input_hash=$3',
+        [uri, kind, hash],
+      )).rows[0];
+      return row ? { titleEs: row.title_es, ingredientLinesEs: row.ingredient_lines_es,
+        difficulty: row.difficulty, meal: row.meal } : null;
+    }, true); },
+    saveEdamamPresentation({ uri, title, kind, hash, titleEs, ingredientLinesEs = null, difficulty = null, meal = null }) {
+      return transaction(async c => {
+        await c.query(`INSERT INTO edamam_presentation_cache
+          (recipe_uri,recipe_title,kind,input_hash,title_es,ingredient_lines_es,difficulty,meal)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
+        [uri, title, kind, hash, titleEs, ingredientLinesEs === null ? null : JSON.stringify(ingredientLinesEs), difficulty, meal]);
+      });
+    },
+    listEdamamFavorites: () => transaction(async c => (await c.query(
+      'SELECT recipe_uri AS uri,title,meal FROM edamam_favorites WHERE profile_id=$1 ORDER BY created_at DESC', [profileId()],
+    )).rows, true),
+    saveEdamamFavorite(uri, title, meal = null) {
+      if (typeof title !== 'string' || !title.trim() || title.length > 150) throw new AppError('INVALID_RECIPE', 'El nombre de la receta no es válido.');
+      if (meal !== null && !['Desayuno', 'Almuerzo', 'Cena'].includes(meal)) throw new AppError('INVALID_RECIPE', 'La categoría de la receta no es válida.');
+      return transaction(async c => {
+        await c.query('INSERT INTO edamam_favorites(profile_id,recipe_uri,title,meal) VALUES($1,$2,$3,$4) ON CONFLICT(profile_id,recipe_uri) DO UPDATE SET title=EXCLUDED.title, meal=COALESCE(EXCLUDED.meal,edamam_favorites.meal)', [profileId(), uri, title.trim(), meal]);
+        return { saved: true };
+      });
+    },
+    classifyEdamamFavorites(items) { return transaction(async c => {
+      for (const item of items) {
+        if (!['Desayuno', 'Almuerzo', 'Cena'].includes(item.meal)) continue;
+        await c.query('UPDATE edamam_favorites SET meal=$3, title=$4 WHERE profile_id=$1 AND recipe_uri=$2 AND meal IS NULL', [profileId(), item.uri, item.meal, item.title]);
+      }
+    }); },
+    removeEdamamFavorite(uri) { return transaction(async c => {
+      await c.query('DELETE FROM edamam_favorites WHERE profile_id=$1 AND recipe_uri=$2', [profileId(), uri]);
+      return { saved: false };
+    }); },
     getIngredientNutritionItems(ids) {
       if (!Array.isArray(ids) || ids.length > 28 || ids.some((id) => typeof id !== 'string' || !id || id.length > 60))
         throw new AppError('INVALID_INGREDIENT', 'Lista de ingredientes inválida.');
@@ -625,11 +699,13 @@ export async function openDatabase(options = {}) {
         await checkRevision(c, expected);
         for (const table of [
           "meal_log",
+          "edamam_meal_log",
           "nutrition_goals",
           "recipe_gram_overrides",
           "ingredient_usda_links",
           "meal_plans",
           "favorites",
+          "edamam_favorites",
           "recipe_feedback",
           "generation_events",
         ])
@@ -726,7 +802,7 @@ export async function openDatabase(options = {}) {
       transaction(
         async (c) => ({
           provider: "postgresql",
-          schemaVersion: 8,
+          schemaVersion: 11,
           ingredients: Number(
             (await c.query("SELECT count(*) AS n FROM ingredients")).rows[0].n,
           ),
@@ -783,6 +859,7 @@ export async function openDatabase(options = {}) {
       "getTodayMeals",
         "setNutritionGoal",
       "recordMeal",
+      "recordEdamamMeal",
       "rateMeal",
       "removeMeal",
       "getUsage",
@@ -792,6 +869,12 @@ export async function openDatabase(options = {}) {
       "saveState",
       "addPantry",
       "saveGenerated",
+      "recordAdminEvent",
+      "listEdamamFavorites",
+      "getEdamamPresentation",
+      "saveEdamamPresentation",
+      "saveEdamamFavorite",
+      "removeEdamamFavorite",
       "getRecipeNutrition",
       "getIngredientNutritionItems",
       "setRecipeGrams",

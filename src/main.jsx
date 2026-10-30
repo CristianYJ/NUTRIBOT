@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
 import PwaWelcome from "./PwaWelcome.jsx";
 import PwaInstall from "./PwaInstall.jsx";
+import CookieBanner from "./CookieBanner.jsx";
 import { initializePwa } from "./pwa.js";
 import "./pwa.css";
 import "./styles.css";
@@ -14,6 +15,7 @@ createRoot(document.getElementById("root")).render(
     <PwaWelcome>
       <PwaInstall />
       <App />
+      <CookieBanner />
     </PwaWelcome>
   </React.StrictMode>,
 );

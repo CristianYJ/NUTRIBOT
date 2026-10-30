@@ -1,0 +1,159 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createEdamam, edamamFilters, makeSearchUrl, requestedServings, shapeRecipe, validateEdamamUri } from '../server/edamam.js';
+import { createAppServer } from '../server/app.js';
+import { ingredients } from '../src/data.js';
+import { encodeConversation } from '../src/useChatPersistence.js';
+
+const uri = 'http://www.edamam.com/ontologies/edamam.owl#recipe_abc123';
+const input = { maxTime: 30, profile: { diet: 'Vegana', allergies: ['Maní', 'Leche'], exclusions: 'cebolla; ajo' } };
+test('Edamam search applies trusted profile filters and keeps credentials server side', () => {
+  assert.deepEqual(edamamFilters(input), { health: ['peanut-free', 'dairy-free', 'vegan'], excluded: ['cebolla', 'ajo'] });
+  const url = makeSearchUrl(input, { query: 'tomato rice', mealType: 'Dinner' }, 'private-id', 'private-key');
+  assert.equal(url.searchParams.get('q'), 'tomato rice');
+  assert.equal(url.searchParams.get('time'), '30');
+  assert.deepEqual(url.searchParams.getAll('health'), ['peanut-free', 'dairy-free', 'vegan']);
+  assert.equal(url.searchParams.getAll('field').includes('glycemicIndex'), true);
+  assert.throws(() => validateEdamamUri('https://evil.example/recipe'));
+});
+test('recipe result shows actual glycemic index and marks absent values unavailable', () => {
+  const base = { uri, label: 'Rice bowl', yield: 2, calories: 500, ingredients: [{ food: 'rice' }], ingredientLines: ['rice'] };
+  const terms = [{ id: 'arroz', english: 'rice' }];
+  assert.equal(shapeRecipe({ ...base, glycemicIndex: 42 }, terms).glycemicIndex, 42);
+  assert.equal(shapeRecipe(base, terms).glycemicIndex, null);
+  assert.equal(shapeRecipe(base, terms).caloriesPerServing, 250);
+  assert.equal(shapeRecipe(base, terms).servings, 2);
+  assert.equal(shapeRecipe({ ...base, yield: 12 }, terms).servings, 12);
+  assert.equal(shapeRecipe({ ...base, yield: undefined }, terms).servings, null);
+  assert.equal(shapeRecipe({ ...base, yield: undefined }, terms).caloriesPerServing, null);
+  assert.deepEqual(shapeRecipe({ ...base, mealType: ['Breakfast'] }, terms).mealTypes, ['Breakfast']);
+  assert.deepEqual(shapeRecipe(base, terms).matched, ['arroz']);
+});
+
+test('recipe detail returns a matching cached Spanish presentation with the Edamam data', async t => {
+  let lookups = 0;
+  const translated = { titleEs: 'Tazón de arroz', ingredientLinesEs: ['1 taza de arroz'], difficulty: 'Fácil', meal: 'Almuerzo' };
+  const server = createAppServer({ authentication: false, store: { getEdamamPresentation: async () => { lookups++; return translated; } },
+    edamamAppId: 'id', edamamAppKey: 'key',
+    edamamFetch: async () => ({ ok: true, json: async () => ({ hits: [{ recipe: {
+      uri, label: 'Rice bowl', yield: 2, ingredientLines: ['1 cup rice'], ingredients: [{ food: 'rice' }], mealType: ['Lunch'],
+    } }] }) }),
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/edamam/detail?uri=${encodeURIComponent(uri)}&meal=Almuerzo`);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.recipe.title, 'Rice bowl');
+  assert.deepEqual(body.presentation, translated);
+  assert.equal(lookups, 1);
+});
+test('one search call ranks pantry terms and excludes results missing requested allergy labels', async () => {
+  let calls = 0;
+  const api = createEdamam({ appId: 'id', appKey: 'key', fetchImpl: async () => {
+    calls++;
+    return { ok: true, json: async () => ({ hits: [
+      { recipe: { uri, label: 'Safe', healthLabels: ['Peanut-Free', 'Dairy-Free', 'Vegan'], ingredients: [{ food: 'rice' }] } },
+      { recipe: { uri: uri + 'x', label: 'Unsafe', healthLabels: ['Vegan'], ingredients: [{ food: 'rice' }] } },
+    ] }) };
+  } });
+  const result = await api.search(input, { query: 'rice', terms: [{ id: 'arroz', english: 'rice' }] });
+  assert.equal(calls, 1);
+  assert.deepEqual(result.recipes.map(r => r.title), ['Safe']);
+});
+test('HTTP suggestion uses Edamam without saving full recipes or calling legacy Gemini generation', async t => {
+  let legacyCalls = 0, searches = 0;
+  const store = { getState: async () => ({ revision: 0, pantry: ['arroz'], ingredients,
+    profile: { diet: 'Sin preferencia', allergies: [], exclusions: '', needsReview: false }, generated: [] }),
+    saveGenerated: async () => { legacyCalls++; } };
+  const server = createAppServer({ authentication: false, store, edamamAppId: 'id', edamamAppKey: 'key',
+    edamamPlan: async () => ({ intent: 'recipe', servings: 2, reply: 'Encontré opciones.', query: 'rice', terms: [{ id: 'arroz', english: 'rice' }] }),
+    edamamFetch: async () => { searches++; return { ok: true, json: async () => ({ hits: [{ recipe: { uri, label: 'Rice bowl', healthLabels: [], ingredients: [{ food: 'rice' }], glycemicIndex: 51 } }] }) }; },
+    generate: async () => { legacyCalls++; throw new Error('Legacy generation called'); } });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/recipes/suggest`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ revision: 0, maxTime: 30, message: 'Arroz', mode: 'initial' }) });
+  const result = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(result.source, 'edamam');
+  assert.equal(result.externalRecipes[0].glycemicIndex, 51);
+  assert.equal(searches, 1);
+  assert.equal(legacyCalls, 0);
+  const persisted = encodeConversation({ messages: [{ id: 'm', role: 'bot', text: 'Listo', externalRecipes: result.externalRecipes }], draft: '', maxTime: 30, busy: false });
+  assert.deepEqual(persisted.messages[0].edamamRefs, [{ uri, title: 'Rice bowl' }]);
+  assert.equal(JSON.stringify(persisted).includes('glycemicIndex'), false);
+});
+test('Mexican dinner follow-up asks servings, then returns two distinct Edamam options', async t => {
+  assert.equal(requestedServings('2 personas'), 2);
+  let searches = 0, legacySaves = 0;
+  const store = { getState: async () => ({ revision: 0, pantry: ['arroz', 'pollo', 'tortilla'], ingredients,
+    profile: { diet: 'Sin preferencia', allergies: [], exclusions: '', needsReview: false }, generated: [] }),
+    saveGenerated: async () => { legacySaves++; } };
+  const server = createAppServer({ authentication: false, store, edamamAppId: 'id', edamamAppKey: 'key',
+    edamamPlan: async input => ({ intent: 'recipe', servings: requestedServings(input.message), query: 'chicken tortilla',
+      terms: [{ id: 'pollo', english: 'chicken' }], mealType: 'Dinner', cuisineType: 'Mexican' }),
+    edamamChoices: async () => [{ titleEs: 'Tazón mexicano', meal: 'Cena' }, { titleEs: 'Tacos de pollo', meal: 'Cena' }],
+    edamamFetch: async () => { searches++; return { ok: true, json: async () => ({ hits: [
+      { recipe: { uri, label: 'Mexican bowl', healthLabels: [], ingredients: [{ food: 'chicken' }] } },
+      { recipe: { uri: uri + 'two', label: 'Chicken tacos', healthLabels: [], ingredients: [{ food: 'chicken' }] } },
+      { recipe: { uri: uri + 'three', label: 'Mexican bowl', healthLabels: [], ingredients: [{ food: 'chicken' }] } },
+    ] }) }; } });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  const send = async (message, history = []) => {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/recipes/suggest`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ revision: 0, maxTime: 30, message, mode: 'initial', history }) });
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const first = await send('Quiero algo mexicano de cenar');
+  assert.equal(first.type, 'conversation');
+  assert.match(first.text, /cuántas personas/i);
+  assert.equal(searches, 0);
+  const second = await send('2 personas', [{ role: 'user', text: 'Quiero algo mexicano de cenar' }, { role: 'bot', text: first.text, type: 'conversation' }]);
+  assert.equal(second.source, 'edamam');
+  assert.equal(second.servings, 2);
+  assert.deepEqual(second.externalRecipes.map(recipe => recipe.title), ['Mexican bowl', 'Chicken tacos']);
+  assert.deepEqual(second.externalRecipes.map(recipe => recipe.titleEs), ['Tazón mexicano', 'Tacos de pollo']);
+  assert.deepEqual(second.externalRecipes.map(recipe => recipe.meal), ['Cena', 'Cena']);
+  assert.deepEqual(encodeConversation({ messages: [{ id: 'm', role: 'bot', text: 'Opciones', externalRecipes: second.externalRecipes }], draft: '', maxTime: 30, busy: false }).messages[0].edamamRefs,
+    [{ uri, title: 'Tazón mexicano', meal: 'Cena' }, { uri: uri + 'two', title: 'Tacos de pollo', meal: 'Cena' }]);
+  assert.equal(searches, 1);
+  assert.equal(legacySaves, 0);
+});
+
+test('saved Edamam recipes get a meal category and keep it for library filters', async t => {
+  const items = [{ uri, title: 'Banana Oat Pancakes recipes', meal: null }];
+  const store = {
+    listEdamamFavorites: async () => items,
+    classifyEdamamFavorites: async changes => { items[0] = { ...items[0], ...changes[0] }; },
+    saveEdamamFavorite: async (savedUri, title, meal) => { items.push({ uri: savedUri, title, meal }); return { saved: true }; },
+  };
+  const server = createAppServer({ authentication: false, store, edamamAppId: 'id', edamamAppKey: 'key',
+    edamamChoices: async recipes => recipes.map(() => ({ titleEs: 'Panqueques de avena y banano', meal: 'Desayuno' })) });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  const base = `http://127.0.0.1:${server.address().port}/api/edamam/favorites`;
+  const listed = await (await fetch(base)).json();
+  assert.deepEqual(listed.items[0], { uri, title: 'Panqueques de avena y banano', meal: 'Desayuno' });
+  const saved = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri: uri + 'two', title: 'Tacos de pollo', meal: 'Cena' }) });
+  assert.equal(saved.status, 200);
+  assert.equal(items[1].meal, 'Cena');
+});
+test('authenticated deployment never falls back to deprecated Gemini recipe generation', async t => {
+  let legacyCalls = 0;
+  const root = { auth: { findSession: async () => ({ profileId: 1 }) }, forProfile: () => ({}),
+    isAdmin: async () => false };
+  const server = createAppServer({ store: root, generate: async () => { legacyCalls++; } });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/recipes/suggest`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: `nutribot_session=${'a'.repeat(64)}`,
+      'X-Nutribot-CSRF': (await import('node:crypto')).createHmac('sha256', 'a'.repeat(64)).update('nutribot-csrf-v1').digest('hex') },
+    body: JSON.stringify({ revision: 0, maxTime: 30, message: 'Una idea para hoy' }) });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, 'EDAMAM_UNCONFIGURED');
+  assert.equal(legacyCalls, 0);
+});

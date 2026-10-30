@@ -7,6 +7,9 @@ export function recipeContext(messages = []) {
       role: m.role, text: m.text.slice(0, 1000),
       ...(Number.isInteger(m.servings) && m.servings >= 1 && m.servings <= 12 ? { servings: m.servings } : {}),
       recipeIds: ids(m.recipeIds || (Array.isArray(m.recipes) ? m.recipes.map(r => r?.id) : [])).slice(0, 2),
+      ...(Array.isArray(m.edamamRefs || m.externalRecipes) ? { edamamRefs: (m.edamamRefs || m.externalRecipes)
+        .filter(ref => ref && typeof ref.uri === 'string' && /^http:\/\/www\.edamam\.com\/ontologies\/edamam\.owl#recipe_[a-zA-Z0-9_-]{1,100}$/.test(ref.uri))
+        .slice(0, 2).map(ref => ({ uri: ref.uri })) } : {}),
       ...(Array.isArray(m.missingIngredients) ? { missingIngredients: ids(m.missingIngredients).slice(0, 14) } : {}),
     }));
 }

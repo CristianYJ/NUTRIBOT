@@ -1,4 +1,4 @@
-export const pageIds = ["home", "pantry", "assistant", "recipes", "profile"];
+export const pageIds = ["home", "pantry", "assistant", "recipes", "profile", "admin"];
 
 export function readNavigation(url) {
   const page = url.hash.slice(1);

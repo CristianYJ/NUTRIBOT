@@ -15,6 +15,7 @@ export default function CulinaryHeader({
   onLogout,
   loggingOut,
   onConnect,
+  onAdmin,
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
@@ -112,6 +113,7 @@ export default function CulinaryHeader({
       </form>
       <nav className="culinary-navigation" aria-label="Navegación principal">
         {[
+          ...(onAdmin ? [["admin", "Admin"]] : []),
           ["home", "Inicio"],
           ["pantry", "Mi despensa"],
           ["assistant", "NutriBot IA"],

@@ -12,19 +12,18 @@ async function mealRequest(path,method='GET',body) {
   if(!response.ok) throw new Error(data.text || 'No se pudo guardar la comida.');
   return data;
 }
-export function useMeals() {
+export function useMeals(includeEdamam = false) {
   const [data,setData]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const pending=useRef(false),sequence=useRef(0);
-  const refresh=useCallback(async()=>{
+  const refresh=useCallback(async(priorityDate)=>{
     const seq=++sequence.current;
-    try {const next=await mealRequest('today');if(seq===sequence.current){setData(next);setError('');}}
+    try {const next=await mealRequest(`today${includeEdamam ? `?includeEdamam=1${priorityDate ? `&priorityDate=${encodeURIComponent(priorityDate)}` : ''}` : ''}`);if(seq===sequence.current){setData(next);setError('');}}
     catch(e){if(seq===sequence.current)setError('No se pudo consultar tu registro de comidas.');throw e;}
-  },[]);
+  },[includeEdamam]);
   useEffect(()=>{
     const update=()=>{if(document.visibilityState==='visible' && !pending.current)refresh().catch(()=>{});};
-    update();const interval=setInterval(update,60000);
-    document.addEventListener('visibilitychange',update);window.addEventListener('focus',update);
-    return()=>{++sequence.current;clearInterval(interval);document.removeEventListener('visibilitychange',update);window.removeEventListener('focus',update);};
+    update();document.addEventListener('visibilitychange',update);
+    return()=>{++sequence.current;document.removeEventListener('visibilitychange',update);};
   },[refresh]);
   const change=async(path,method,body)=>{
     if(pending.current)throw new Error('Espera a que termine el guardado.');
@@ -40,7 +39,8 @@ export function MealFeedback({recipe,tracker}) {
   const [adding,setAdding]=useState(false),[notice,setNotice]=useState('');
   const [mealType,setMealType]=useState(['Desayuno','Almuerzo','Cena'].includes(recipe.category) ? recipe.category : 'Almuerzo');
   const requestId=useRef(newId());
-  const entry=tracker.data?.meals.find(m=>m.recipeId===recipe.id);
+  const external=Boolean(recipe.uri);
+  const entry=tracker.data?.meals.find(m=>external ? m.externalUri===recipe.uri : m.recipeId===recipe.id);
   const run=async(action)=>{setNotice('');try{await action();}catch{/* Shared error is displayed below. */}};
   return <section className="meal-feedback" aria-label="Registrar esta comida">
     {!entry || adding ? <>
@@ -48,11 +48,11 @@ export function MealFeedback({recipe,tracker}) {
         <p>Se registrará una porción para ti, aunque la receta sea para más personas.</p></div>
       <label className="meal-type-label">¿En qué comida?<select value={mealType} disabled={tracker.busy} onChange={event=>setMealType(event.target.value)}>{['Desayuno','Almuerzo','Cena'].map(type=><option key={type}>{type}</option>)}</select></label>
       <div className="meal-actions"><button className="btn primary" disabled={tracker.busy || !tracker.data || Boolean(tracker.error)} onClick={()=>run(async()=>{
-        await tracker.change(requestId.current,'PUT',{recipeId:recipe.id,mealType});setAdding(false);requestId.current=newId();
+        await tracker.change(external ? `edamam/${requestId.current}` : requestId.current,'PUT',external ? {uri:recipe.uri,mealType} : {recipeId:recipe.id,mealType});setAdding(false);requestId.current=newId();
       })}>{tracker.busy ? 'Guardando…' : 'Sí, ya la comí'}</button>
       <button className="btn secondary" disabled={tracker.busy} onClick={()=>{setAdding(false);setNotice('Cuando la comas, puedes registrarla aquí.');}}>Aún no</button></div>
     </> : <>
-      <div role="status"><h3>Comida registrada</h3><p>Una porción añadida a tu consumo de hoy. Los nutrientes disponibles ya se incluyen en Inicio.</p></div>
+      <div role="status"><h3>Comida registrada</h3><p>Una porción añadida a tu consumo de hoy. {external ? 'Los nutrientes de Edamam se consultarán al abrir Inicio.' : 'Los nutrientes disponibles ya se incluyen en Inicio.'}</p></div>
       <div className="meal-actions"><button className="text-btn" disabled={tracker.busy} onClick={()=>{requestId.current=newId();setAdding(true);}}>Registrar otra porción</button>
         <button className="text-btn" disabled={tracker.busy} onClick={()=>run(()=>tracker.change(entry.id,'DELETE'))}>Deshacer este registro</button></div>
     </>}
@@ -110,7 +110,7 @@ export function DailyNutrition({tracker,onProfile}) {
         const future=day.date>current.date;
         const unknown=day.count>0 && day.missing.kcal===day.count;
         const label=new Date(day.date+'T12:00:00Z').toLocaleDateString('es-SV',{weekday:'short',timeZone:'UTC'});
-        return <button type="button" key={day.date} disabled={future} onClick={()=>setSelectedDate(day.date)} aria-pressed={day.date===data.date} aria-label={`Consultar nutrición del ${day.date.split('-').reverse().join('/')}`} className={`nutrition-day${day.date===data.date ? ' is-today' : ''}${future ? ' is-future' : ''}`} aria-current={day.date===current.date ? 'date' : undefined}>
+        return <button type="button" key={day.date} disabled={future} onClick={()=>{setSelectedDate(day.date);if(day.date!==current.date)tracker.refresh(day.date).catch(()=>{});}} aria-pressed={day.date===data.date} aria-label={`Consultar nutrición del ${day.date.split('-').reverse().join('/')}`} className={`nutrition-day${day.date===data.date ? ' is-today' : ''}${future ? ' is-future' : ''}`} aria-current={day.date===current.date ? 'date' : undefined}>
           <span>{label}</span><strong>{Number(day.date.slice(-2))}</strong><b>{future || !day.count || unknown ? '—' : number(day.knownTotals.kcal)}</b>
         </button>;
       })}</div>}
@@ -129,6 +129,7 @@ export function DailyNutrition({tracker,onProfile}) {
       </div>
       <div className="nutrient-pagination">{[0,1].map(index=><button key={index} aria-label={index===0 ? 'Ver carbohidratos, proteína y grasa' : 'Ver fibra, azúcares y sodio'} aria-pressed={page===index} onClick={()=>slider.current?.scrollTo({left:slider.current.clientWidth*index,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'})}><span /></button>)}</div>
       {!data.complete && <p className="review-note">Faltan datos nutricionales en algunas comidas.</p>}
+      {data.externalNutritionPartial && <p className="review-note">Algunas recetas de Edamam no pudieron consultarse ahora. <button className="text-btn" onClick={()=>tracker.refresh(data.date).catch(()=>{})}>Actualizar este día</button></p>}
       {data.meals.length>0 && <details key={data.date} className="daily-meal-list"><summary>Comidas registradas ({data.meals.length})</summary>{data.meals.map(meal=><div key={meal.id}><span><strong>{meal.title}</strong><small>1 porción{meal.rating ? ` · ${meal.rating}/5 estrellas` : ''}</small></span><button className="btn secondary" aria-label={`Quitar registro de ${meal.title}`} disabled={busy} onClick={()=>tracker.change(meal.id,'DELETE').catch(()=>{})}>Quitar</button></div>)}</details>}
     </>}
   </section>;

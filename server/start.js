@@ -24,7 +24,7 @@ export async function startNutribot(development = false) {
     network.proxySecret = development
       ? randomBytes(32).toString("hex")
       : deployment?.proxySecret;
-    store = await openDatabase();
+    store = await openDatabase({ adminEmail: config.adminEmail });
     api = createAppServer({
       ...config,
       store,

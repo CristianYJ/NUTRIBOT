@@ -16,8 +16,9 @@ export function usageWindow(feature, now = new Date()) {
 
 export function createPlanUsage({ transaction, profileId }) {
   async function account(c, lock = false) {
-    const { rows } = await c.query(`SELECT plan_code FROM profiles WHERE id=$1${lock ? ' FOR UPDATE' : ''}`, [profileId()]);
-    const plan = planCatalog[rows[0]?.plan_code];
+    const { rows } = await c.query(`SELECT plan_code,role_code FROM profiles WHERE id=$1${lock ? ' FOR UPDATE' : ''}`, [profileId()]);
+    const isAdmin = rows[0]?.role_code === 'admin';
+    const plan = isAdmin ? { ...planCatalog.nutripro_plus, code: 'goat', name: 'GOAT Mode' } : planCatalog[rows[0]?.plan_code];
     if (!plan) throw new AppError('PLAN_UNAVAILABLE', 'No se pudo comprobar el plan de tu cuenta.', 503);
     const now = (await c.query('SELECT clock_timestamp() AS now')).rows[0].now;
     return { plan, now };

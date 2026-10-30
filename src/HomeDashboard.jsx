@@ -14,7 +14,7 @@ export default function HomeDashboard({tracker,profile,pantry,dates,ingredients,
     document.addEventListener('visibilitychange',update);
     return () => {clearInterval(timer);document.removeEventListener('visibilitychange',update);};
   },[]);
-  const {foods,soon,past,suggestions,groups,fortnight,urgent} = kitchenOverview({pantry,dates,ingredients,recipes,profile,today});
+  const {foods,soon,past,groups,fortnight,urgent} = kitchenOverview({pantry,dates,ingredients,recipes:[],profile,today});
   const expiryNames = list => list.slice(0,3).map(item => `${item.name} (${item.expiry.detail.toLowerCase()}${item.expiry.estimated ? ', estimado' : ''})`).join(', ');
   return <div className="page-enter home-dashboard">
     <DailyNutrition tracker={tracker} onProfile={()=>onNavigate('profile')} />
@@ -33,23 +33,10 @@ export default function HomeDashboard({tracker,profile,pantry,dates,ingredients,
 
     <div className="dashboard-content">
       <section aria-labelledby="dashboard-recipes-title">
-        <div className="dashboard-section-heading"><div><span className="dashboard-kicker"></span><h2 id="dashboard-recipes-title">Recetas para hoy</h2></div>
-          <button className="btn secondary dashboard-section-button" onClick={() => onNavigate('recipes')}>Ver todas<Icon name="chevron" size={16} /></button></div>
-        <div className="dashboard-recipes">{suggestions.slice(0,3).map(recipe => <article key={recipe.id} className="dashboard-recipe">
-          <button className={`dashboard-recipe-picture${recipe.photo ? '' : ' illustrated'}`} aria-label={`Ver ${recipe.title}`} onClick={() => onOpenRecipe(recipe)}>
-            {recipe.photo ? <img src="/bowl-nutribot.png" alt={recipe.title} /> : <span aria-hidden="true">{recipe.emoji || '🍽️'}</span>}
-            <small>En tu despensa</small>
-          </button>
-          <div className="dashboard-recipe-copy"><span className="dashboard-meal">{recipe.category}</span>
-            <button className="title-link" onClick={() => onOpenRecipe(recipe)}><h3>{recipe.title}</h3></button><p>{recipe.subtitle}</p>
-            <div className="dashboard-recipe-meta"><span><Icon name="clock" size={15} />{recipe.time} min</span><span>{recipe.ingredients.length} ingredientes</span>
-              <button aria-label={`Abrir ${recipe.title}`} onClick={() => onOpenRecipe(recipe)}><Icon name="arrow" size={20} /></button></div>
-          </div>
-          <button className={`dashboard-save${saved.includes(recipe.id) ? ' saved' : ''}`} aria-label={`${saved.includes(recipe.id) ? 'Quitar de favoritas' : 'Guardar en favoritas'} ${recipe.title}`} aria-pressed={saved.includes(recipe.id)} onClick={() => onSave(recipe.id)}><Icon name="heart" size={20} /></button>
-        </article>)}</div>
-        {!suggestions.length && <div className="dashboard-empty"><Icon name="chef" size={36} /><h3>Tu próxima receta empieza aquí</h3>
-          <p>{foods.length ? 'Todavía no hay recetas rápidas guardadas que coincidan con tu despensa y tus preferencias.' : 'Añade algunos ingredientes y busquemos qué cocinar.'}</p>
-          <button className="btn primary" onClick={() => onNavigate(foods.length ? 'assistant' : 'pantry')}>{foods.length ? 'Buscar una idea en el chat' : 'Agregar ingredientes'}<Icon name="arrow" size={18} /></button></div>}
+        <div className="dashboard-section-heading"><div><span className="dashboard-kicker"></span><h2 id="dashboard-recipes-title">Ideas nuevas con tu despensa</h2></div></div>
+        <div className="dashboard-empty"><Icon name="chef" size={36} /><h3>Encuentra dos opciones nuevas</h3>
+          <p>{foods.length ? 'Cuéntale a Nutribot qué se te antoja. Buscará recetas de Edamam con tus ingredientes y preferencias.' : 'Añade algunos ingredientes y después buscaremos recetas con tu despensa.'}</p>
+          <button className="btn primary" onClick={() => onNavigate(foods.length ? 'assistant' : 'pantry')}>{foods.length ? 'Buscar recetas en el chat' : 'Agregar ingredientes'}<Icon name="arrow" size={18} /></button></div>
       </section>
 
 

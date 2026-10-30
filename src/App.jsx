@@ -5,6 +5,7 @@ import PantryWorkspace from "./PantryWorkspace.jsx";
 import { authenticatedFetch } from "./auth-api.js";
 import AuthPage from "./AuthPage.jsx";
 import LandingPage from "./LandingPage.jsx";
+import PrivacyPage from "./PrivacyPage.jsx";
 import { publicPage } from "./public-navigation.js";
 import PhoneConnection from "./PhoneConnection.jsx";
 import { accountRequest, acceptSession } from "./auth-api.js";
@@ -15,11 +16,13 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import PantryImport from "./PantryImport.jsx";
 import PlanUsage, { usePlanUsage } from './PlanUsage.jsx';
-import RecipePantryImpact from "./RecipePantryImpact.jsx";
+import RecipeCardCalories from "./RecipeCardCalories.jsx";
 import CulinaryHeader from "./CulinaryHeader.jsx";
 import {useMeals, MealFeedback, CalorieGoal} from './MealTracking.jsx';
 import HomeDashboard from "./HomeDashboard.jsx";
 import AssistantWorkspace from "./AssistantWorkspace.jsx";
+import { EdamamBadge, EdamamFavorites } from './EdamamRecipeView.jsx';
+import AdminPortal from './AdminPortal.jsx';
 import NutritionPanel from "./NutritionPanel.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
@@ -27,7 +30,7 @@ import { readNavigation, navigationUrl, openRecipeInHistory, closeRecipeInHistor
 import { readChat } from "./chat-session.js";
 import { profileRestrictions } from "./profile-rules.js";
 import { allergyOptions } from "./data.js";
-import { availability, matchesProfile, requiresReview } from "./engine.js";
+import { matchesProfile, requiresReview } from "./engine.js";
 
 const pages = [
   { id: "home", label: "Inicio", icon: "home" },
@@ -60,6 +63,29 @@ function Empty({ icon = "book", title, children, action }) {
       {action}
     </div>
   );
+}
+
+function RecipeCard({ recipe: r, saved, onOpen, onSave }) {
+  const isSaved = saved.includes(r.id);
+  return <article className="recipe-card">
+    <button className={`recipe-image ${r.photo ? "" : "illustrated " + r.id}`} onClick={() => onOpen(r)} aria-label={`Ver ${r.title}`}>
+      {r.photo ? <img src="/bowl-nutribot.png" alt="Bowl de arroz, frijoles, aguacate y tomate" />
+        : <><span className="food-illustration">{r.emoji}</span><span className="food-ring" /></>}
+      <span className="photo-label">{r.category}</span>
+    </button>
+    <button className={`save-btn ${isSaved ? "saved" : ""}`} onClick={() => onSave(r.id)}
+      aria-label={`${isSaved ? "Quitar" : "Guardar"} ${r.title}`} aria-pressed={isSaved}>
+      <Icon name="heart" size={19} />
+    </button>
+    <div className="recipe-copy">
+      <div className="recipe-meta"><span><Icon name="clock" size={14} />{r.time} min</span><span>{r.category}</span></div>
+      <button className="title-link" onClick={() => onOpen(r)}><h3>{r.title}</h3></button>
+      <RecipeCardCalories recipeId={r.id} />
+      <button className="availability recipe-view-button" type="button" onClick={() => onOpen(r)}>
+        <Icon name="arrow" size={15} />Ver receta
+      </button>
+    </div>
+  </article>;
 }
 
 export default function App() {
@@ -119,6 +145,7 @@ export default function App() {
       /* storage can be disabled */
     }
   }
+  if (entryPage === "privacy") return <PrivacyPage />;
   if (entryPage === "landing" && !auth?.authenticated)
     return <LandingPage brand={<Brand />} />;
   if (auth && !auth.authenticated)
@@ -166,8 +193,13 @@ export default function App() {
 }
 
 function Workspace({ initial, onSignedOut }) {
+  const [adminAccess, setAdminAccess] = useState(false);
+  useEffect(() => {
+    let active = true;
+    authenticatedFetch('/api/admin/access').then(response => { if (active && response.ok) setAdminAccess(true); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   const { usage, usageError, refreshUsage } = usePlanUsage();
-  const meals = useMeals();
   const [loggingOut, setLoggingOut] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [ingredients, setIngredients] = useState(initial.ingredients);
@@ -177,6 +209,7 @@ function Workspace({ initial, onSignedOut }) {
     readNavigation(new URL(location.href)),
   );
   const { page } = navigation;
+  const meals = useMeals(page === 'home');
   const [focusPrivacy, setFocusPrivacy] = useState(false);
   const privacyPanel = useRef(null);
   useEffect(() => {
@@ -484,7 +517,7 @@ function Workspace({ initial, onSignedOut }) {
       ]);
     }
   }
-  async function generate(text = "¿Qué puedo cocinar con lo que tengo?", mode = "initial") {
+  async function generate(text = "¿Qué puedo cocinar con lo que tengo?", mode = "initial", timeOverride = null) {
     if (request.current || switchingChat) return;
     if (messages.length > MAX_CHAT_MESSAGES - 2) {
       setToast(
@@ -508,7 +541,7 @@ function Workspace({ initial, onSignedOut }) {
       if (controller.signal.aborted) return;
       const result = await requestRecipe({
         revision,
-        maxTime,
+        maxTime: timeOverride || maxTime,
         message: text,
         history: recipeContext(messages),
         mode,
@@ -534,7 +567,7 @@ function Workspace({ initial, onSignedOut }) {
           role: "bot",
           type: "error",
           source: "local",
-          text: error.message,
+          text: error.requestId ? `${error.message} Referencia: ${error.requestId.slice(0, 8)}.` : error.message,
           recipes: [],
           retryText: text,
           retryMode: mode,
@@ -596,68 +629,13 @@ function Workspace({ initial, onSignedOut }) {
       <Icon name={icon} size={18} />
     </button>
   );
-  function RecipeCard({ recipe: r }) {
-    const a = availability(r, pantry);
-    return (
-      <article className="recipe-card">
-        <button
-          className={`recipe-image ${r.photo ? "" : "illustrated " + r.id}`}
-          onClick={() => openRecipe(r)}
-          aria-label={`Ver ${r.title}`}
-        >
-          {r.photo ? (
-            <img
-              src="/bowl-nutribot.png"
-              alt="Bowl de arroz, frijoles, aguacate y tomate"
-            />
-          ) : (
-            <>
-              <span className="food-illustration">{r.emoji}</span>
-              <span className="food-ring" />
-            </>
-          )}
-          <span className="photo-label">
-            {r.category}
-          </span>
-        </button>
-        <button
-          className={`save-btn ${saved.includes(r.id) ? "saved" : ""}`}
-          onClick={() => toggleSave(r.id)}
-          aria-label={`${saved.includes(r.id) ? "Quitar" : "Guardar"} ${r.title}`}
-          aria-pressed={saved.includes(r.id)}
-        >
-          <Icon name="heart" size={19} />
-        </button>
-        <div className="recipe-copy">
-          <div className="recipe-meta">
-            <span>
-              <Icon name="clock" size={14} />
-              {r.time} min
-            </span>
-            <span>{r.vegan ? "Vegetal" : "Casera"}</span>
-          </div>
-          <button className="title-link" onClick={() => openRecipe(r)}>
-            <h3>{r.title}</h3>
-          </button>
-          <p>{r.subtitle}</p>
-          <RecipePantryImpact recipe={r} pantry={pantry} />
-          <div className={`availability ${a.missing.length ? "missing" : ""}`}>
-            <Icon name={a.missing.length ? "bag" : "check"} size={15} />
-            {a.missing.length
-              ? `Te falta${a.missing.length > 1 ? "n" : ""}: ${a.missing.map((id) => ingredients.find((item) => item.id === id)?.name || id).join(", ")}`
-              : "Tienes todos los ingredientes"}
-          </div>
-        </div>
-      </article>
-    );
-  }
   return (
     <>
       <div className={`app-shell culinary-shell ${page === "assistant" ? "assistant-shell" : ""}`}>
         <CulinaryHeader
           brand={<Brand />}
           page={page}
-          profile={profile}
+          profile={adminAccess ? { ...profile, plan: { code: 'goat', name: 'GOAT Mode' } } : profile}
           ingredients={ingredients}
           recipes={allRecipes.filter((recipe) =>
             matchesProfile(recipe, profile, ingredients),
@@ -667,6 +645,7 @@ function Workspace({ initial, onSignedOut }) {
           onLogout={logout}
           loggingOut={loggingOut}
           onConnect={() => setPhoneOpen(true)}
+          onAdmin={adminAccess ? () => go('admin') : null}
           onSearchIngredient={(query) => {
             go("pantry");
             setCategory("Todos");
@@ -719,13 +698,14 @@ function Workspace({ initial, onSignedOut }) {
             </div>
           )}
           <main>
+            {page === 'admin' && (adminAccess ? <AdminPortal /> : <div className="database-loading"><h1>Acceso administrativo</h1><p>Esta cuenta no tiene acceso al portal.</p></div>)}
             {page === "home" && (
               <HomeDashboard tracker={meals} profile={profile} pantry={pantry} dates={pantryDates}
                 ingredients={ingredients} recipes={allRecipes} saved={saved}
                 usage={usage} usageError={usageError} onNavigate={go}
                 onOpenRecipe={openRecipe} onSave={toggleSave} onImport={openPantryImport}
                 onAsk={(text) => { setMessage(text); go("assistant"); }}
-                onFavorites={() => { go("recipes"); setMeal("Favoritas"); }} />
+                onFavorites={() => { go("recipes"); setMeal("Todas"); }} />
             )}
             {page === "pantry" && (
               <PantryWorkspace
@@ -745,6 +725,7 @@ function Workspace({ initial, onSignedOut }) {
             )}
             {page === "assistant" && (
               <AssistantWorkspace
+                mealTracker={meals}
                 usage={usage}
                 profile={profile}
                 pantry={pantry}
@@ -779,7 +760,7 @@ function Workspace({ initial, onSignedOut }) {
                   <h1>Mis Recetas</h1>
                 </div>
                 <div className="filter-row">
-                  {["Todas", "Favoritas", "Desayuno", "Almuerzo", "Cena"].map((c) => (
+                  {["Todas", "Desayuno", "Almuerzo", "Cena"].map((c) => (
                     <button
                       key={c}
                       className={meal === c ? "selected" : ""}
@@ -800,32 +781,17 @@ function Workspace({ initial, onSignedOut }) {
                 ) : (
                   <>
                     <div className="recipe-grid library">
+                      <EdamamFavorites meal={meal} mealTracker={meals} localCount={allRecipes.filter(r => matchesProfile(r, profile, ingredients) && (meal === "Todas" || r.category === meal)).length} />
                       {allRecipes
                         .filter(
                           (r) =>
                             matchesProfile(r, profile, ingredients) &&
-                            (meal === "Todas" || (meal === "Favoritas" ? saved.includes(r.id) : r.category === meal)),
+                            (meal === "Todas" || r.category === meal),
                         )
                         .map((r) => (
-                          <RecipeCard key={r.id} recipe={r} />
+                          <RecipeCard key={r.id} recipe={r} saved={saved} onOpen={openRecipe} onSave={toggleSave} />
                         ))}
                     </div>
-                    {!allRecipes.some(
-                      (r) =>
-                        matchesProfile(r, profile, ingredients) &&
-                        (meal === "Todas" || (meal === "Favoritas" ? saved.includes(r.id) : r.category === meal)),
-                    ) && (
-                        <Empty
-                          icon="heart"
-                          title={
-                            meal === "Favoritas"
-                              ? "Aquí van tus próximas favoritas"
-                              : "No hay coincidencias"
-                          }
-                        >
-                          {meal === "Favoritas" ? "Guarda una receta tocando el corazón." : "Prueba otra categoría o pide una receta en el chat."}
-                        </Empty>
-                      )}
                   </>
                 )}
                 <div className="quiet-note">
@@ -859,7 +825,7 @@ function Workspace({ initial, onSignedOut }) {
                     <p>
                       Tu perfil, despensa y recetas se guardan en nuestros servidores.
                       Al generar tus recetas algunos datos se comparten con nuestros colaboradores.
-                      Para mas informacion revisa nuestra <a href="#">politica de privacidad</a>
+                      Para más información revisa nuestra <a href="#politica-privacidad">política de privacidad</a>
                     </p>
                   </div>
                   <button
@@ -897,19 +863,20 @@ function Workspace({ initial, onSignedOut }) {
               </div>
             )}
           </main>
-          <footer className="app-footer">
+          <footer className={`app-footer${page === 'assistant' || page === 'recipes' ? ' edamam-footer' : ''}`}>
             <Brand small />
-            <span>Menos dudas. Más cocina.</span>
-            <button className="footer-privacy" onClick={() => {
-              go("profile");
-              setFocusPrivacy(true);
-            }}>Política de privacidad</button>
+            <span>2026</span>
+            <div className="footer-actions">
+              {(page === 'assistant' || page === 'recipes') && <EdamamBadge compact />}
+              <a className="footer-privacy" href="#politica-privacidad">Política de privacidad</a>
+            </div>
           </footer>
         </div>
         <nav className="mobile-nav" aria-label="Navegación móvil">
-          {pages.map((p) => (
+          {(adminAccess ? [{ id: 'admin', label: 'Admin', icon: 'shield' }, ...pages] : pages).map((p) => (
             <button
               key={p.id}
+              data-page={p.id}
               className={page === p.id ? "active" : ""}
               aria-current={page === p.id ? "page" : undefined}
               onClick={() => go(p.id)}

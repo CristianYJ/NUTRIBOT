@@ -51,8 +51,8 @@ export default function ChatComposer({ usage, busy, message, setMessage, maxTime
     <div className="chat-composer-topline">
       <div className="culinary-suggestions">
         <span><Icon name="sun" size={14} />SUGERENCIAS</span>
-        <button disabled={busy} onClick={() => generate('¿Qué puedo cocinar con lo que tengo?')}>🍽️ Una idea para hoy</button>
-        <button disabled={busy} onClick={() => generate('Sugiere una receta rápida con mi despensa')}>⚡ Algo rápido</button>
+        <button disabled={busy} onClick={() => generate('Busca dos opciones de recetas con lo que tengo en mi despensa')}>🍽️ Una idea para hoy</button>
+        <button disabled={busy} onClick={() => generate('Busca dos recetas rápidas de hasta 15 minutos con mi despensa', 'initial', 15)}>⚡ Algo rápido</button>
         <button disabled={busy} onClick={() => generate('Quiero aprovechar mis vegetales')}>🌱 Mis vegetales</button>
       </div>
       <PlanUsage usage={usage} compact />

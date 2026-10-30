@@ -47,9 +47,10 @@ export function writeChat(storage, { messages, draft, maxTime, busy }) {
     storage.setItem(
       key,
       JSON.stringify({
-        messages: messages.map(({ recipes, photo, ...message }) => ({
+        messages: messages.map(({ recipes, externalRecipes, photo, ...message }) => ({
           ...message,
           recipeIds: recipes?.map((r) => r.id) || [],
+          edamamRefs: externalRecipes?.map(({ uri, title, titleEs, meal }) => ({ uri, title: titleEs || title, ...(meal ? { meal } : {}) })) || message.edamamRefs || [],
         })),
         draft,
         maxTime,

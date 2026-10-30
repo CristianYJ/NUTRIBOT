@@ -194,7 +194,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .culinary-shell .mobile-nav { background: #fffffff5; border-color: #e5e9e6; z-index: 8; padding: 12px 8px max(12px, env(safe-area-inset-bottom)); height: 74px; }
 .culinary-shell .mobile-nav button { color: #64746b; font-size: 9px; gap: 6px; min-width: 50px; }
 .culinary-shell .mobile-nav button.active { color: var(--green); }
-.culinary-shell .mobile-nav button:nth-child(3) svg { box-sizing: content-box; padding: 13px; color: #fff; background: var(--green); border: 4px solid #faf8ff; border-radius: 50%; margin-top: -33px; box-shadow: 0 3px 12px #006c4925; }
+.culinary-shell .mobile-nav button[data-page="assistant"] svg { box-sizing: content-box; padding: 13px; color: #fff; background: var(--green); border: 4px solid #faf8ff; border-radius: 50%; margin-top: -33px; box-shadow: 0 3px 12px #006c4925; }
 @container app (max-width: 1100px) {
   .culinary-toolbar { align-items: flex-start; }
   .culinary-toolbar-actions { width: 100%; justify-content: space-between; }
@@ -306,7 +306,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .assistant-shell>.culinary-header{flex-shrink:0}
 .assistant-shell>.main-area{display:flex;flex:1;flex-direction:column;min-height:0;overflow:hidden}
 .culinary-shell.assistant-shell .main-area>main{flex:1;min-height:0;overflow:hidden;padding:20px 40px}
-.assistant-shell .app-footer{display:none}
+.assistant-shell .app-footer.edamam-footer{display:flex;flex-shrink:0;padding:4px 40px;background:#f0f1fa;}
+@media(max-width:700px){
+  .culinary-shell .app-footer.edamam-footer{display:flex;flex-wrap:wrap;padding:5px 14px;gap:8px;}
+  .app-footer.edamam-footer .brand,.app-footer.edamam-footer > span{display:none;}
+  .app-footer.edamam-footer .edamam-attribution{margin-left:auto;}
+  .assistant-shell .app-footer.edamam-footer{padding:5px 14px;}
+}
 .assistant-shell .culinary-assistant,.assistant-shell .culinary-assistant-grid{height:100%;min-height:0}
 .assistant-shell .culinary-assistant-grid{grid-template-columns:minmax(0,1fr) 280px;align-items:stretch}
 .assistant-shell .culinary-chat{display:flex;flex-direction:column;min-height:0;overflow:hidden}

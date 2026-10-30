@@ -2727,3 +2727,67 @@ main {
 @media(max-width:600px) {.detail-meta.recipe-summary {grid-template-columns:repeat(2,minmax(0,1fr));}.recipe-method {padding:14px;}.recipe-summary strong {font-size:14px;}}
 
 .recipe-dialog .detail-photo > .tag {background:#f8f9f7;}
+
+.edamam-recipe-card {display:flex;overflow:hidden;flex-direction:column;border:1px solid #e2e9e2;border-radius:20px;background:#fff;box-shadow:0 4px 18px #15271b0a;margin:12px 0;max-width:720px;}
+.edamam-recipe-photo {width:100%;height:190px;object-fit:cover;}
+.edamam-recipe-content {padding:20px;}
+.edamam-recipe-content h3 {font-size:20px;line-height:1.3;margin:6px 0 12px;color:#193622;}
+.edamam-recipe-content p {line-height:1.5;}
+.edamam-recipe-facts {display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
+.edamam-recipe-facts span {padding:6px 10px;border-radius:999px;background:#edf6ee;color:#244c32;font-size:13px;}
+.edamam-recipe-content details {margin:12px 0;}
+.edamam-recipe-content summary {cursor:pointer;font-weight:650;}
+.edamam-recipe-content li {margin:5px 0;}
+.edamam-recipe-content a {color:#087045;}
+.edamam-attribution {display:inline-block;margin:12px 0;}
+.edamam-attribution img {display:block;width:200px;height:40px;object-fit:contain;}
+.edamam-favorites {margin:18px 0 28px;}
+.edamam-favorites h2 {font-size:21px;}
+
+.edamam-library-card {min-width:0;}
+.edamam-card-image {background:#f0e2cb;}
+.edamam-card-image > .food-illustration {display:grid;place-items:center;height:100%;font-size:58px;}
+.edamam-library-card .recipe-copy > p {min-height:1.5em;}
+.edamam-library-card .availability {margin-top:12px;}
+.recipe-card .recipe-view-button {display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px;padding:10px 12px;border:1px solid #cfe2d6;border-radius:10px;background:#f2f8f4;color:var(--green);font-size:11px;font-weight:600;line-height:1.3;}
+.recipe-card .recipe-view-button:hover {background:#e6f3eb;}
+.edamam-detail-photo {background:#f0e2cb;}
+.edamam-dialog .edamam-detail-photo {overflow:hidden;border-radius:24px 24px 0 0;}
+.edamam-dialog .edamam-detail-photo > img {position:absolute;inset:0;width:100%;height:100%;min-height:0;object-fit:cover;}
+.edamam-dialog .edamam-detail-photo > .detail-close {z-index:1;}
+.edamam-dialog .edamam-detail-meal {position:absolute;top:-13px;left:34px;z-index:1;background:#f8f9f7;}
+.edamam-library-empty {grid-column:1/-1;padding:24px;color:#63716e;text-align:center;}
+.edamam-glycemic {margin-top:22px;}
+.edamam-glycemic > div:first-child {display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#526057;margin-bottom:8px;}
+.edamam-glycemic strong {color:#142b21;}
+.edamam-glycemic-track {height:7px;border-radius:999px;background:linear-gradient(90deg,#64b97b 0%,#b6d765 45%,#f6c65e 68%,#df775f 100%);position:relative;}
+.edamam-glycemic-track.unavailable {background:#e5e9e4;}
+.edamam-glycemic-track > span {position:absolute;top:50%;width:13px;height:13px;border:2px solid #fff;border-radius:50%;background:#233a2c;box-shadow:0 1px 4px #0005;transform:translate(-50%,-50%);}
+.edamam-nutrition h3 {margin-bottom:6px;}
+.edamam-nutrient-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:14px;}
+.edamam-nutrient-grid > div {display:flex;flex-direction:column;gap:5px;background:#eff3e9;border-radius:12px;padding:14px;min-width:0;}
+.edamam-nutrient-grid small {color:#677e6d;font-size:11px;}
+.edamam-nutrient-grid strong {color:#193a29;font-size:19px;}
+.edamam-nutrient-grid strong span {font-size:11px;font-weight:400;}
+.edamam-source-link {display:inline-flex;margin-top:18px;text-decoration:none;}
+.edamam-dialog .detail-ingredients li {align-items:flex-start;}
+.edamam-numbered-ingredients .detail-ingredient-number {display:grid;place-items:center;flex:0 0 25px;width:25px;height:25px;border-radius:50%;background:#e7f5ec;color:#006c49;font-size:12px;font-weight:700;line-height:1;}
+.edamam-attribution.compact {display:inline-flex;background:transparent;vertical-align:middle;margin:4px 0;}
+.edamam-attribution.compact img {width:125px;height:25px;}
+.edamam-more-button {margin:14px 0 4px;}
+.edamam-chat-options {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:10px 0;min-width:0;}
+.edamam-chat-card {width:100%;min-width:0;box-shadow:0 4px 18px #15271b0a;}
+.edamam-chat-card .recipe-image {aspect-ratio:auto;height:clamp(96px,12vw,150px);}
+.edamam-chat-card .recipe-copy {padding:12px 14px;}
+.edamam-chat-card .recipe-meta {font-size:11px;gap:7px;margin-bottom:5px;}
+.edamam-chat-card .title-link h3 {font-size:16px;line-height:1.3;min-height:2.6em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.edamam-chat-card .recipe-copy > p {font-size:11px;min-height:0;margin-top:5px;}
+.edamam-chat-card .availability {font-size:11px;margin-top:8px;padding-top:8px;}
+.edamam-chat-card .photo-label {font-size:10px;}
+@media(max-width:640px){
+  .edamam-chat-options {display:flex;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-inline:contain;padding-bottom:7px;}
+  .edamam-chat-card {flex:0 0 min(82%,280px);scroll-snap-align:start;}
+  .edamam-chat-card .recipe-image {height:110px;}
+}
+.edamam-original-line {display:block;margin-top:3px;color:#83918a;font-size:10px;}
+@media(max-width:600px){.edamam-nutrient-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.edamam-glycemic > div:first-child{font-size:11px;}}

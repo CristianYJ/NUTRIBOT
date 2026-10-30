@@ -4,6 +4,7 @@ import Icon from "./Icons.jsx";
 import ChatComposer from './ChatComposer.jsx';
 import RecipePantryImpact from "./RecipePantryImpact.jsx";
 import { availability, matchesProfile } from "./engine.js";
+import { EdamamRecipeCard } from './EdamamRecipeView.jsx';
 
 function MessageStamp({ message, name }) {
   const date = message.createdAt ? new Date(message.createdAt) : null;
@@ -118,6 +119,7 @@ export default function AssistantWorkspace({
   onImport,
   onOpenRecipe,
   onSave,
+  mealTracker,
 }) {
   const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 800px)").matches);
   const workspaceRef = useRef(null);
@@ -348,12 +350,19 @@ export default function AssistantWorkspace({
                     />
                   ))}
                   {m.role === "bot" && ["success", "empty"].includes(m.type) && (
-                    <button className="btn secondary" disabled={busy} onClick={() =>
+                    <button className="btn secondary edamam-more-button" disabled={busy} onClick={() =>
                       generate([...messages.slice(0, index)].reverse().find((item) => item.role === "user")?.text || "¿Qué puedo cocinar con lo que tengo?", "more")
                     }>
                       <Icon name="reset" size={16} />
                       Generar más alternativas
                     </button>
+                  )}
+                  {(m.externalRecipes?.length || m.edamamRefs?.length) > 0 && (
+                    <div className="edamam-chat-options" aria-label="Opciones de recetas" role="group">
+                      {m.externalRecipes?.length
+                        ? m.externalRecipes.map(recipe => <EdamamRecipeCard key={recipe.uri} initial={recipe} compact pantry={pantry} ingredients={ingredients} mealTracker={mealTracker} />)
+                        : m.edamamRefs.map(ref => <EdamamRecipeCard key={ref.uri} reference={ref} compact pantry={pantry} ingredients={ingredients} mealTracker={mealTracker} />)}
+                    </div>
                   )}
                   <MessageStamp message={m} name={profile.name} />
                 </div>
@@ -402,7 +411,7 @@ export default function AssistantWorkspace({
               <Icon name="pantry" size={20} /><span>Despensa</span>
             </button>
             <button id="chat-tool-recipes" className="chat-sidebar-button" aria-expanded={toolPanel === "recipes"} aria-controls="chat-sidebar-preview" onClick={() => selectTool("recipes")}>
-              <Icon name="book" size={20} /><span>Recetas recientes</span>
+              <Icon name="book" size={20} /><span>Recetas anteriores</span>
             </button>
           </div>
           <section id="chat-sidebar-preview" className="chat-sidebar-preview" hidden={!toolPanel} aria-labelledby={toolPanel ? `chat-tool-${toolPanel}` : undefined}>
@@ -477,7 +486,7 @@ export default function AssistantWorkspace({
           })}</ul> : <p className="culinary-muted">Agrega tus primeros ingredientes para empezar a cocinar.</p>}
           <button className="btn secondary" onClick={() => { setToolPanel(null); onNavigate("pantry"); }}>Ver mi despensa<Icon name="arrow" size={16} /></button>
         </>}
-        {toolPanel === "recipes" && <><h2 className="chat-preview-title">Recetas recientes</h2>{recent.length ? (
+        {toolPanel === "recipes" && <><h2 className="chat-preview-title">Recetas anteriores</h2><p className="culinary-muted">Este archivo conserva recetas de la versión anterior. Las ideas nuevas se buscan en Edamam.</p>{recent.length ? (
               <ul className="culinary-history">
                 {recent.map((recipe) => (
                   <li key={recipe.id}>

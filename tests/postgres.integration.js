@@ -47,9 +47,9 @@ const result = () =>
     },
     "fake-test-model",
   );
-async function fixture(t) {
+async function fixture(t, overrides = {}) {
   const schema = "nutribot_test_" + randomBytes(8).toString("hex");
-  const options = { database, schema };
+  const options = { database, schema, ...overrides };
   const store = await openDatabase(options);
   const sql = new pg.Client(
     postgresOptions({ database, options: `-c search_path=${schema},public` }),
@@ -106,12 +106,178 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    8,
+    16,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
     6,
   );
+});
+
+test('Edamam saved recipes retain URI, title and meal without nutrition, stay within each account and clear on reset', async t => {
+  const f = await fixture(t);
+  const uri = 'http://www.edamam.com/ontologies/edamam.owl#recipe_test123';
+  await f.store.saveEdamamFavorite(uri, 'Test recipe', 'Desayuno');
+  assert.deepEqual(await (await f.reopen()).listEdamamFavorites(), [{ uri, title: 'Test recipe', meal: 'Desayuno' }]);
+  const placeholders = (await f.sql.query('SELECT nutrition_cache,nutrition_cache_source,nutrition_cache_updated_at FROM edamam_favorites WHERE recipe_uri=$1', [uri])).rows[0];
+  assert.deepEqual(placeholders, { nutrition_cache: null, nutrition_cache_source: null, nutrition_cache_updated_at: null });
+  const mealColumns = (await f.sql.query("SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='edamam_meal_log' AND column_name IN ('nutrition_snapshot','nutrition_source','nutrition_recorded_at') ORDER BY column_name")).rows;
+  assert.deepEqual(mealColumns.map(row => row.column_name), ['nutrition_recorded_at', 'nutrition_snapshot', 'nutrition_source']);
+  await f.store.classifyEdamamFavorites([{ uri, title: 'Receta de prueba', meal: 'Cena' }]);
+  assert.equal((await f.store.listEdamamFavorites())[0].meal, 'Desayuno');
+  const oldUri = 'http://www.edamam.com/ontologies/edamam.owl#recipe_old456';
+  await f.store.saveEdamamFavorite(oldUri, 'Old recipe');
+  await f.store.classifyEdamamFavorites([{ uri: oldUri, title: 'Receta anterior', meal: 'Cena' }]);
+  assert.deepEqual((await f.store.listEdamamFavorites())[0], { uri: oldUri, title: 'Receta anterior', meal: 'Cena' });
+  const otherId = await f.store.auth.register({ name: 'Other recipe', email: 'edamam-fav@example.test', password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  assert.deepEqual(await f.store.forProfile(otherId).listEdamamFavorites(), []);
+  const state = await f.store.getState();
+  await f.store.reset(state.revision);
+  assert.deepEqual(await f.store.listEdamamFavorites(), []);
+});
+
+test('Spanish Edamam presentations persist once and are shared without storing original ingredients', async t => {
+  const f = await fixture(t);
+  const uri = 'http://www.edamam.com/ontologies/edamam.owl#recipe_shared123';
+  const hash = 'a'.repeat(64);
+  await f.store.saveEdamamPresentation({ uri, title: 'Chicken rolls', kind: 'detail', hash,
+    titleEs: 'Rollitos de pollo', ingredientLinesEs: ['3 tortillas de harina'], difficulty: 'Fácil', meal: 'Almuerzo' });
+  const otherId = await f.store.auth.register({ name: 'Another cook', email: 'translation-cache@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  const cached = await (await f.reopen()).forProfile(otherId).getEdamamPresentation(uri, 'detail', hash);
+  assert.deepEqual(cached, { titleEs: 'Rollitos de pollo', ingredientLinesEs: ['3 tortillas de harina'],
+    difficulty: 'Fácil', meal: 'Almuerzo' });
+  const row = (await f.sql.query('SELECT recipe_title,ingredient_lines_es,input_hash FROM edamam_presentation_cache WHERE recipe_uri=$1', [uri])).rows[0];
+  assert.equal(row.recipe_title, 'Chicken rolls');
+  assert.deepEqual(row.ingredient_lines_es, ['3 tortillas de harina']);
+  assert.equal(row.input_hash.trim(), hash);
+});
+
+test('admin diagnostics retain a bounded trace and allow only accounts granted the admin role', async t => {
+  const f = await fixture(t);
+  const id = await f.store.auth.register({ name: 'Administrator', email: 'admin@example.test', password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  assert.equal(await f.store.isAdmin(id), false);
+  await f.sql.query("UPDATE profiles SET role_code='admin' WHERE id=$1", [id]);
+  assert.equal(await f.store.isAdmin(id), true);
+  assert.equal(await f.store.isAdmin(1), false);
+  await f.store.forProfile(id).recordAdminEvent({ requestId: randomUUID(), provider: 'gemini', outcome: 'error',
+    stage: 'gemini_recipe', errorCode: 'INVALID_AI_OUTPUT', reasons: ['UNDECLARED_SEASONING'],
+    message: '2 personas', previousMessage: 'Cena mexicana', pantryCount: 3, maxTime: 30, mode: 'initial', durationMs: 240 });
+  const events = await f.store.listAdminEvents();
+  assert.equal(events.items.length, 1);
+  assert.equal(events.items[0].accountId, id);
+  assert.deepEqual(events.items[0].reasons, ['UNDECLARED_SEASONING']);
+  const summary = await f.store.adminSummary();
+  assert.equal(summary.errors24h, 1);
+  assert.equal(summary.quality.activeAccounts, 1);
+  assert.equal(summary.byProvider[0].provider, 'gemini');
+  assert.equal(summary.daily.length, 7);
+  assert.equal((await f.store.adminSummary('year', 2026)).daily.at(-1).errors, 1);
+  assert.equal((await f.store.listAdminEvents({ provider: 'edamam' })).items.length, 0);
+  assert.equal((await f.store.listAdminEvents({ accountId: id, search: 'INVALID_AI_OUTPUT' })).items.length, 1);
+  assert.equal((await f.store.listAdminEvents({ accountId: 1 })).items.length, 0);
+  assert.equal((await f.store.findAdminAccount('admin@example.test')).account.id, id);
+  assert.equal((await f.store.findAdminAccount(String(id))).recent.length, 1);
+});
+
+test('database administrator receives GOAT Mode quotas while other Basic accounts stay Basic', async t => {
+  const f = await fixture(t);
+  const id = await f.store.auth.register({ name: 'Administrator', email: 'admin@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  const admin = f.store.forProfile(id);
+  assert.equal((await admin.getUsage()).plan.code, 'basico');
+  await f.sql.query("UPDATE profiles SET role_code='admin' WHERE id=$1", [id]);
+  const goat = await admin.getUsage();
+  assert.deepEqual(goat.plan, { code: 'goat', name: 'GOAT Mode' });
+  assert.equal(goat.recipes.limit, 100);
+  assert.equal(goat.vision.limit, 60);
+  const normal = await f.store.getUsage();
+  assert.deepEqual(normal.plan, { code: 'basico', name: 'Básico' });
+  assert.equal(normal.recipes.limit, 4);
+  assert.equal(normal.vision.limit, 1);
+  assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'basico');
+  const token = await admin.reserveUsage('recipes');
+  assert.equal((await admin.getUsage()).recipes.pending, 1);
+  await admin.finishUsage(token, true);
+  assert.equal((await admin.getUsage()).recipes.used, 1);
+  await f.sql.query("UPDATE profiles SET role_code='user' WHERE id=$1", [id]);
+  assert.equal(await f.store.isAdmin(id), false);
+  assert.equal((await admin.getUsage()).plan.code, 'basico');
+  assert.deepEqual((await f.sql.query('SELECT from_role,to_role FROM profile_role_history WHERE profile_id=$1 ORDER BY id', [id])).rows,
+    [{ from_role: 'user', to_role: 'admin' }, { from_role: 'admin', to_role: 'user' }]);
+});
+
+test('role migration grants the configured existing account once and does not regrant after revocation', async t => {
+  const f = await fixture(t);
+  const id = await f.store.auth.register({ name: 'Original admin', email: 'admin@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  await f.sql.query('DROP TRIGGER profile_role_audit ON profiles');
+  await f.sql.query('DROP FUNCTION record_profile_role()');
+  await f.sql.query('DROP TABLE profile_role_history');
+  await f.sql.query('ALTER TABLE profiles DROP COLUMN role_code');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version=16');
+  const migrated = await openDatabase({ ...f.options, adminEmail: 'ADMIN@example.test' });
+  t.after(() => migrated.close());
+  assert.equal(await migrated.isAdmin(id), true);
+  await f.sql.query("UPDATE profiles SET role_code='user' WHERE id=$1", [id]);
+  const restarted = await openDatabase({ ...f.options, adminEmail: 'admin@example.test' });
+  t.after(() => restarted.close());
+  assert.equal(await restarted.isAdmin(id), false);
+});
+
+test('admin analytics counts measured provider calls, HTTP activity, plans and account history', async t => {
+  const f = await fixture(t, { adminEmail: 'admin@example.test' });
+  const id = await f.store.auth.register({ name: 'Analytics user', email: 'analytics@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  await f.store.recordApiCall({ profileId: id, provider: 'edamam', operation: 'recipe_search',
+    outcome: 'success', statusCode: 200, durationMs: 320 });
+  await f.store.recordApiCall({ profileId: id, provider: 'gemini', operation: 'generate_content',
+    model: 'gemini-test', outcome: 'http_error', statusCode: 429, durationMs: 2100 });
+  await f.store.recordHttpRequest({ profileId: id, feature: 'recipes', statusCode: 200, durationMs: 850 });
+  const dormant = await f.store.auth.register({ name: 'Dormant user', email: 'dormant@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  await f.sql.query("UPDATE profiles SET created_at=now()-interval '31 days' WHERE id=$1", [dormant]);
+  const api = await f.store.adminApiSummary();
+  assert.equal(api.calls.length, 2);
+  assert.equal(api.providers.find(row => row.provider === 'edamam').success, 1);
+  assert.equal(api.providers.find(row => row.provider === 'gemini').failed, 1);
+  assert.equal((await f.store.adminApiSummary('year', 2026)).providers.find(row => row.provider === 'edamam').total, 1);
+  const users = await f.store.adminUsersSummary();
+  assert.equal(users.total, 2);
+  assert.equal(users.active, 1);
+  assert.equal(users.inactive, 1);
+  assert.equal(users.free, 2);
+  assert.equal(users.features.at(-1).recipes, 1);
+  assert.equal(users.planTrend.at(-1).free, 2);
+  assert.equal(users.performance.serverUnder2s, 100);
+  assert.equal(users.performance.apiUnder2s, 50);
+  const detail = await f.store.adminAccountDetail(id);
+  assert.equal(detail.usage.recipes.limit, 4);
+  assert.equal(detail.calls.length, 2);
+  assert.equal(detail.effectivePlan, 'Básico');
+  await f.sql.query("UPDATE profiles SET plan_code='nutripro' WHERE id=$1", [id]);
+  assert.equal((await f.store.adminUsersSummary()).estimatedMonthlyCents, 299);
+  assert.equal((await f.store.adminUsersSummary('quarter')).planTrend.at(-1).paid, 1);
+  assert.ok((await f.store.adminAccountDetail(id)).paidSince);
+  await f.sql.query("UPDATE profiles SET plan_code='basico' WHERE id=$1", [id]);
+  assert.ok((await f.store.adminAccountDetail(id)).freeSinceAfterPaid);
+});
+
+test('daily aggregate migration backfills available detailed metrics without account data', async t => {
+  const f = await fixture(t);
+  await f.store.recordApiCall({ provider: 'edamam', operation: 'recipe_search',
+    outcome: 'success', statusCode: 200, durationMs: 300 });
+  await f.sql.query('DROP TABLE admin_daily_metrics');
+  await f.sql.query('DROP TABLE edamam_presentation_cache');
+  await f.sql.query('DROP TRIGGER profile_role_audit ON profiles');
+  await f.sql.query('DROP FUNCTION record_profile_role()');
+  await f.sql.query('DROP TABLE profile_role_history');
+  await f.sql.query('ALTER TABLE profiles DROP COLUMN role_code');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14,15,16)');
+  const reopened = await f.reopen();
+  const rows = (await f.sql.query("SELECT source,category,outcome,total FROM admin_daily_metrics WHERE source='api'")).rows;
+  assert.deepEqual(rows, [{ source: 'api', category: 'edamam', outcome: 'success', total: 1 }]);
+  assert.equal((await reopened.adminApiSummary('year', 2026)).providers.find(item => item.provider === 'edamam').total, 1);
 });
 
 test('USDA links and grams persist per recipe and enforce structured limits', async (t) => {
@@ -561,6 +727,28 @@ test('meal log stores unknown nutrients honestly and ignores client totals',asyn
   await f.store.recordMeal(randomUUID(),{recipeId:'bowl',nutrition:{kcal:123}});
   const today=await f.store.getTodayMeals();
   assert.equal(today.complete,false);assert.equal(today.totals.kcal,null);assert.equal(today.missing.kcal,1);
+});
+
+test('Edamam meal events retain only URI and title, and stay isolated by account',async t=>{
+  const f=await fixture(t),id=randomUUID();
+  const uri='http://www.edamam.com/ontologies/edamam.owl#recipe_abc123';
+  const body={uri,title:'Chicken rolls',mealType:'Cena',nutrition:{kcal:9999}};
+  await f.store.recordEdamamMeal(id,body);
+  await f.store.recordEdamamMeal(id,body);
+  const today=await f.store.getTodayMeals();
+  assert.equal(today.meals.length,1);
+  assert.equal(today.meals[0].externalUri,uri);
+  assert.equal(today.meals[0].nutrition,null);
+  assert.equal(today.totals.kcal,null);
+  const row=(await f.sql.query('SELECT * FROM edamam_meal_log WHERE id=$1',[id])).rows[0];
+  assert.deepEqual(Object.keys(row).sort(),['eaten_at','id','meal_date','meal_type','nutrition_recorded_at','nutrition_snapshot','nutrition_source','profile_id','recipe_title','recipe_uri'].sort());
+  assert.equal(row.nutrition_snapshot, null);
+  const otherId=await f.store.auth.register({name:'Another user',email:'edamam-meal@example.test',password:'A long test password 2026',birthDate:'2000-01-01'},false);
+  assert.equal((await f.store.forProfile(otherId).getTodayMeals()).meals.length,0);
+  await f.store.forProfile(otherId).removeMeal(id);
+  assert.equal((await f.store.getTodayMeals()).meals.length,1);
+  await f.store.removeMeal(id);
+  assert.equal((await f.store.getTodayMeals()).meals.length,0);
 });
 
 test('calorie goal and estimate profile persist per account, while meal types survive recipe edits',async t=>{

@@ -1110,7 +1110,7 @@ function PasswordChangeForm() {
     <label>Nueva contraseña<input type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={newPassword} onChange={event => setNewPassword(event.target.value)} /></label>
     <label>Confirmar contraseña nueva<input type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={confirm} onChange={event => setConfirm(event.target.value)} /></label>
     {error && <p role="alert" className="auth-error">{error}</p>}
-    {success && <p role="status" className="password-change-success">Tu contraseña se cambió correctamente. Puedes seguir usando esta sesión.</p>}
+    {success && <p role="status" className="password-change-success">Tu contraseña se cambió correctamente.</p>}
     <button className="btn primary" type="submit">{busy ? 'Guardando…' : 'Guardar nueva contraseña'}</button>
   </fieldset></form>;
 }

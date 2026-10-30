@@ -128,7 +128,7 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                     />
                   </div>
                 </label>
-              ) : step === 'forgot' ? <p>Enviaremos un enlace a {email} para que elijas una contraseña nueva. El enlace no iniciará sesión automáticamente.</p> : (
+              ) : step === 'forgot' ? <p>Si {email} está asociado a una cuenta, enviaremos un enlace para restablecer la contraseña.</p> : (
                 <>
                   {step === "register" && (
                     <>
@@ -261,7 +261,7 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                     : step === "register"
                       ? "Crear mi cuenta"
                       : step === 'forgot'
-                        ? 'Enviar enlace'
+                        ? 'Enviar'
                       : "Iniciar sesión"}
                 <Icon name="arrow" size={20} />
               </button>

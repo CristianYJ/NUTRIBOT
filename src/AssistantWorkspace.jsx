@@ -406,7 +406,7 @@ export default function AssistantWorkspace({
               <Icon name="pantry" size={20} /><span>Despensa</span>
             </button>
             <button id="chat-tool-recipes" className="chat-sidebar-button" aria-expanded={toolPanel === "recipes"} aria-controls="chat-sidebar-preview" onClick={() => selectTool("recipes")}>
-              <Icon name="book" size={20} /><span>Recetas recientes</span>
+              <Icon name="book" size={20} /><span>Recetas anteriores</span>
             </button>
           </div>
           <section id="chat-sidebar-preview" className="chat-sidebar-preview" hidden={!toolPanel} aria-labelledby={toolPanel ? `chat-tool-${toolPanel}` : undefined}>
@@ -481,7 +481,7 @@ export default function AssistantWorkspace({
           })}</ul> : <p className="culinary-muted">Agrega tus primeros ingredientes para empezar a cocinar.</p>}
           <button className="btn secondary" onClick={() => { setToolPanel(null); onNavigate("pantry"); }}>Ver mi despensa<Icon name="arrow" size={16} /></button>
         </>}
-        {toolPanel === "recipes" && <><h2 className="chat-preview-title">Recetas recientes</h2>{recent.length ? (
+        {toolPanel === "recipes" && <><h2 className="chat-preview-title">Recetas anteriores</h2><p className="culinary-muted">Este archivo conserva recetas de la versión anterior. Las ideas nuevas se buscan en Edamam.</p>{recent.length ? (
               <ul className="culinary-history">
                 {recent.map((recipe) => (
                   <li key={recipe.id}>

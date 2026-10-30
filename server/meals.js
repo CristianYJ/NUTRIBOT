@@ -31,8 +31,9 @@ export function summarizeWeek(date, meals) {
     return {date:key,count:entries.length,meals:entries,byMeal:summarizeMealTypes(entries),...summarizeMeals(entries)};
   });
 }
-export async function hydrateEdamamMeals(data, lookup, maxRecipes = 3) {
-  const all = [...(data.meals || []), ...(data.week || []).flatMap(day => day.meals || [])];
+export async function hydrateEdamamMeals(data, lookup, maxRecipes = 6, priorityDate = data.date) {
+  const prioritized = (data.week || []).find(day => day.date === priorityDate)?.meals || [];
+  const all = [...prioritized, ...(data.meals || []), ...(data.week || []).flatMap(day => day.meals || [])];
   const uris = [...new Set(all.map(meal => meal.externalUri).filter(Boolean))];
   const fetched = await Promise.allSettled(uris.slice(0,maxRecipes).map(uri => lookup(uri)));
   const byUri = new Map(fetched.map((result,index) => [uris[index], result.status === 'fulfilled' ? result.value : null]));

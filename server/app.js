@@ -132,7 +132,9 @@ export function createAppServer({
       }
       if (url.pathname === '/api/meals/today' && req.method === 'GET') {
         const data = await store.getTodayMeals();
-        return json(res,200,url.searchParams.get('includeEdamam') === '1' ? await hydrateEdamamMeals(data, uri => edamam.detail(uri)) : data);
+        const priorityDate = url.searchParams.get('priorityDate');
+        return json(res,200,url.searchParams.get('includeEdamam') === '1' ? await hydrateEdamamMeals(data, uri => edamam.detail(uri), 6,
+          /^\d{4}-\d{2}-\d{2}$/.test(priorityDate || '') ? priorityDate : data.date) : data);
       }
       if (url.pathname === '/api/meals/goal') {
         if(req.method!=='PUT') throw new AppError('METHOD_NOT_ALLOWED','Utiliza PUT.',405);

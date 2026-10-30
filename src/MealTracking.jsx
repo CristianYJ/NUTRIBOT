@@ -15,9 +15,9 @@ async function mealRequest(path,method='GET',body) {
 export function useMeals(includeEdamam = false) {
   const [data,setData]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const pending=useRef(false),sequence=useRef(0);
-  const refresh=useCallback(async()=>{
+  const refresh=useCallback(async(priorityDate)=>{
     const seq=++sequence.current;
-    try {const next=await mealRequest(`today${includeEdamam ? '?includeEdamam=1' : ''}`);if(seq===sequence.current){setData(next);setError('');}}
+    try {const next=await mealRequest(`today${includeEdamam ? `?includeEdamam=1${priorityDate ? `&priorityDate=${encodeURIComponent(priorityDate)}` : ''}` : ''}`);if(seq===sequence.current){setData(next);setError('');}}
     catch(e){if(seq===sequence.current)setError('No se pudo consultar tu registro de comidas.');throw e;}
   },[includeEdamam]);
   useEffect(()=>{
@@ -110,7 +110,7 @@ export function DailyNutrition({tracker,onProfile}) {
         const future=day.date>current.date;
         const unknown=day.count>0 && day.missing.kcal===day.count;
         const label=new Date(day.date+'T12:00:00Z').toLocaleDateString('es-SV',{weekday:'short',timeZone:'UTC'});
-        return <button type="button" key={day.date} disabled={future} onClick={()=>setSelectedDate(day.date)} aria-pressed={day.date===data.date} aria-label={`Consultar nutrición del ${day.date.split('-').reverse().join('/')}`} className={`nutrition-day${day.date===data.date ? ' is-today' : ''}${future ? ' is-future' : ''}`} aria-current={day.date===current.date ? 'date' : undefined}>
+        return <button type="button" key={day.date} disabled={future} onClick={()=>{setSelectedDate(day.date);if(day.date!==current.date)tracker.refresh(day.date).catch(()=>{});}} aria-pressed={day.date===data.date} aria-label={`Consultar nutrición del ${day.date.split('-').reverse().join('/')}`} className={`nutrition-day${day.date===data.date ? ' is-today' : ''}${future ? ' is-future' : ''}`} aria-current={day.date===current.date ? 'date' : undefined}>
           <span>{label}</span><strong>{Number(day.date.slice(-2))}</strong><b>{future || !day.count || unknown ? '—' : number(day.knownTotals.kcal)}</b>
         </button>;
       })}</div>}
@@ -129,7 +129,7 @@ export function DailyNutrition({tracker,onProfile}) {
       </div>
       <div className="nutrient-pagination">{[0,1].map(index=><button key={index} aria-label={index===0 ? 'Ver carbohidratos, proteína y grasa' : 'Ver fibra, azúcares y sodio'} aria-pressed={page===index} onClick={()=>slider.current?.scrollTo({left:slider.current.clientWidth*index,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'})}><span /></button>)}</div>
       {!data.complete && <p className="review-note">Faltan datos nutricionales en algunas comidas.</p>}
-      {data.externalNutritionPartial && <p className="review-note">Algunas recetas de Edamam no pudieron consultarse ahora. Sus nutrientes se mostrarán cuando vuelvas a abrir Inicio.</p>}
+      {data.externalNutritionPartial && <p className="review-note">Algunas recetas de Edamam no pudieron consultarse ahora. <button className="text-btn" onClick={()=>tracker.refresh(data.date).catch(()=>{})}>Actualizar este día</button></p>}
       {data.meals.length>0 && <details key={data.date} className="daily-meal-list"><summary>Comidas registradas ({data.meals.length})</summary>{data.meals.map(meal=><div key={meal.id}><span><strong>{meal.title}</strong><small>1 porción{meal.rating ? ` · ${meal.rating}/5 estrellas` : ''}</small></span><button className="btn secondary" aria-label={`Quitar registro de ${meal.title}`} disabled={busy} onClick={()=>tracker.change(meal.id,'DELETE').catch(()=>{})}>Quitar</button></div>)}</details>}
     </>}
   </section>;

@@ -7,9 +7,9 @@ const sections = [
   ["responsable", "Responsable y contacto"],
   ["datos", "Datos personales tratados"],
   ["uso", "Finalidades del tratamiento"],
-  ["gemini", "Google Gemini"],
-  ["edamam", "Edamam"],
-  ["usda", "USDA FoodData Central"],
+  ["gemini", "Proveedor de IA"],
+  ["edamam", "Recetas"],
+  ["usda", "USDA"],
   ["cookies", "Cookies y preferencias"],
   ["conservacion", "Conservación y seguridad"],
   ["derechos", "Derechos de las personas usuarias"],
@@ -34,9 +34,7 @@ export default function PrivacyPage() {
       </header>
       <main id="privacy-main" className="privacy-layout">
         <div className="privacy-hero">
-          <p className="privacy-eyebrow">Privacidad en NutriBot</p>
           <h1>Política de privacidad</h1>
-          <p>Esta política describe los datos personales tratados por NutriBot, las finalidades del tratamiento y los medios disponibles para ejercer los derechos de las personas usuarias.</p>
         </div>
         <div className="privacy-content">
           <nav className="privacy-toc" aria-label="Contenido de la política">
@@ -46,11 +44,11 @@ export default function PrivacyPage() {
           <div className="privacy-articles">
             <section id="responsable">
               <h2>1. Responsable y contacto</h2>
-              <p>El responsable del tratamiento de datos personales de NutriBot se identifica provisionalmente como <strong>John Doe</strong>, en <strong>El Salvador</strong>. Las consultas sobre privacidad y las solicitudes relativas a datos personales pueden dirigirse a <a href="mailto:soporte@nutribot.online">soporte@nutribot.online</a>.</p>
-              <p>Dirección provisional de contacto: Prolongación Alameda Juan Pablo II, Calle El Carmen, San Antonio Abad, San Salvador, El Salvador (<a href="https://www.uees.edu.sv/" target="_blank" rel="noopener noreferrer">dirección de la Universidad Evangélica de El Salvador</a>). La referencia a esta dirección no atribuye a la universidad la operación ni el respaldo de NutriBot.</p>
+              <p>Las consultas sobre privacidad y las solicitudes relativas a datos personales pueden dirigirse a <a href="mailto:soporte@nutribot.online">soporte@nutribot.online</a>.</p>
+              <p>Dirección de contacto: Prolongación Alameda Juan Pablo II, Calle El Carmen, San Antonio Abad, San Salvador, El Salvador (<a href="https://www.uees.edu.sv/" target="_blank" rel="noopener noreferrer">dirección de la Universidad Evangélica de El Salvador</a>). La referencia a esta dirección no atribuye a la universidad la operación ni el respaldo de NutriBot.</p>
             </section>
             <section id="datos">
-              <h2>2. Datos personales tratados</h2>
+              <h2>2. Datos personales</h2>
               <p>NutriBot trata los datos proporcionados por la persona usuaria y los generados durante el uso del servicio:</p>
               <ul>
                 <li><strong>Cuenta y acceso:</strong> nombre, correo electrónico, fecha de nacimiento, plan asignado e información necesaria para autenticar y proteger la cuenta. Las solicitudes de cambio de contraseña se comunican al correo registrado.</li>
@@ -67,23 +65,20 @@ export default function PrivacyPage() {
               <p>Los datos se utilizan para administrar la cuenta, proteger el acceso, mantener el perfil y la despensa, atender consultas culinarias, buscar recetas conforme a las preferencias registradas, presentar información nutricional y registrar comidas. Los registros técnicos permiten detectar errores, medir el funcionamiento del servicio y prevenir usos indebidos.</p>
               <p>El análisis de fotografías y el seguimiento nutricional se realizan cuando la persona usuaria utiliza esas funciones. Las recetas y los cálculos son información orientativa; corresponde comprobar ingredientes, alérgenos, etiquetas y cantidades antes de preparar o consumir un alimento.</p>
             </section>
-            <section id="gemini" className="privacy-provider">
-              <span className="privacy-provider-label">Proveedor de IA</span>
-              <h2>4. Google Gemini</h2>
+            <section id="gemini">
+              <h2>4. Proveedor de IA</h2>
               <p>NutriBot utiliza Google Gemini para interpretar consultas en lenguaje natural, mantener conversaciones, identificar ingredientes en fotografías, traducir títulos e ingredientes y estimar la dificultad o categoría de una receta.</p>
               <p>Según la función utilizada, se transmiten a Google las consultas o fotografías proporcionadas y la información alimentaria pertinente para responderlas. Las credenciales de acceso no se envían para estas funciones. El texto y las imágenes proporcionados por la persona usuaria podrían contener otros datos personales.</p>
               <p>Google trata la información recibida conforme a sus <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">condiciones de Gemini API</a>. Estas contemplan usos para prestar y proteger el servicio y, según la modalidad aplicable, para mejorar sus productos.</p>
             </section>
-            <section id="edamam" className="privacy-provider">
-              <span className="privacy-provider-label">Búsqueda de recetas</span>
-              <h2>5. Edamam</h2>
+            <section id="edamam">
+              <h2>5. Recetas</h2>
               <p>Para buscar recetas, Edamam recibe los ingredientes y las preferencias alimentarias pertinentes, incluidas las restricciones que la persona usuaria haya indicado. NutriBot no transmite sus credenciales de acceso para realizar estas búsquedas.</p>
               <p>Edamam proporciona recetas de terceros, imágenes, ingredientes y, cuando están disponibles, información nutricional e índice glucémico. Las instrucciones de preparación pueden encontrarse en sitios externos. NutriBot conserva la referencia de las recetas guardadas por la persona usuaria, pero no almacena actualmente los valores nutricionales suministrados por Edamam. Se aplican las <a href="https://developer.edamam.com/edamam-recipe-api" target="_blank" rel="noopener noreferrer">condiciones del servicio de Edamam</a>.</p>
             </section>
-            <section id="usda" className="privacy-provider">
-              <span className="privacy-provider-label">Datos de alimentos</span>
-              <h2>6. USDA FoodData Central</h2>
-              <p>NutriBot consulta FoodData Central, del Departamento de Agricultura de Estados Unidos, para obtener información nutricional de alimentos y recetas. Estas consultas se basan en los alimentos utilizados y no requieren transmitir las credenciales de acceso de la persona usuaria.</p>
+            <section id="usda">
+              <h2>6. USDA</h2>
+              <p>NutriBot consulta USDA FoodData Central, del Departamento de Agricultura de Estados Unidos, para obtener información nutricional de alimentos y recetas. Estas consultas se basan en los alimentos utilizados y no requieren transmitir las credenciales de acceso de la persona usuaria.</p>
               <p>La información nutricional obtenida puede conservarse cuando sea necesaria para las funciones de la cuenta. Los valores pueden variar según marca, porción y preparación. Puede consultarse la <a href="https://fdc.nal.usda.gov/api-guide/" target="_blank" rel="noopener noreferrer">documentación de FoodData Central</a>.</p>
             </section>
             <section id="cookies">

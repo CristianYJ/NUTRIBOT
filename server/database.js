@@ -333,7 +333,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 10) throw new Error("Esquema de una versión posterior");
+      if (version > 11) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(

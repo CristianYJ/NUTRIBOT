@@ -55,12 +55,15 @@ export function requestContext(req, network = {}) {
     "http://127.0.0.1:5173",
     "http://localhost:5173",
   ];
-  const publicNavigation = network.public && req.method === "GET" &&
-    req.headers["sec-fetch-mode"] === "navigate" &&
-    req.headers["sec-fetch-dest"] === "document";
+  // A redirect or an installed PWA can reach the public shell with an old
+  // Origin and incomplete Fetch Metadata headers. The shell contains no
+  // account data; API routes still require the exact current origin.
+  const publicEntry = network.public && req.method === "GET" &&
+    typeof req.url === "string" &&
+    /^\/(?:index\.html)?(?:\?.*)?$/.test(req.url);
   if (
-    (req.headers.origin && !origins.includes(req.headers.origin) && !publicNavigation) ||
-    (req.headers["sec-fetch-site"] === "cross-site" && !publicNavigation)
+    (req.headers.origin && !origins.includes(req.headers.origin) && !publicEntry) ||
+    (req.headers["sec-fetch-site"] === "cross-site" && !publicEntry)
   )
     throw new AppError("FORBIDDEN", "Origen no autorizado.", 403);
   return {

@@ -61,9 +61,15 @@ test("public requests require the local authenticated HTTPS proxy and the exact 
   assert.equal(requestContext(request({ "x-forwarded-for": "127.0.0.1", "x-forwarded-proto": "http" }), network).local, false);
   assert.equal(requestContext(request({ "x-nutribot-client": "127.0.0.1" }), network).local, false);
   assert.equal(requestContext(request({ "x-nutribot-client": "2001:db8::20" }), network).secure, true);
-  const navigation = { ...request({ "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" }), method: "GET" };
+  const navigation = { ...request({ "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" }), method: "GET", url: "/" };
   assert.equal(requestContext(navigation, network).origin, origin);
   assert.equal(requestContext({ ...navigation, headers: { ...navigation.headers, origin: "https://nutribot.facheritossv.com" } }, network).origin, origin);
+  const redirected = { ...navigation, headers: { ...navigation.headers, origin: "https://nutribot.facheritossv.com",
+    "sec-fetch-mode": undefined, "sec-fetch-dest": undefined } };
+  assert.equal(requestContext(redirected, network).origin, origin);
+  assert.equal(requestContext({ ...redirected, url: "/?install=1" }, network).origin, origin);
+  for (const url of ["/api/health", "/api/auth/session", "/assets/app.js"])
+    assert.throws(() => requestContext({ ...redirected, url }, network), { code: "FORBIDDEN" });
   assert.throws(() => requestContext(request({ origin: "https://nutribot.facheritossv.com" }), network), { code: "FORBIDDEN" });
   assert.throws(() => requestContext({ ...navigation, method: "POST" }, network), { code: "FORBIDDEN" });
 });

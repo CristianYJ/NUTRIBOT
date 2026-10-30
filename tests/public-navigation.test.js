@@ -12,6 +12,9 @@ test("public sections stay on landing while account and protected routes require
   for (const hash of ["", "#", ...landingSections.map((id) => "#" + id)])
     assert.equal(publicPage(hash), "landing");
   assert.equal(publicPage("#politica-privacidad"), "privacy");
+  assert.equal(publicPage("#restablecer/" + "a".repeat(64)), "reset");
+  assert.equal(publicPage("#restablecer"), "reset");
+  assert.equal(publicPage("#restablecer/not-a-token"), "auth");
   for (const id of privacySectionIds) assert.equal(publicPage("#" + id), "privacy");
   for (const hash of ["#auth", "#pantry", "#assistant", "#profile", "#recipes"])
     assert.equal(publicPage(hash), "auth");

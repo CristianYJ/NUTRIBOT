@@ -128,6 +128,49 @@ test("email lookup routes existing accounts to login and new emails to registrat
     last = await lookup({ email: "new@example.test" });
   assert.equal(last.status, 429);
 });
+
+test('forgotten-password and admin requests email a reset form, never a sign-in link', async t => {
+  const f = await fixture(t);
+  const userId = await f.store.auth.register(credentials('recover@example.test'), false);
+  const adminId = await f.store.auth.register(credentials('staff@example.test'), false);
+  await f.sql.query("UPDATE profiles SET role_code='admin' WHERE id=$1", [adminId]);
+  const mail = [];
+  const server = createAppServer({ store: f.store, network: { origins: ['https://nutribot.online'] },
+    sendPasswordResetEmail: async item => { mail.push(item); } });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (route, body, headers = {}) => fetch(base + route, { method: 'POST', headers: {
+    'Content-Type': 'application/json', 'X-Nutribot-Request': '1', ...headers }, body: JSON.stringify(body) });
+  const known = await post('/api/auth/password-reset/request', { email: 'recover@example.test' });
+  const unknown = await post('/api/auth/password-reset/request', { email: 'unknown@example.test' });
+  assert.equal(known.status, 200);
+  assert.equal(unknown.status, 200);
+  assert.deepEqual(await known.json(), await unknown.json());
+  assert.equal(known.headers.get('set-cookie'), null);
+  assert.equal(mail.length, 1);
+  assert.equal(mail[0].to, 'recover@example.test');
+  assert.match(mail[0].link, /^https:\/\/nutribot\.online\/#restablecer\/[a-f0-9]{64}$/);
+  const token = mail[0].link.split('/').at(-1);
+  const complete = await post('/api/auth/password-reset/complete', { token, newPassword: 'A new password 2026' });
+  assert.equal(complete.status, 200);
+  assert.equal((await complete.json()).authenticated, false);
+  assert.equal((await (await fetch(base + '/api/auth/session')).json()).authenticated, false);
+  const login = await post('/api/auth/login', { email: 'staff@example.test', password: 'Una frase larga de prueba 2026' });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const csrf = (await login.json()).csrfToken;
+  const anonymousAdmin = await post('/api/admin/password-reset', { accountId: userId });
+  assert.equal(anonymousAdmin.status, 401);
+  const missingCsrf = await post('/api/admin/password-reset', { accountId: userId }, { Cookie: cookie });
+  assert.equal(missingCsrf.status, 403);
+  const admin = await post('/api/admin/password-reset', { accountId: userId }, { Cookie: cookie, 'X-Nutribot-CSRF': csrf });
+  assert.equal(admin.status, 200);
+  assert.equal(mail.length, 2);
+  assert.equal(mail[1].to, 'recover@example.test');
+  const audit = (await f.sql.query('SELECT requested_by_admin_id FROM password_reset_tokens ORDER BY created_at DESC')).rows;
+  assert(audit.some(row => row.requested_by_admin_id === String(adminId)));
+});
 async function fixture(t) {
   const schema = "nutribot_test_" + randomBytes(8).toString("hex");
   const store = await openDatabase({ database, schema });

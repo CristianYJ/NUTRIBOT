@@ -52,6 +52,7 @@ export function createAppServer({
   edamamPlan = planEdamam,
   edamamPresent = presentEdamamRecipe,
   edamamChoices = presentEdamamChoices,
+  sendPasswordResetEmail = null,
   usdaFetch = fetch,
   model = "gemini-3.5-flash-lite",
   generate = generateWithGemini,
@@ -64,7 +65,9 @@ export function createAppServer({
 } = {}) {
   if (authentication && (!rootStore?.auth || !rootStore?.forProfile))
     throw new Error("La autenticación requiere PostgreSQL actualizado.");
-  const auth = authentication ? createAuthentication(rootStore) : null;
+  const auth = authentication ? createAuthentication(rootStore, {
+    sendPasswordResetEmail, resetOrigin: network.origins?.[0] || '',
+  }) : null;
   const requests = new Map();
   const requestMetrics = new AsyncLocalStorage();
   const operation = (provider, target) => {
@@ -155,6 +158,15 @@ export function createAppServer({
       if (url.pathname.startsWith('/api/admin/')) {
         if (!session || !await rootStore?.isAdmin?.(session.profileId))
           throw new AppError('FORBIDDEN', 'Acceso administrativo no autorizado.', 403);
+        if (url.pathname === '/api/admin/password-reset' && req.method === 'POST') {
+          const body = await readJson(req, 1000);
+          const id = body?.accountId;
+          if (!Number.isSafeInteger(id) || id < 1) throw new AppError('INVALID_REQUEST', 'Cuenta inválida.');
+          const found = await rootStore.findAdminAccount(String(id));
+          if (!found.account || !await auth.sendReset(found.account.email, session.profileId))
+            throw new AppError('RESET_UNAVAILABLE', 'No se pudo enviar el enlace. Espera antes de volver a intentarlo.', 429);
+          return json(res, 200, { sent: true });
+        }
         if (req.method !== 'GET') throw new AppError('METHOD_NOT_ALLOWED', 'Utiliza GET.', 405);
         const period = url.searchParams.get('period') || 'week';
         if (!Object.hasOwn(adminPeriods, period)) throw new AppError('INVALID_FILTER', 'Período inválido.');

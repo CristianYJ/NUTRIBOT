@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    16,
+    17,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -212,10 +212,11 @@ test('role migration grants the configured existing account once and does not re
   const id = await f.store.auth.register({ name: 'Original admin', email: 'admin@example.test',
     password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
   await f.sql.query('DROP TRIGGER profile_role_audit ON profiles');
+  await f.sql.query('DROP TABLE password_reset_tokens');
   await f.sql.query('DROP FUNCTION record_profile_role()');
   await f.sql.query('DROP TABLE profile_role_history');
   await f.sql.query('ALTER TABLE profiles DROP COLUMN role_code');
-  await f.sql.query('DELETE FROM schema_migrations WHERE version=16');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (16,17)');
   const migrated = await openDatabase({ ...f.options, adminEmail: 'ADMIN@example.test' });
   t.after(() => migrated.close());
   assert.equal(await migrated.isAdmin(id), true);
@@ -223,6 +224,46 @@ test('role migration grants the configured existing account once and does not re
   const restarted = await openDatabase({ ...f.options, adminEmail: 'admin@example.test' });
   t.after(() => restarted.close());
   assert.equal(await restarted.isAdmin(id), false);
+});
+
+test('password reset links are one-use, expire, and revoke sessions without signing in', async t => {
+  const f = await fixture(t);
+  const email = 'reset@example.test';
+  const original = 'A long test password 2026';
+  const next = 'Another long password 2026';
+  const id = await f.store.auth.register({ name: 'Reset user', email, password: original, birthDate: '1990-01-01' }, false);
+  assert.equal(await f.store.auth.issuePasswordReset('missing@example.test'), null);
+  const first = await f.store.auth.issuePasswordReset(email);
+  assert.match(first.token, /^[a-f0-9]{64}$/);
+  assert.equal(first.email, email);
+  assert(!JSON.stringify((await f.sql.query('SELECT * FROM password_reset_tokens')).rows).includes(first.token));
+  await f.store.auth.createSession(id, 'a'.repeat(64), new Date(Date.now() + 600000));
+  const second = await f.store.auth.issuePasswordReset(email, id);
+  await assert.rejects(f.store.auth.completePasswordReset(first.token, next), { code: 'INVALID_RESET_LINK' });
+  await f.store.auth.completePasswordReset(second.token, next);
+  assert.equal(await f.store.auth.findSession('a'.repeat(64)), null);
+  await assert.rejects(f.store.auth.login({ email, password: original }), { code: 'INVALID_CREDENTIALS' });
+  assert.equal(await f.store.auth.login({ email, password: next }), id);
+  await assert.rejects(f.store.auth.completePasswordReset(second.token, original), { code: 'INVALID_RESET_LINK' });
+  assert.equal((await f.sql.query('SELECT requested_by_admin_id FROM password_reset_tokens WHERE token_hash=$1', [second.tokenHash])).rows[0].requested_by_admin_id, String(id));
+  const third = await f.store.auth.issuePasswordReset(email);
+  assert.equal(third !== null, true);
+  assert.equal(await f.store.auth.issuePasswordReset(email), null);
+  await f.sql.query("UPDATE password_reset_tokens SET created_at=now()-interval '30 minutes',expires_at=now()-interval '10 minutes' WHERE token_hash=$1", [third.tokenHash]);
+  await assert.rejects(f.store.auth.completePasswordReset(third.token, original), { code: 'INVALID_RESET_LINK' });
+});
+
+test('signed-in password change requires the current password and invalidates sessions', async t => {
+  const f = await fixture(t);
+  const email = 'change@example.test';
+  const id = await f.store.auth.register({ name: 'Change user', email,
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  await f.store.auth.createSession(id, 'b'.repeat(64), new Date(Date.now() + 600000));
+  await assert.rejects(f.store.auth.changePassword(id, 'wrong', 'A different password 2026'), { code: 'INVALID_CREDENTIALS' });
+  assert(await f.store.auth.findSession('b'.repeat(64)));
+  await f.store.auth.changePassword(id, 'A long test password 2026', 'A different password 2026');
+  assert.equal(await f.store.auth.findSession('b'.repeat(64)), null);
+  assert.equal(await f.store.auth.login({ email, password: 'A different password 2026' }), id);
 });
 
 test('admin analytics counts measured provider calls, HTTP activity, plans and account history', async t => {
@@ -269,11 +310,12 @@ test('daily aggregate migration backfills available detailed metrics without acc
     outcome: 'success', statusCode: 200, durationMs: 300 });
   await f.sql.query('DROP TABLE admin_daily_metrics');
   await f.sql.query('DROP TABLE edamam_presentation_cache');
+  await f.sql.query('DROP TABLE password_reset_tokens');
   await f.sql.query('DROP TRIGGER profile_role_audit ON profiles');
   await f.sql.query('DROP FUNCTION record_profile_role()');
   await f.sql.query('DROP TABLE profile_role_history');
   await f.sql.query('ALTER TABLE profiles DROP COLUMN role_code');
-  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14,15,16)');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14,15,16,17)');
   const reopened = await f.reopen();
   const rows = (await f.sql.query("SELECT source,category,outcome,total FROM admin_daily_metrics WHERE source='api'")).rows;
   assert.deepEqual(rows, [{ source: 'api', category: 'edamam', outcome: 'success', total: 1 }]);

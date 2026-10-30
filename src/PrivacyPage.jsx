@@ -55,7 +55,7 @@ export default function PrivacyPage() {
               <h2>2. Datos que recopilamos</h2>
               <p>Recopilamos la información que proporcionas y los datos necesarios para que funcionen las herramientas que utilizas:</p>
               <ul>
-                <li><strong>Cuenta y acceso:</strong> nombre, correo electrónico, fecha de nacimiento, plan asignado y contraseña protegida mediante hash. Guardamos sesiones para mantener el acceso.</li>
+                <li><strong>Cuenta y acceso:</strong> nombre, correo electrónico, fecha de nacimiento, plan asignado y contraseña protegida mediante hash. Guardamos sesiones para mantener el acceso. Si solicitas cambiar la contraseña, generamos un enlace temporal de un solo uso y enviamos un correo a tu dirección registrada. El personal administrador también puede solicitar ese envío, sin conocer ni cambiar tu contraseña.</li>
                 <li><strong>Perfil alimentario:</strong> objetivos, dieta, alergias, restricciones y alimentos excluidos. Si los completas, también peso, estatura, actividad, metas nutricionales y notas sobre indicaciones profesionales. Las alergias y algunas notas pueden revelar información de salud.</li>
                 <li><strong>Despensa:</strong> alimentos agregados, fechas de almacenamiento y vencimiento, y alimentos personalizados.</li>
                 <li><strong>Recetas y comidas:</strong> recetas locales, identificador y nombre de recetas de Edamam que guardas, su categoría asignada por NutriBot, valoraciones, comidas registradas y datos nutricionales de recetas locales o consultas a USDA. Los valores nutricionales de Edamam se consultan cuando se necesitan; no se guardan bajo el plan actual.</li>
@@ -96,13 +96,13 @@ export default function PrivacyPage() {
             </section>
             <section id="conservacion">
               <h2>8. Conservación y seguridad</h2>
-              <p>La cuenta, el perfil, la despensa, las conversaciones y las comidas se guardan en PostgreSQL mientras la cuenta siga activa o hasta que uses una función de restablecimiento que elimine esos datos.</p>
-              <p>El portal muestra diagnósticos detallados de los últimos 30 días. Los registros anteriores se depuran al registrar nuevos eventos. Los totales diarios sin identificadores de cuenta se conservan para estadísticas históricas durante varios años. El portal de diagnósticos solo es accesible para la cuenta administradora configurada. Las contraseñas se guardan con hash y se limita el acceso a los datos por cuenta.</p>
+              <p>La cuenta, el perfil, la despensa, las conversaciones y las comidas se guardan en PostgreSQL mientras la cuenta siga activa o hasta que uses una función de restablecimiento que elimine esos datos. Los enlaces para cambiar la contraseña vencen a los 20 minutos y solo se pueden usar una vez. Guardamos un hash del token, la cuenta y cuándo se solicitó o utilizó; si lo pidió un administrador, también su identificador. Eliminamos estos registros antiguos al generar nuevos enlaces. El correo transaccional se envía mediante el servicio de correo de Hostinger desde soporte@nutribot.online.</p>
+              <p>El portal muestra diagnósticos detallados de los últimos 30 días. Los registros anteriores se depuran al registrar nuevos eventos. Los totales diarios sin identificadores de cuenta se conservan para estadísticas históricas durante varios años. El portal de diagnósticos solo es accesible para cuentas con el rol de administrador. Las contraseñas se guardan con hash y se limita el acceso a los datos por cuenta.</p>
               <p><strong>Pendiente:</strong> indicar alojamiento, transferencias internacionales, duración de copias de seguridad y procedimiento de eliminación completa de cuenta. Restablecer datos no borra la cuenta ni solicitudes ya procesadas por proveedores externos.</p>
             </section>
             <section id="derechos">
               <h2>9. Tus opciones</h2>
-              <p>Puedes revisar y cambiar tu perfil y despensa, quitar recetas guardadas, administrar conversaciones, registrar o eliminar comidas y cerrar sesión. «Restaurar mis datos» reinicia datos de uso, pero mantiene la cuenta. Para solicitar acceso, corrección, exportación o eliminación completa falta establecer un correo de privacidad y un procedimiento de verificación. Los derechos y plazos concretos dependerán de la legislación aplicable.</p>
+              <p>Puedes revisar y cambiar tu perfil y despensa, quitar recetas guardadas, administrar conversaciones, registrar o eliminar comidas y cerrar sesión. Puedes cambiar tu contraseña desde el perfil usando la contraseña actual, o solicitar por correo un enlace para elegir otra si la olvidaste. El enlace no inicia sesión automáticamente. «Restaurar mis datos» reinicia datos de uso, pero mantiene la cuenta. Para solicitar acceso, corrección, exportación o eliminación completa falta establecer un correo de privacidad y un procedimiento de verificación. Los derechos y plazos concretos dependerán de la legislación aplicable.</p>
             </section>
             <section id="cambios">
               <h2>10. Cambios a esta política</h2>

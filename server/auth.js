@@ -88,7 +88,7 @@ function setCookie(res, token, secure, remember, clear = false) {
     `${cookieName}=${clear ? "" : token}; Path=/; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}${age}`,
   );
 }
-export function createAuthentication(store) {
+export function createAuthentication(store, { sendPasswordResetEmail = null, resetOrigin = '' } = {}) {
   const attempts = new Map();
   let running = 0;
   function throttle(ip) {
@@ -125,9 +125,27 @@ export function createAuthentication(store) {
         403,
       );
   }
+  async function sendReset(email, requestedByAdminId = null) {
+    if (!sendPasswordResetEmail || !resetOrigin)
+      throw new AppError('MAIL_UNAVAILABLE', 'El envío de correos aún no está configurado.', 503);
+    const issued = await store.auth.issuePasswordReset(email, requestedByAdminId);
+    if (!issued) return false;
+    try {
+      await sendPasswordResetEmail({ to: issued.email, link: `${resetOrigin}/#restablecer/${issued.token}` });
+      return true;
+    } catch (error) {
+      await store.auth.cancelPasswordReset(issued.tokenHash);
+      if (requestedByAdminId)
+        throw new AppError('MAIL_UNAVAILABLE', 'No se pudo enviar el correo. Revisa la configuración de correo.', 503);
+      // The public response must not reveal whether the address belongs to an account.
+      console.error('Password reset email delivery failed:', error?.code || 'MAIL_ERROR');
+      return false;
+    }
+  }
   return {
     session,
     requireCsrf,
+    sendReset,
     async route(req, res, url, context, readJson, json) {
       if (!url.pathname.startsWith("/api/auth/")) return false;
       const current = await session(req);
@@ -164,6 +182,31 @@ export function createAuthentication(store) {
         }
         setCookie(res, "", context.secure, false, true);
         json(res, 200, { authenticated: false });
+        return true;
+      }
+      if (url.pathname === '/api/auth/password-reset/request') {
+        throttle(context.ip);
+        const raw = await readJson(req, 4096);
+        await sendReset(raw?.email);
+        json(res, 200, { sent: true, text: 'Si el correo está registrado, recibirás un enlace para cambiar la contraseña.' });
+        return true;
+      }
+      if (url.pathname === '/api/auth/password-reset/complete') {
+        throttle(context.ip);
+        const raw = await readJson(req, 4096);
+        await store.auth.completePasswordReset(raw?.token, raw?.newPassword);
+        setCookie(res, '', context.secure, false, true);
+        json(res, 200, { authenticated: false, changed: true });
+        return true;
+      }
+      if (url.pathname === '/api/auth/password/change') {
+        if (!current) throw new AppError('UNAUTHORIZED', 'Inicia sesión para continuar.', 401);
+        requireCsrf(req, current);
+        throttle(context.ip);
+        const raw = await readJson(req, 4096);
+        await store.auth.changePassword(current.profileId, raw?.oldPassword, raw?.newPassword);
+        setCookie(res, '', context.secure, false, true);
+        json(res, 200, { authenticated: false, changed: true });
         return true;
       }
       if (

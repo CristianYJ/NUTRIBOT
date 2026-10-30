@@ -121,7 +121,7 @@ test('Edamam saved recipes retain URI, title and meal without nutrition, stay wi
   assert.deepEqual(await (await f.reopen()).listEdamamFavorites(), [{ uri, title: 'Test recipe', meal: 'Desayuno' }]);
   const placeholders = (await f.sql.query('SELECT nutrition_cache,nutrition_cache_source,nutrition_cache_updated_at FROM edamam_favorites WHERE recipe_uri=$1', [uri])).rows[0];
   assert.deepEqual(placeholders, { nutrition_cache: null, nutrition_cache_source: null, nutrition_cache_updated_at: null });
-  const mealColumns = (await f.sql.query("SELECT column_name FROM information_schema.columns WHERE table_name='edamam_meal_log' AND column_name IN ('nutrition_snapshot','nutrition_source','nutrition_recorded_at') ORDER BY column_name")).rows;
+  const mealColumns = (await f.sql.query("SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='edamam_meal_log' AND column_name IN ('nutrition_snapshot','nutrition_source','nutrition_recorded_at') ORDER BY column_name")).rows;
   assert.deepEqual(mealColumns.map(row => row.column_name), ['nutrition_recorded_at', 'nutrition_snapshot', 'nutrition_source']);
   await f.store.classifyEdamamFavorites([{ uri, title: 'Receta de prueba', meal: 'Cena' }]);
   assert.equal((await f.store.listEdamamFavorites())[0].meal, 'Desayuno');

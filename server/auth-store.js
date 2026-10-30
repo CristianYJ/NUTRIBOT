@@ -2,6 +2,9 @@ import { AppError } from "./recipes.js";
 import { ageFromBirthDate } from "../src/date-utils.js";
 import { hashPassword, verifyPassword } from "./passwords.js";
 import { initialProfile } from "../src/data.js";
+import { createHash, randomBytes } from "node:crypto";
+
+const resetHash = token => createHash('sha256').update(token).digest('hex');
 
 export function normalizeEmail(value) {
   if (
@@ -133,6 +136,57 @@ export function createAuthStore(pool, transaction) {
     },
     async deleteSession(hash) {
       await pool.query("DELETE FROM auth_sessions WHERE token_hash=$1", [hash]);
+    },
+    async issuePasswordReset(email, requestedByAdminId = null) {
+      const normalized = normalizeEmail(email);
+      return transaction(async c => {
+        await c.query("DELETE FROM password_reset_tokens WHERE created_at < now() - interval '1 day'");
+        const profile = (await c.query('SELECT id,email FROM profiles WHERE email=$1 FOR UPDATE', [normalized])).rows[0];
+        if (!profile) return null;
+        const recent = (await c.query("SELECT count(*)::integer AS n FROM password_reset_tokens WHERE profile_id=$1 AND created_at > now() - interval '1 hour'", [profile.id])).rows[0].n;
+        if (recent >= 3) return null;
+        const token = randomBytes(32).toString('hex');
+        const tokenHash = resetHash(token);
+        await c.query("UPDATE password_reset_tokens SET consumed_at=now() WHERE profile_id=$1 AND consumed_at IS NULL", [profile.id]);
+        await c.query("INSERT INTO password_reset_tokens(token_hash,profile_id,requested_by_admin_id,expires_at) VALUES($1,$2,$3,now()+interval '20 minutes')",
+          [tokenHash, profile.id, requestedByAdminId]);
+        return { token, tokenHash, email: profile.email };
+      });
+    },
+    cancelPasswordReset(tokenHash) {
+      return pool.query('DELETE FROM password_reset_tokens WHERE token_hash=$1', [tokenHash]);
+    },
+    async completePasswordReset(token, newPassword) {
+      if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token))
+        throw new AppError('INVALID_RESET_LINK', 'El enlace no es válido o ya venció.', 400);
+      const passwordHash = await hashPassword(newPassword);
+      const tokenHash = resetHash(token);
+      const candidate = (await pool.query('SELECT profile_id FROM password_reset_tokens WHERE token_hash=$1', [tokenHash])).rows[0];
+      if (!candidate) throw new AppError('INVALID_RESET_LINK', 'El enlace no es válido o ya venció.', 400);
+      return transaction(async c => {
+        await c.query('SELECT id FROM profiles WHERE id=$1 FOR UPDATE', [candidate.profile_id]);
+        const row = (await c.query(`SELECT profile_id FROM password_reset_tokens
+          WHERE token_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, [tokenHash])).rows[0];
+        if (!row || Number(row.profile_id) !== Number(candidate.profile_id))
+          throw new AppError('INVALID_RESET_LINK', 'El enlace no es válido o ya venció.', 400);
+        await c.query('UPDATE profiles SET password_hash=$1,updated_at=now() WHERE id=$2', [passwordHash, row.profile_id]);
+        await c.query('UPDATE password_reset_tokens SET consumed_at=now() WHERE profile_id=$1 AND consumed_at IS NULL', [row.profile_id]);
+        await c.query('DELETE FROM auth_sessions WHERE profile_id=$1', [row.profile_id]);
+      });
+    },
+    async changePassword(profileId, oldPassword, newPassword, currentSessionHash) {
+      if (oldPassword === newPassword) throw new AppError('INVALID_PASSWORD', 'Elige una contraseña nueva.');
+      if (typeof currentSessionHash !== 'string' || !/^[a-f0-9]{64}$/.test(currentSessionHash))
+        throw new AppError('INVALID_SESSION', 'La sesión actual no es válida.', 401);
+      const passwordHash = await hashPassword(newPassword);
+      return transaction(async c => {
+        const row = (await c.query('SELECT password_hash FROM profiles WHERE id=$1 FOR UPDATE', [profileId])).rows[0];
+        if (!await verifyPassword(oldPassword, row?.password_hash))
+          throw new AppError('INVALID_CREDENTIALS', 'La contraseña actual no es correcta.', 401);
+        await c.query('UPDATE profiles SET password_hash=$1,updated_at=now() WHERE id=$2', [passwordHash, profileId]);
+        await c.query('UPDATE password_reset_tokens SET consumed_at=now() WHERE profile_id=$1 AND consumed_at IS NULL', [profileId]);
+        await c.query('DELETE FROM auth_sessions WHERE profile_id=$1 AND token_hash<>$2', [profileId, currentSessionHash]);
+      });
     },
   };
 }

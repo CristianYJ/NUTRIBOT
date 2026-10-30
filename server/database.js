@@ -334,7 +334,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 16) throw new Error("Esquema de una versión posterior");
+      if (version > 17) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -448,6 +448,10 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/016_account_roles.sql', import.meta.url), 'utf8'));
         if (adminEmail) await c.query("UPDATE profiles SET role_code='admin' WHERE email=$1", [adminEmail.trim().toLowerCase()]);
         await c.query('INSERT INTO schema_migrations(version) VALUES(16)');
+      }
+      if (version < 17) {
+        await c.query(readFileSync(new URL('./postgres/017_password_reset.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(17)');
       }
     });
   } catch (error) {

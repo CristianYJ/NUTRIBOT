@@ -88,6 +88,7 @@ export default function AdminPortal() {
   const accountRequest = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [resetNotice, setResetNotice] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const q = summary?.quality || {};
   const successes = (q.twoOptions || 0) + (q.oneOption || 0);
@@ -141,6 +142,18 @@ export default function AdminPortal() {
     catch (problem) { setError(problem.message); } finally { setBusy(false); }
   }
   async function findAccount(event) { event.preventDefault(); await showAccount(accountQuery.trim()); }
+  async function sendPasswordReset() {
+    if (!accountResult?.account) return;
+    setBusy(true); setError(''); setResetNotice('');
+    try {
+      const response = await authenticatedFetch('/api/admin/password-reset', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: accountResult.account.id }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.text || 'No se pudo enviar el enlace.');
+      setResetNotice(`Enlace enviado a ${accountResult.account.email}. El usuario elegirá su nueva contraseña.`);
+    } catch (problem) { setError(problem.message); }
+    finally { setBusy(false); }
+  }
   function openAccountIncidents(id) { setFilters(previous => ({ ...previous, accountId: String(id), outcome: 'all' })); setView('incidents'); }
   async function showAccount(query) {
     const request = ++accountRequest.current;
@@ -219,7 +232,8 @@ export default function AdminPortal() {
           <section className="admin-panel admin-users-list"><div className="admin-panel-heading"><div><h2>Últimas 10 cuentas</h2><p>Ordenadas de registro más reciente a más antiguo</p></div></div>
             {users?.latest?.length ? <div className="admin-table-wrap"><table><thead><tr><th>Cuenta</th><th>Plan</th><th>Registro</th><th>Última actividad</th><th></th></tr></thead><tbody>{users.latest.map(user => <tr key={user.id}><td><strong>{user.name}</strong><small>#{user.id} · {user.email}{user.role === 'admin' ? ' · Admin' : ''}</small></td><td>{user.plan === 'basico' ? 'Básico' : user.plan === 'nutripro' ? 'NutriPro' : 'NutriMax'}</td><td>{date(user.createdAt)}</td><td>{date(user.lastActiveAt)}</td><td><button className="admin-text-link" onClick={() => showAccount(user.id)}>Detalles</button></td></tr>)}</tbody></table></div> : empty}
           </section></>}
-          {accountResult && (accountResult.account ? <section className="admin-panel admin-account"><div className="admin-panel-heading"><div><h3>{accountResult.account.name}</h3><p>{accountResult.account.email} · Cuenta #{accountResult.account.id}</p></div><button className="btn secondary" disabled title="Restablecimiento de contraseña pendiente de implementar">Restablecer contraseña · próximamente</button></div>
+          {accountResult && (accountResult.account ? <section className="admin-panel admin-account"><div className="admin-panel-heading"><div><h3>{accountResult.account.name}</h3><p>{accountResult.account.email} · Cuenta #{accountResult.account.id}</p></div><button className="btn secondary" disabled={busy} onClick={sendPasswordReset}>Enviar enlace para cambiar contraseña</button></div>
+            {resetNotice && <p role="status">{resetNotice}</p>}
             <dl><div><dt>ID</dt><dd>#{accountResult.account.id}</dd></div><div><dt>Nombre</dt><dd>{accountResult.account.name}</dd></div><div><dt>Rol</dt><dd>{accountResult.account.role === 'admin' ? 'Admin' : 'Usuario'}</dd></div><div><dt>Plan asignado</dt><dd>{accountResult.detail?.effectivePlan || accountResult.account.plan}</dd></div><div><dt>Registro</dt><dd>{date(accountResult.account.createdAt)}</dd></div>
               <div><dt>Último cambio de perfil</dt><dd>{date(accountResult.detail?.updatedAt || accountResult.account.createdAt)}</dd></div><div><dt>Última actividad</dt><dd>{date(accountResult.detail?.lastActiveAt || accountResult.account.createdAt)}</dd></div>
               <div><dt>Tiempo de pago continuo</dt><dd>{accountResult.detail?.paidSince ? `${since(accountResult.detail.paidSince)} · desde ${date(accountResult.detail.paidSince)}` : 'No está en un plan de pago'}</dd></div>

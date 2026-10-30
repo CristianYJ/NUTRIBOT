@@ -4,6 +4,7 @@ import { MAX_CHAT_MESSAGES } from "./conversation-limits.js";
 import PantryWorkspace from "./PantryWorkspace.jsx";
 import { authenticatedFetch } from "./auth-api.js";
 import AuthPage from "./AuthPage.jsx";
+import ResetPasswordPage from './ResetPasswordPage.jsx';
 import LandingPage from "./LandingPage.jsx";
 import PrivacyPage from "./PrivacyPage.jsx";
 import { publicPage } from "./public-navigation.js";
@@ -146,6 +147,7 @@ export default function App() {
     }
   }
   if (entryPage === "privacy") return <PrivacyPage />;
+  if (entryPage === 'reset') return <ResetPasswordPage />;
   if (entryPage === "landing" && !auth?.authenticated)
     return <LandingPage brand={<Brand />} />;
   if (auth && !auth.authenticated)
@@ -201,6 +203,7 @@ function Workspace({ initial, onSignedOut }) {
   }, []);
   const { usage, usageError, refreshUsage } = usePlanUsage();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [ingredients, setIngredients] = useState(initial.ingredients);
   const ingredientById = Object.fromEntries(ingredients.map((i) => [i.id, i]));
@@ -846,12 +849,13 @@ function Workspace({ initial, onSignedOut }) {
                   </div>
                   <button
                     className="btn secondary"
-                    disabled
-                    title="Disponible próximamente"
+                    type="button"
+                    onClick={() => setShowPasswordChange(value => !value)}
                   >
-                    Cambiar contraseña · Próximamente
+                    Cambiar contraseña
                   </button>
                 </section>
+                {showPasswordChange && <PasswordChangeForm />}
                 <button
                   className="profile-logout"
                   disabled={loggingOut}
@@ -1079,6 +1083,36 @@ function Workspace({ initial, onSignedOut }) {
       )}
     </>
   );
+}
+
+function PasswordChangeForm() {
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  async function submit(event) {
+    event.preventDefault();
+    setError('');
+    setSuccess(false);
+    if (newPassword !== confirm) { setError('Las contraseñas no coinciden.'); return; }
+    setBusy(true);
+    try {
+      await accountRequest('password/change', { oldPassword, newPassword });
+      setOldPassword(''); setNewPassword(''); setConfirm('');
+      setSuccess(true);
+    } catch (problem) { setError(problem.message); }
+    finally { setBusy(false); }
+  }
+  return <form className="password-change-form" onSubmit={submit}><fieldset disabled={busy}>
+    <label>Contraseña actual<input type="password" autoComplete="current-password" required value={oldPassword} onChange={event => setOldPassword(event.target.value)} /></label>
+    <label>Nueva contraseña<input type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={newPassword} onChange={event => setNewPassword(event.target.value)} /></label>
+    <label>Confirmar contraseña nueva<input type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={confirm} onChange={event => setConfirm(event.target.value)} /></label>
+    {error && <p role="alert" className="auth-error">{error}</p>}
+    {success && <p role="status" className="password-change-success">Tu contraseña se cambió correctamente.</p>}
+    <button className="btn primary" type="submit">{busy ? 'Guardando…' : 'Guardar nueva contraseña'}</button>
+  </fieldset></form>;
 }
 
 function ProfileForm({ profile, onSave, catalog, tracker }) {

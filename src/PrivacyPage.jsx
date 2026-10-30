@@ -5,14 +5,15 @@ import "./privacy-page.css";
 
 const sections = [
   ["responsable", "Responsable y contacto"],
-  ["datos", "Datos que recopilamos"],
-  ["uso", "Cómo los usamos"],
-  ["gemini", "Google Gemini"],
-  ["edamam", "Edamam"],
-  ["usda", "USDA FoodData Central"],
+  ["datos", "Datos personales tratados"],
+  ["uso", "Finalidades del tratamiento"],
+  ["gemini", "Proveedor de IA"],
+  ["edamam", "Recetas"],
+  ["usda", "USDA"],
   ["cookies", "Cookies y preferencias"],
   ["conservacion", "Conservación y seguridad"],
-  ["derechos", "Tus opciones"],
+  ["derechos", "Derechos de las personas usuarias"],
+  ["normativa", "Marco legal"],
   ["cambios", "Cambios a esta política"],
 ];
 
@@ -33,13 +34,7 @@ export default function PrivacyPage() {
       </header>
       <main id="privacy-main" className="privacy-layout">
         <div className="privacy-hero">
-          <p className="privacy-eyebrow">Privacidad en NutriBot</p>
           <h1>Política de privacidad</h1>
-          <p>Te explicamos qué datos usamos para tu cuenta, despensa, recetas y seguimiento nutricional, y cuándo intervienen Gemini, Edamam y USDA.</p>
-          <div className="privacy-draft" role="note">
-            <strong>Documento en preparación · 30 de octubre de 2026.</strong>
-            <span>Antes de publicarlo faltan el nombre legal y país del responsable, un correo de privacidad, el alojamiento, los plazos de copias de seguridad y confirmar si Gemini usa cuota gratuita o facturación activa.</span>
-          </div>
         </div>
         <div className="privacy-content">
           <nav className="privacy-toc" aria-label="Contenido de la política">
@@ -49,64 +44,73 @@ export default function PrivacyPage() {
           <div className="privacy-articles">
             <section id="responsable">
               <h2>1. Responsable y contacto</h2>
-              <p>NutriBot es la aplicación que presta este servicio. <strong>Pendiente antes de publicar:</strong> identificar a la persona o entidad responsable, su país, una dirección de contacto y el correo para solicitudes de privacidad.</p>
+              <p>Las consultas sobre privacidad y las solicitudes relativas a datos personales pueden dirigirse a <a href="mailto:soporte@nutribot.online">soporte@nutribot.online</a>.</p>
+              <p>Dirección de contacto: Prolongación Alameda Juan Pablo II, Calle El Carmen, San Antonio Abad, San Salvador, El Salvador (<a href="https://www.uees.edu.sv/" target="_blank" rel="noopener noreferrer">dirección de la Universidad Evangélica de El Salvador</a>). La referencia a esta dirección no atribuye a la universidad la operación ni el respaldo de NutriBot.</p>
             </section>
             <section id="datos">
-              <h2>2. Datos que recopilamos</h2>
-              <p>Recopilamos la información que proporcionas y los datos necesarios para que funcionen las herramientas que utilizas:</p>
+              <h2>2. Datos personales</h2>
+              <p>NutriBot trata los datos proporcionados por la persona usuaria y los generados durante el uso del servicio:</p>
               <ul>
-                <li><strong>Cuenta y acceso:</strong> nombre, correo electrónico, fecha de nacimiento, plan asignado y contraseña protegida mediante hash. Guardamos sesiones para mantener el acceso.</li>
-                <li><strong>Perfil alimentario:</strong> objetivos, dieta, alergias, restricciones y alimentos excluidos. Si los completas, también peso, estatura, actividad, metas nutricionales y notas sobre indicaciones profesionales. Las alergias y algunas notas pueden revelar información de salud.</li>
+                <li><strong>Cuenta y acceso:</strong> nombre, correo electrónico, fecha de nacimiento, plan asignado e información necesaria para autenticar y proteger la cuenta. Las solicitudes de cambio de contraseña se comunican al correo registrado.</li>
+                <li><strong>Perfil alimentario:</strong> objetivos, dieta, alergias, restricciones y alimentos excluidos. Según los campos completados, también peso, estatura, actividad, metas nutricionales y notas sobre indicaciones profesionales. Las alergias y determinadas notas pueden constituir datos relativos a la salud.</li>
                 <li><strong>Despensa:</strong> alimentos agregados, fechas de almacenamiento y vencimiento, y alimentos personalizados.</li>
-                <li><strong>Recetas y comidas:</strong> recetas locales, identificador y nombre de recetas de Edamam que guardas, su categoría asignada por NutriBot, valoraciones, comidas registradas y datos nutricionales de recetas locales o consultas a USDA. Los valores nutricionales de Edamam se consultan cuando se necesitan; no se guardan bajo el plan actual.</li>
-                <li><strong>Conversaciones:</strong> mensajes que escribes, respuestas y referencias de recetas. Si incluyes datos personales en texto libre, también formarán parte de la conversación.</li>
-                <li><strong>Fotos de Nutri-Vision:</strong> las imágenes que eliges se envían para identificar alimentos. NutriBot no guarda el archivo de la foto en el historial de su base de datos; los alimentos que confirmes sí se guardan en tu despensa.</li>
-                <li><strong>Funcionamiento y seguridad:</strong> identificador de cuenta, sesión, función usada, resultado, tiempos de respuesta y errores. Ante una consulta de recetas fallida, guardamos extractos limitados del mensaje y del contexto anterior. Se sustituyen correos y teléfonos detectados, aunque otros datos personales escritos libremente podrían permanecer en el extracto.</li>
+                <li><strong>Recetas y comidas:</strong> recetas guardadas, categorías, valoraciones, comidas registradas e información nutricional utilizada por las funciones de seguimiento. Los valores nutricionales proporcionados por Edamam se muestran al consultar una receta y no se conservan bajo el plan actual.</li>
+                <li><strong>Conversaciones:</strong> mensajes, respuestas y referencias de recetas. Los datos personales incluidos en mensajes de texto libre también forman parte de la conversación.</li>
+                <li><strong>Fotos de Nutri-Vision:</strong> las imágenes seleccionadas se envían para identificar alimentos. NutriBot no conserva esas fotografías en el historial de la cuenta. Los alimentos confirmados sí se guardan en la despensa.</li>
+                <li><strong>Funcionamiento y seguridad:</strong> datos de uso, rendimiento y errores necesarios para prestar el servicio, resolver incidencias y prevenir abusos. Los registros de incidencias pueden incluir fragmentos de las consultas enviadas por la persona usuaria.</li>
               </ul>
             </section>
             <section id="uso">
-              <h2>3. Cómo usamos los datos</h2>
-              <p>Los usamos para crear y proteger la cuenta, recordar tu perfil y despensa, conversar sobre comida, encontrar recetas compatibles con tus preferencias, mostrar nutrientes, registrar lo que comiste y mantener el servicio. Los datos técnicos y diagnósticos ayudan a detectar fallos, medir el rendimiento y prevenir abusos.</p>
-              <p>La foto y el seguimiento nutricional son funciones que decides usar. Las sugerencias y los cálculos pueden tener errores: verifica ingredientes, etiquetas, alérgenos y cantidades. <strong>Pendiente:</strong> documentar las bases legales aplicables en los países donde se ofrezca NutriBot.</p>
+              <h2>3. Finalidades del tratamiento</h2>
+              <p>Los datos se utilizan para administrar la cuenta, proteger el acceso, mantener el perfil y la despensa, atender consultas culinarias, buscar recetas conforme a las preferencias registradas, presentar información nutricional y registrar comidas. Los registros técnicos permiten detectar errores, medir el funcionamiento del servicio y prevenir usos indebidos.</p>
+              <p>El análisis de fotografías y el seguimiento nutricional se realizan cuando la persona usuaria utiliza esas funciones. Las recetas y los cálculos son información orientativa; corresponde comprobar ingredientes, alérgenos, etiquetas y cantidades antes de preparar o consumir un alimento.</p>
             </section>
-            <section id="gemini" className="privacy-provider">
-              <span className="privacy-provider-label">Proveedor de IA</span>
-              <h2>4. Google Gemini</h2>
-              <p>Gemini interpreta las consultas en lenguaje natural, conversa contigo, reconoce ingredientes en fotos elegidas por ti y ayuda a traducir alimentos, títulos e ingredientes de recetas. También estima dificultad y clasifica recetas como desayuno, almuerzo o cena cuando hace falta.</p>
-              <p>Según la función, enviamos el mensaje actual, una parte reciente de la conversación, alimentos de la despensa, dieta y exclusiones, o la foto elegida. Para traducir una receta enviamos su título e ingredientes. No añadimos automáticamente tu correo, contraseña, nombre, fecha de nacimiento ni medidas corporales. Lo que escribas o aparezca en una foto sí puede llegar a Google.</p>
-              <p><strong>Modalidad pendiente de confirmar:</strong> las <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">condiciones de Gemini API</a> distinguen entre servicios gratuitos y servicios con facturación activa. En la modalidad gratuita, Google puede usar entradas y salidas para mejorar sus servicios y para revisión humana. En la modalidad pagada no las usa para mejorar productos, pero puede conservarlas temporalmente por seguridad. Confirmaremos cuál corresponde a NutriBot antes de publicar esta política.</p>
+            <section id="gemini">
+              <h2>4. Proveedor de IA</h2>
+              <p>NutriBot utiliza Google Gemini para interpretar consultas en lenguaje natural, mantener conversaciones, identificar ingredientes en fotografías, traducir títulos e ingredientes y estimar la dificultad o categoría de una receta.</p>
+              <p>Según la función utilizada, se transmiten a Google las consultas o fotografías proporcionadas y la información alimentaria pertinente para responderlas. Las credenciales de acceso no se envían para estas funciones. El texto y las imágenes proporcionados por la persona usuaria podrían contener otros datos personales.</p>
+              <p>Google trata la información recibida conforme a sus <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">condiciones de Gemini API</a>. Estas contemplan usos para prestar y proteger el servicio y, según la modalidad aplicable, para mejorar sus productos.</p>
             </section>
-            <section id="edamam" className="privacy-provider">
-              <span className="privacy-provider-label">Búsqueda de recetas</span>
-              <h2>5. Edamam</h2>
-              <p>Edamam recibe una búsqueda preparada con tus ingredientes y filtros relevantes, como dieta, alergias, exclusiones, tiempo, tipo de comida o límites nutricionales elegidos. También consultamos una receta por su identificador cuando la abres o registras, y podemos solicitar su lista de compras. No enviamos tu nombre, correo ni contraseña en la búsqueda.</p>
-              <p>Edamam devuelve recetas de terceros, imágenes, ingredientes y, si están disponibles, nutrientes e índice glucémico. Los pasos de preparación se abren en el sitio de origen, sujeto a sus propias prácticas de privacidad. Con Enterprise Basic conservamos la referencia y el nombre de las recetas que guardas; la categoría es de NutriBot. Los nutrientes de Edamam se muestran al consultarlos y no se almacenan actualmente. Consulta las <a href="https://developer.edamam.com/edamam-recipe-api" target="_blank" rel="noopener noreferrer">condiciones de Recipe Search</a>.</p>
+            <section id="edamam">
+              <h2>5. Recetas</h2>
+              <p>Para buscar recetas, Edamam recibe los ingredientes y las preferencias alimentarias pertinentes, incluidas las restricciones que la persona usuaria haya indicado. NutriBot no transmite sus credenciales de acceso para realizar estas búsquedas.</p>
+              <p>Edamam proporciona recetas de terceros, imágenes, ingredientes y, cuando están disponibles, información nutricional e índice glucémico. Las instrucciones de preparación pueden encontrarse en sitios externos. NutriBot conserva la referencia de las recetas guardadas por la persona usuaria, pero no almacena actualmente los valores nutricionales suministrados por Edamam. Se aplican las <a href="https://developer.edamam.com/edamam-recipe-api" target="_blank" rel="noopener noreferrer">condiciones del servicio de Edamam</a>.</p>
             </section>
-            <section id="usda" className="privacy-provider">
-              <span className="privacy-provider-label">Datos de alimentos</span>
-              <h2>6. USDA FoodData Central</h2>
-              <p>Consultamos FoodData Central del Departamento de Agricultura de Estados Unidos para buscar alimentos y obtener valores nutricionales de ingredientes y recetas locales. Enviamos el nombre del alimento o su identificador de FoodData Central, sin añadir automáticamente tu nombre, correo ni contraseña. A veces Gemini traduce primero el nombre para mejorar la búsqueda.</p>
-              <p>Podemos guardar la referencia del alimento de USDA y sus nutrientes vinculados a tu cuenta o a una receta local para los cálculos de la app. Los valores varían por marca, porción y preparación. <a href="https://fdc.nal.usda.gov/api-guide/" target="_blank" rel="noopener noreferrer">Conoce FoodData Central</a>.</p>
+            <section id="usda">
+              <h2>6. USDA</h2>
+              <p>NutriBot consulta USDA FoodData Central, del Departamento de Agricultura de Estados Unidos, para obtener información nutricional de alimentos y recetas. Estas consultas se basan en los alimentos utilizados y no requieren transmitir las credenciales de acceso de la persona usuaria.</p>
+              <p>La información nutricional obtenida puede conservarse cuando sea necesaria para las funciones de la cuenta. Los valores pueden variar según marca, porción y preparación. Puede consultarse la <a href="https://fdc.nal.usda.gov/api-guide/" target="_blank" rel="noopener noreferrer">documentación de FoodData Central</a>.</p>
             </section>
             <section id="cookies">
               <h2>7. Cookies y preferencias</h2>
-              <p>Cuando ingresas, NutriBot usa la cookie propia <strong>nutribot_session</strong> para mantener tu sesión y proteger el acceso a tu cuenta. Es necesaria para usar las funciones con inicio de sesión. Tiene una duración de hasta 8 horas o hasta 30 días si eliges «recordarme»; se elimina al cerrar sesión. Se configura como HttpOnly y SameSite=Strict, y como Secure cuando la conexión es HTTPS.</p>
-              <p>Actualmente no usamos cookies opcionales de publicidad o análisis. El aviso ofrece «Aceptar todas» y «Rechazar opcionales»: ambas opciones mantienen la cookie necesaria, porque no existe ninguna opcional que activar o desactivar por ahora. Guardamos tu elección en el almacenamiento local del navegador bajo <strong>nutribot.cookies.v1</strong> para no repetir el aviso; permanece hasta que la cambies aquí o borres los datos del navegador.</p>
+              <p>NutriBot utiliza una cookie necesaria para mantener la sesión iniciada. Si se activa la opción «recordarme», la sesión puede mantenerse durante más tiempo. La cookie de sesión no se utiliza con fines publicitarios.</p>
+              <p>Actualmente no se utilizan cookies opcionales de publicidad o análisis. Por ello, aceptar o rechazar las cookies opcionales no modifica el funcionamiento de la cookie necesaria. La preferencia elegida se recuerda en el navegador y puede modificarse en cualquier momento.</p>
               <button type="button" className="privacy-cookie-settings" onClick={() => window.dispatchEvent(new Event("nutribot:cookies-open"))}>Cambiar preferencia de cookies</button>
             </section>
             <section id="conservacion">
               <h2>8. Conservación y seguridad</h2>
-              <p>La cuenta, el perfil, la despensa, las conversaciones y las comidas se guardan en PostgreSQL mientras la cuenta siga activa o hasta que uses una función de restablecimiento que elimine esos datos.</p>
-              <p>El portal muestra diagnósticos detallados de los últimos 30 días. Los registros anteriores se depuran al registrar nuevos eventos. Los totales diarios sin identificadores de cuenta se conservan para estadísticas históricas durante varios años. El portal de diagnósticos solo es accesible para la cuenta administradora configurada. Las contraseñas se guardan con hash y se limita el acceso a los datos por cuenta.</p>
-              <p><strong>Pendiente:</strong> indicar alojamiento, transferencias internacionales, duración de copias de seguridad y procedimiento de eliminación completa de cuenta. Restablecer datos no borra la cuenta ni solicitudes ya procesadas por proveedores externos.</p>
+              <p>Los datos asociados a la cuenta se conservan mientras esta permanezca activa o durante el período necesario para prestar el servicio y atender obligaciones aplicables. Algunas funciones permiten modificar o eliminar datos de uso. Restablecer esos datos no elimina la cuenta ni revierte el tratamiento ya realizado por terceros.</p>
+              <p>Los datos relacionados con solicitudes de cambio de contraseña y los registros de funcionamiento se conservan de forma limitada para fines de seguridad y atención de incidencias. Las comunicaciones de la cuenta se envían al correo registrado mediante un proveedor de correo electrónico.</p>
+              <p>NutriBot aplica medidas de seguridad y restringe el acceso a la información según las funciones autorizadas. Los datos estadísticos consolidados pueden conservarse por períodos más amplios cuando ya no identifican a una persona.</p>
             </section>
             <section id="derechos">
-              <h2>9. Tus opciones</h2>
-              <p>Puedes revisar y cambiar tu perfil y despensa, quitar recetas guardadas, administrar conversaciones, registrar o eliminar comidas y cerrar sesión. «Restaurar mis datos» reinicia datos de uso, pero mantiene la cuenta. Para solicitar acceso, corrección, exportación o eliminación completa falta establecer un correo de privacidad y un procedimiento de verificación. Los derechos y plazos concretos dependerán de la legislación aplicable.</p>
+              <h2>9. Derechos de las personas usuarias</h2>
+              <p>La <a href="https://www.asamblea.gob.sv/leyes-y-decretos/view/6054" target="_blank" rel="noopener noreferrer">Ley para la Protección de Datos Personales de El Salvador</a>, con sus <a href="https://www.asamblea.gob.sv/leyes-y-decretos/view/7022" target="_blank" rel="noopener noreferrer">reformas de 2026</a>, reconoce derechos de acceso, rectificación, cancelación, oposición, portabilidad, olvido y limitación, según corresponda. Las solicitudes pueden dirigirse a <a href="mailto:soporte@nutribot.online">soporte@nutribot.online</a>; antes de atenderlas se verificará la identidad de la persona solicitante.</p>
+              <p>Desde la aplicación pueden modificarse el perfil y la despensa, retirarse recetas guardadas, administrarse conversaciones y registros de comidas, y cambiarse la contraseña. «Restaurar mis datos» elimina datos de uso, pero mantiene la cuenta. Para solicitar la eliminación completa de la cuenta o una copia de los datos, debe escribirse al correo indicado.</p>
+            </section>
+            <section id="normativa">
+              <h2>10. Marco legal</h2>
+              <p>El tratamiento de datos personales se sujeta principalmente a la Ley para la Protección de Datos Personales (Decreto Legislativo n.º 144 de 2024 y reformas posteriores). El uso de información nutricional y la eventual comercialización de suscripciones se relacionan, además, con las siguientes normas salvadoreñas, según la actividad efectivamente realizada:</p>
+              <ul>
+                <li><a href="https://biblioteca.asamblea.gob.sv/31354_cdigo-de-salud-decreto-no-955-de-fecha-28-de-abril-de-1988" target="_blank" rel="noopener noreferrer">Código de Salud (Decreto Legislativo n.º 955)</a>: delimita el ejercicio profesional en materia de salud. NutriBot ofrece información culinaria y nutricional orientativa, sin emitir diagnósticos ni tratamientos.</li>
+                <li><a href="https://www.asamblea.gob.sv/leyes-y-decretos/decretos-por-anios/2005/0" target="_blank" rel="noopener noreferrer">Ley de Protección al Consumidor (Decreto Legislativo n.º 776)</a> y <a href="https://www.asamblea.gob.sv/leyes-y-decretos/decretos-por-anios/2019/0" target="_blank" rel="noopener noreferrer">Ley de Comercio Electrónico (Decreto Legislativo n.º 463)</a>: resultan pertinentes para la contratación digital y, cuando se habiliten pagos, para las condiciones de suscripción. Esta política no sustituye los términos comerciales.</li>
+                <li><a href="https://www.asamblea.gob.sv/sites/default/files/documents/decretos/D214AD9F-9A48-4A9C-893C-7E063FE7C4A9.pdf" target="_blank" rel="noopener noreferrer">Ley de Propiedad Intelectual (Decreto Legislativo n.º 66)</a>: se relaciona con el uso de software, imágenes, recetas y contenidos de terceros.</li>
+                <li><a href="https://www.asamblea.gob.sv/sites/default/files/documents/decretos/C4062E8E-154F-4F82-9835-7C1D16EF4616.pdf" target="_blank" rel="noopener noreferrer">Ley de Fomento a la Innovación y Manufactura de Tecnologías (Decreto Legislativo n.º 722)</a>: cualquier incentivo previsto en ella requiere verificar los requisitos legales; esta política no afirma que NutriBot sea beneficiario.</li>
+              </ul>
             </section>
             <section id="cambios">
-              <h2>10. Cambios a esta política</h2>
-              <p>Actualizaremos el texto cuando cambien las funciones o proveedores y mostraremos aquí la fecha de vigencia de la versión definitiva. <strong>Fecha de vigencia: pendiente.</strong></p>
+              <h2>11. Cambios a esta política</h2>
+              <p>Las modificaciones de esta política se publicarán en esta página, con indicación de la fecha correspondiente. <strong>Última actualización: 30 de octubre de 2026.</strong></p>
             </section>
           </div>
         </div>

@@ -42,6 +42,11 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
         changeStep(result.nextStep);
         return;
       }
+      if (step === 'forgot') {
+        await accountRequest('password-reset/request', { email });
+        changeStep('sent');
+        return;
+      }
       const session = await accountRequest(step, {
         email,
         password,
@@ -79,7 +84,7 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                 : "Bienvenido a NutriBot"}
             </h1>
           </div>
-          {step !== "email" && (
+          {step !== "email" && step !== 'sent' && (
             <div className="auth-email-summary">
               <span className="auth-email-avatar">
                 <Icon name="user" />
@@ -99,7 +104,10 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
               </button>
             </div>
           )}
-          <form onSubmit={submit}>
+          {step === 'sent' ? <div role="status" className="auth-reset-message">
+            <p>Si el correo está registrado, recibirás un enlace para elegir una contraseña nueva. Revisa también la carpeta de spam.</p>
+            <button type="button" className="auth-submit" onClick={() => changeStep('login')}>Volver a iniciar sesión</button>
+          </div> : <form onSubmit={submit}>
             <fieldset disabled={busy}>
               {step === "email" ? (
                 <label htmlFor="auth-email">
@@ -120,7 +128,7 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                     />
                   </div>
                 </label>
-              ) : (
+              ) : step === 'forgot' ? <p>Si {email} está asociado a una cuenta, enviaremos un enlace para restablecer la contraseña.</p> : (
                 <>
                   {step === "register" && (
                     <>
@@ -193,6 +201,7 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                       </button>
                     </div>
                   </label>
+                  {step === 'login' && <button type="button" className="auth-forgot-link" onClick={() => changeStep('forgot')}>Olvidé mi contraseña</button>}
                   {step === "register" && (
                     <>
                       <p className="auth-hint">
@@ -251,11 +260,13 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
                     ? "Continuar con correo"
                     : step === "register"
                       ? "Crear mi cuenta"
+                      : step === 'forgot'
+                        ? 'Enviar'
                       : "Iniciar sesión"}
                 <Icon name="arrow" size={20} />
               </button>
             </fieldset>
-          </form>
+          </form>}
           <p className="auth-switch">
             <a className="auth-back-home" href="#welcome">
               <span className="auth-back-icon"><Icon name="home" size={18} /></span>

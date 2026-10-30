@@ -3,6 +3,7 @@ import { createAppServer } from "./app.js";
 import { config } from "./config.js";
 import { openDatabase } from "./database.js";
 import { connectionInfo, printConnection, publicDeployment } from "./network.js";
+import { createPasswordMailer } from './password-mail.js';
 
 export async function startNutribot(development = false) {
   let store, api, vite;
@@ -29,6 +30,7 @@ export async function startNutribot(development = false) {
       ...config,
       store,
       network,
+      sendPasswordResetEmail: createPasswordMailer(),
       serveStatic: !development,
     });
     await new Promise((resolve, reject) => {

@@ -41,6 +41,8 @@ test('admin endpoints require the signed-in allowlisted account', async t => {
   assert.deepEqual((await (await fetch(base + '/api/admin/account?q=admin@example.test', { headers })).json()).account,
     { id: 7, email: 'admin@example.test' });
   assert.equal((await fetch(base + '/api/admin/apis', { headers })).status, 200);
+  assert.equal((await fetch(base + '/api/admin/summary?period=decade', { headers })).status, 400);
+  assert.equal((await fetch(base + '/api/admin/summary?period=year&year=2025', { headers })).status, 400);
 });
 test('failed recipe request records safe validation reasons and returns a trace reference', async t => {
   const events = [];

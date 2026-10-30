@@ -1,11 +1,16 @@
 import { planCatalog } from '../src/plan-catalog.js';
 import { usageWindow } from './plan-usage.js';
 import { AppError } from './recipes.js';
+import { adminPeriodBuckets, bucketMetrics, planMixTrend } from '../src/admin-periods.js';
 
 const iso = value => value instanceof Date ? value.toISOString() : value ? new Date(value).toISOString() : null;
 const day = value => value instanceof Date ? value.toISOString().slice(0, 10) : String(value);
 const allowedProviders = new Set(['gemini', 'edamam', 'usda']);
 const allowedOutcomes = new Set(['success', 'http_error', 'network_error']);
+function bucketsFor(period, year) {
+  try { return adminPeriodBuckets(period, new Date(), year); }
+  catch { throw new AppError('INVALID_FILTER', 'Período inválido.'); }
+}
 
 export function createAdminAnalytics({ transaction, adminEmail = '' }) {
   return {
@@ -21,6 +26,12 @@ export function createAdminAnalytics({ transaction, adminEmail = '' }) {
           event.outcome, Number.isInteger(event.statusCode) ? event.statusCode : null,
           Math.max(0, Math.min(600000, Math.round(event.durationMs || 0))),
         ]);
+        await c.query(`INSERT INTO admin_daily_metrics(day,source,category,outcome,total,under_2s)
+          VALUES((now() AT TIME ZONE 'America/Guatemala')::date,'api',$1,$2,1,$3)
+          ON CONFLICT(day,source,category,outcome) DO UPDATE SET total=admin_daily_metrics.total+1,
+            under_2s=admin_daily_metrics.under_2s+EXCLUDED.under_2s`,
+        [event.provider, event.outcome, event.durationMs <= 2000 ? 1 : 0]);
+        await c.query("DELETE FROM admin_daily_metrics WHERE day < make_date(extract(year from (now() AT TIME ZONE 'America/Guatemala'))::integer - 5,1,1)");
       });
     },
     recordHttpRequest(event) {
@@ -32,21 +43,42 @@ export function createAdminAnalytics({ transaction, adminEmail = '' }) {
         await c.query(`INSERT INTO admin_http_requests(profile_id,feature,status_code,duration_ms)
           VALUES($1,$2,$3,$4)`, [event.profileId, event.feature, event.statusCode,
           Math.max(0, Math.min(600000, Math.round(event.durationMs || 0)))]);
+        await c.query(`INSERT INTO admin_daily_metrics(day,source,category,outcome,total,under_2s)
+          VALUES((now() AT TIME ZONE 'America/Guatemala')::date,'http',$1,$2,1,$3)
+          ON CONFLICT(day,source,category,outcome) DO UPDATE SET total=admin_daily_metrics.total+1,
+            under_2s=admin_daily_metrics.under_2s+EXCLUDED.under_2s`,
+        [event.feature, event.statusCode < 400 ? 'success' : 'error', event.durationMs <= 2000 ? 1 : 0]);
+        await c.query("DELETE FROM admin_daily_metrics WHERE day < make_date(extract(year from (now() AT TIME ZONE 'America/Guatemala'))::integer - 5,1,1)");
       });
     },
-    adminApiSummary() {
+    adminApiSummary(period = 'week', year = null) {
+      const buckets = bucketsFor(period, year);
       return transaction(async c => {
-        const providers = (await c.query(`SELECT provider,operation,model,count(*)::integer AS total,
+        const operations = (await c.query(`SELECT provider,operation,model,count(*)::integer AS total,
           count(*) FILTER (WHERE outcome='success')::integer AS success,
           count(*) FILTER (WHERE outcome<>'success')::integer AS failed,
           percentile_disc(0.95) WITHIN GROUP (ORDER BY duration_ms)::integer AS p95_ms
-          FROM admin_api_calls WHERE created_at >= now() - interval '7 days'
+          FROM admin_api_calls WHERE created_at >= now() - interval '30 days'
           GROUP BY provider,operation,model ORDER BY total DESC,provider,operation`)).rows;
-        const daily = (await c.query(`SELECT (created_at AT TIME ZONE 'America/Guatemala')::date AS day,provider,
-          count(*) FILTER (WHERE outcome='success')::integer AS success,
-          count(*) FILTER (WHERE outcome<>'success')::integer AS failed
-          FROM admin_api_calls WHERE created_at >= now() - interval '7 days'
-          GROUP BY 1,2 ORDER BY 1,2`)).rows.map(row => ({ ...row, day: day(row.day) }));
+        const raw = (await c.query(`SELECT day,category AS provider,outcome,total FROM admin_daily_metrics
+          WHERE source='api' AND day >= $1::date ORDER BY day`, [buckets[0].startDay])).rows.map(row => ({
+            ...row, day: day(row.day), success: row.outcome === 'success' ? row.total : 0,
+            failed: row.outcome === 'success' ? 0 : row.total,
+          }));
+        const apiCoverage = (await c.query(`SELECT category AS provider,min(day) AS first_day
+          FROM admin_daily_metrics WHERE source='api' GROUP BY category`)).rows;
+        const firstApiDay = apiCoverage.length ? apiCoverage.map(row => day(row.first_day)).sort()[0] : null;
+        const daily = ['gemini', 'edamam', 'usda'].flatMap(provider =>
+          bucketMetrics(raw.filter(row => row.provider === provider), buckets, ['success', 'failed'],
+            apiCoverage.find(row => row.provider === provider)?.first_day
+              ? day(apiCoverage.find(row => row.provider === provider).first_day) : firstApiDay)
+            .map(row => ({ ...row, provider })));
+        const providers = ['gemini', 'edamam', 'usda'].map(provider => {
+          const rows = daily.filter(row => row.provider === provider);
+          const success = rows.reduce((sum, row) => sum + (row.success || 0), 0);
+          const failed = rows.reduce((sum, row) => sum + (row.failed || 0), 0);
+          return { provider, success, failed, total: success + failed };
+        });
         const calls = (await c.query(`SELECT id,profile_id,provider,operation,model,outcome,status_code,duration_ms,created_at
           FROM admin_api_calls WHERE created_at >= now() - interval '30 days'
           ORDER BY created_at DESC,id DESC LIMIT 30`)).rows.map(row => ({
@@ -54,10 +86,11 @@ export function createAdminAnalytics({ transaction, adminEmail = '' }) {
             provider: row.provider, operation: row.operation, model: row.model, outcome: row.outcome,
             statusCode: row.status_code, durationMs: row.duration_ms, createdAt: iso(row.created_at),
           }));
-        return { providers, daily, calls };
+        return { period, providers, daily, operations, calls };
       }, true);
     },
-    adminUsersSummary() {
+    adminUsersSummary(period = 'week', year = null) {
+      const buckets = bucketsFor(period, year);
       return transaction(async c => {
         const stats = (await c.query(`WITH activity AS (
             SELECT profile_id,created_at AS at FROM auth_sessions
@@ -82,20 +115,37 @@ export function createAdminAnalytics({ transaction, adminEmail = '' }) {
             id: Number(row.id), name: row.name, email: row.email, plan: row.plan_code,
             createdAt: iso(row.created_at), updatedAt: iso(row.updated_at), lastActiveAt: iso(row.last_active_at),
           }));
-        const features = (await c.query(`SELECT (created_at AT TIME ZONE 'America/Guatemala')::date AS day,feature,
-          count(*)::integer AS total FROM admin_http_requests WHERE created_at >= now() - interval '7 days'
-          GROUP BY 1,2 ORDER BY 1,2`)).rows.map(row => ({ ...row, day: day(row.day) }));
+        const featureRaw = (await c.query(`SELECT day,category AS feature,total FROM admin_daily_metrics
+          WHERE source='http' AND day >= $1::date ORDER BY day`, [buckets[0].startDay])).rows.map(row => ({
+            ...row, day: day(row.day), total: Number(row.total),
+          }));
+        const firstFeatureDay = (await c.query(`SELECT min(day) AS day FROM admin_daily_metrics
+          WHERE source='http'`)).rows[0].day;
+        const featureNames = ['recipes', 'vision', 'recipe_detail', 'shopping', 'meals', 'nutrition', 'chat'];
+        const features = buckets.map(bucket => ({ label: bucket.label, day: bucket.endDay,
+          ...Object.fromEntries(featureNames.map(feature => [feature,
+            firstFeatureDay && bucket.endDay < day(firstFeatureDay) ? null
+              : featureRaw.filter(row => row.feature === feature && row.day >= bucket.startDay && row.day <= bucket.endDay)
+                .reduce((sum, row) => sum + row.total, 0)])) }));
+        const trendAccounts = (await c.query('SELECT id,created_at FROM profiles WHERE email IS NOT NULL')).rows;
+        const trendHistory = (await c.query(`SELECT h.profile_id,h.to_plan,h.changed_at FROM profile_plan_history h
+          JOIN profiles p ON p.id=h.profile_id WHERE p.email IS NOT NULL
+          ORDER BY h.profile_id,h.changed_at,h.id`)).rows;
+        const planTrend = planMixTrend(trendAccounts, trendHistory, buckets);
         const performance = (await c.query(`SELECT
-          (SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY duration_ms) FROM admin_http_requests WHERE created_at >= now() - interval '7 days') AS server_p95,
-          (SELECT round(100.0 * count(*) FILTER (WHERE duration_ms <= 2000) / nullif(count(*),0))::integer FROM admin_http_requests WHERE created_at >= now() - interval '7 days') AS server_under_2s,
-          (SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY duration_ms) FROM admin_api_calls WHERE created_at >= now() - interval '7 days') AS api_p95,
-          (SELECT round(100.0 * count(*) FILTER (WHERE duration_ms <= 2000) / nullif(count(*),0))::integer FROM admin_api_calls WHERE created_at >= now() - interval '7 days') AS api_under_2s`)).rows[0];
+          (SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY duration_ms) FROM admin_http_requests WHERE created_at >= now() - interval '30 days') AS server_p95,
+          (SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY duration_ms) FROM admin_api_calls WHERE created_at >= now() - interval '30 days') AS api_p95`)).rows[0];
+        const ratios = (await c.query(`SELECT source,sum(total)::integer AS total,sum(under_2s)::integer AS under_2s
+          FROM admin_daily_metrics WHERE source IN ('http','api') AND day >= $1::date GROUP BY source`,
+        [buckets[0].startDay])).rows;
+        const within = source => { const row = ratios.find(item => item.source === source);
+          return row?.total ? Math.round(row.under_2s / row.total * 100) : null; };
         return { total: stats.total, active: stats.active, inactive: stats.total - stats.active,
           free: stats.free, paid: stats.nutripro + stats.nutrimax, nutripro: stats.nutripro,
           nutrimax: stats.nutrimax, estimatedMonthlyCents: stats.nutripro * 299 + stats.nutrimax * 999,
-          latest, features, performance: { serverP95Ms: performance.server_p95,
-            serverUnder2s: performance.server_under_2s, apiP95Ms: performance.api_p95,
-            apiUnder2s: performance.api_under_2s } };
+          latest, features, planTrend, performance: { serverP95Ms: performance.server_p95,
+            serverUnder2s: within('http'), apiP95Ms: performance.api_p95,
+            apiUnder2s: within('api') } };
       }, true);
     },
     adminAccountDetail(id) {

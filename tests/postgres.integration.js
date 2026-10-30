@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    12,
+    13,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -142,7 +142,8 @@ test('admin diagnostics retain a bounded trace and allow only the configured acc
   assert.equal(summary.errors24h, 1);
   assert.equal(summary.quality.activeAccounts, 1);
   assert.equal(summary.byProvider[0].provider, 'gemini');
-  assert.equal(summary.daily.length, 1);
+  assert.equal(summary.daily.length, 7);
+  assert.equal((await f.store.adminSummary('year', 2026)).daily.at(-1).errors, 1);
   assert.equal((await f.store.listAdminEvents({ provider: 'edamam' })).items.length, 0);
   assert.equal((await f.store.listAdminEvents({ accountId: id, search: 'INVALID_AI_OUTPUT' })).items.length, 1);
   assert.equal((await f.store.listAdminEvents({ accountId: 1 })).items.length, 0);
@@ -186,12 +187,14 @@ test('admin analytics counts measured provider calls, HTTP activity, plans and a
   assert.equal(api.calls.length, 2);
   assert.equal(api.providers.find(row => row.provider === 'edamam').success, 1);
   assert.equal(api.providers.find(row => row.provider === 'gemini').failed, 1);
+  assert.equal((await f.store.adminApiSummary('year', 2026)).providers.find(row => row.provider === 'edamam').total, 1);
   const users = await f.store.adminUsersSummary();
   assert.equal(users.total, 2);
   assert.equal(users.active, 1);
   assert.equal(users.inactive, 1);
   assert.equal(users.free, 2);
-  assert.equal(users.features.find(row => row.feature === 'recipes').total, 1);
+  assert.equal(users.features.at(-1).recipes, 1);
+  assert.equal(users.planTrend.at(-1).free, 2);
   assert.equal(users.performance.serverUnder2s, 100);
   assert.equal(users.performance.apiUnder2s, 50);
   const detail = await f.store.adminAccountDetail(id);
@@ -200,9 +203,22 @@ test('admin analytics counts measured provider calls, HTTP activity, plans and a
   assert.equal(detail.effectivePlan, 'Básico');
   await f.sql.query("UPDATE profiles SET plan_code='nutripro' WHERE id=$1", [id]);
   assert.equal((await f.store.adminUsersSummary()).estimatedMonthlyCents, 299);
+  assert.equal((await f.store.adminUsersSummary('quarter')).planTrend.at(-1).paid, 1);
   assert.ok((await f.store.adminAccountDetail(id)).paidSince);
   await f.sql.query("UPDATE profiles SET plan_code='basico' WHERE id=$1", [id]);
   assert.ok((await f.store.adminAccountDetail(id)).freeSinceAfterPaid);
+});
+
+test('daily aggregate migration backfills available detailed metrics without account data', async t => {
+  const f = await fixture(t);
+  await f.store.recordApiCall({ provider: 'edamam', operation: 'recipe_search',
+    outcome: 'success', statusCode: 200, durationMs: 300 });
+  await f.sql.query('DROP TABLE admin_daily_metrics');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version=13');
+  const reopened = await f.reopen();
+  const rows = (await f.sql.query("SELECT source,category,outcome,total FROM admin_daily_metrics WHERE source='api'")).rows;
+  assert.deepEqual(rows, [{ source: 'api', category: 'edamam', outcome: 'success', total: 1 }]);
+  assert.equal((await reopened.adminApiSummary('year', 2026)).providers.find(item => item.provider === 'edamam').total, 1);
 });
 
 test('USDA links and grams persist per recipe and enforce structured limits', async (t) => {

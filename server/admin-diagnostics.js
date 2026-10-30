@@ -1,4 +1,5 @@
 import { AppError } from './recipes.js';
+import { adminPeriodBuckets, bucketMetrics } from '../src/admin-periods.js';
 
 // Diagnostic excerpts are intentionally short and remove common contact details.
 export function diagnosticExcerpt(value) {
@@ -16,6 +17,9 @@ export function createAdminDiagnostics({ transaction, profileId, pool }) {
     },
     recordAdminEvent(event) {
       const reasons = (Array.isArray(event.reasons) ? event.reasons : []).filter(x => typeof x === 'string' && /^[A-Z_]{2,50}$/.test(x)).slice(0, 8);
+      const outcome = ['nutrition_setup', 'out_of_scope'].includes(event.outcome) ? 'conversation'
+        : ['success', 'empty', 'conversation', 'review'].includes(event.outcome) ? event.outcome : 'error';
+      const durationMs = Math.min(600000, Math.max(0, Math.round(event.durationMs || 0)));
       const context = {
         mode: ['initial', 'more'].includes(event.mode) ? event.mode : null,
         maxTime: [15, 30, 60].includes(event.maxTime) ? event.maxTime : null,
@@ -27,13 +31,17 @@ export function createAdminDiagnostics({ transaction, profileId, pool }) {
         await c.query(`INSERT INTO admin_diagnostics(request_id,profile_id,feature,provider,outcome,stage,error_code,reasons,request_excerpt,previous_excerpt,context,duration_ms)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [
           event.requestId, profileId(), 'recipe', String(event.provider || 'unknown').slice(0, 24),
-          ['nutrition_setup', 'out_of_scope'].includes(event.outcome) ? 'conversation'
-            : ['success', 'empty', 'conversation', 'review'].includes(event.outcome) ? event.outcome : 'error',
+          outcome,
           String(event.stage || 'unknown').slice(0, 40), event.errorCode ? String(event.errorCode).slice(0, 80) : null,
           JSON.stringify(reasons), event.outcome === 'error' ? diagnosticExcerpt(event.message) : null,
           event.outcome === 'error' ? diagnosticExcerpt(event.previousMessage) : null,
-          JSON.stringify(context), Math.min(600000, Math.max(0, Math.round(event.durationMs || 0))),
+          JSON.stringify(context), durationMs,
         ]);
+        await c.query(`INSERT INTO admin_daily_metrics(day,source,category,outcome,total,under_2s)
+          VALUES((now() AT TIME ZONE 'America/Guatemala')::date,'recipe','recipe',$1,1,$2)
+          ON CONFLICT(day,source,category,outcome) DO UPDATE SET total=admin_daily_metrics.total+1,
+            under_2s=admin_daily_metrics.under_2s+EXCLUDED.under_2s`, [outcome, durationMs <= 2000 ? 1 : 0]);
+        await c.query("DELETE FROM admin_daily_metrics WHERE day < make_date(extract(year from (now() AT TIME ZONE 'America/Guatemala'))::integer - 5,1,1)");
       });
     },
     listAdminEvents({ outcome = 'error', offset = 0, days = 30, provider = 'all', search = '', accountId = null } = {}) {
@@ -60,7 +68,10 @@ export function createAdminDiagnostics({ transaction, profileId, pool }) {
         })), nextOffset: rows.length > 50 ? offset + 50 : null };
       }, true);
     },
-    adminSummary() {
+    adminSummary(period = 'week', year = null) {
+      let buckets;
+      try { buckets = adminPeriodBuckets(period, new Date(), year); }
+      catch { throw new AppError('INVALID_FILTER', 'Período inválido.'); }
       return transaction(async c => {
         const totals = (await c.query(`SELECT count(*) FILTER (WHERE created_at >= now() - interval '24 hours')::integer AS total_24h,
           count(*) FILTER (WHERE created_at >= now() - interval '24 hours' AND outcome='error')::integer AS errors_24h,
@@ -70,14 +81,21 @@ export function createAdminDiagnostics({ transaction, profileId, pool }) {
         const codes = (await c.query(`SELECT error_code AS code,count(*)::integer AS count FROM admin_diagnostics
           WHERE created_at >= now() - interval '7 days' AND outcome='error'
           GROUP BY error_code ORDER BY count DESC,error_code LIMIT 8`)).rows;
-        const daily = (await c.query(`SELECT (created_at AT TIME ZONE 'America/Guatemala')::date AS day,
-          count(*)::integer AS total, count(*) FILTER (WHERE outcome='error')::integer AS errors,
-          count(*) FILTER (WHERE outcome='success')::integer AS success,
-          count(*) FILTER (WHERE outcome='empty')::integer AS empty
-          FROM admin_diagnostics WHERE created_at >= now() - interval '7 days' GROUP BY 1 ORDER BY 1`)).rows.map(row => ({
-            day: row.day instanceof Date ? row.day.toISOString().slice(0, 10) : String(row.day),
-            total: row.total, errors: row.errors, success: row.success, empty: row.empty,
-          }));
+        const dailyRaw = (await c.query(`SELECT day,outcome,total FROM admin_daily_metrics
+          WHERE source='recipe' AND day >= $1::date ORDER BY day`, [buckets[0].startDay])).rows;
+        const firstRecipeDay = (await c.query(`SELECT min(day) AS day FROM admin_daily_metrics
+          WHERE source='recipe'`)).rows[0].day;
+        const byDay = new Map();
+        for (const row of dailyRaw) {
+          const key = row.day instanceof Date ? row.day.toISOString().slice(0, 10) : String(row.day);
+          const current = byDay.get(key) || { day: key, total: 0, errors: 0, empty: 0 };
+          current.total += row.total;
+          if (row.outcome === 'error') current.errors += row.total;
+          if (row.outcome === 'empty') current.empty += row.total;
+          byDay.set(key, current);
+        }
+        const daily = bucketMetrics([...byDay.values()], buckets, ['total', 'errors', 'empty'],
+          firstRecipeDay ? firstRecipeDay instanceof Date ? firstRecipeDay.toISOString().slice(0, 10) : String(firstRecipeDay) : null);
         const byProvider = (await c.query(`SELECT provider,count(*)::integer AS total,
           count(*) FILTER (WHERE outcome='error')::integer AS errors,
           count(*) FILTER (WHERE outcome='success')::integer AS success

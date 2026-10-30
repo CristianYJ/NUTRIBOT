@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from './auth-api.js';
+import { adminPeriods, adminPeriodBuckets, adminPeriodYears } from './admin-periods.js';
+import { adminAccountQuery, openAdminAccount, closeAdminAccount } from './admin-account-history.js';
 import './admin-portal.css';
 
 async function readAdmin(path) {
@@ -34,23 +36,28 @@ function sevenDays(rows = []) {
   });
 }
 function LineChart({ rows, lines, label }) {
-  const data = sevenDays(rows);
+  const data = rows?.length ? rows : sevenDays([]);
   const maximum = Math.max(1, ...data.flatMap(row => lines.map(line => Number(row[line.key]) || 0)));
-  const x = index => 32 + index * 96;
+  const x = index => 32 + index * (576 / Math.max(1, data.length - 1));
   const y = value => 174 - (Number(value) || 0) / maximum * 145;
-  return <div className="admin-line-chart" role="img" aria-label={`${label}. ${data.map(row => `${shortDate(row.day)}: ${lines.map(line => `${line.label} ${row[line.key] || 0}`).join(', ')}`).join('; ')}`}>
+  return <div className="admin-line-chart" role="img" aria-label={`${label}. ${data.map(row => `${row.label || shortDate(row.day)}: ${lines.map(line => `${line.label} ${row[line.key] == null ? 'sin datos' : row[line.key]}`).join(', ')}`).join('; ')}`}>
     <svg viewBox="0 0 640 190" preserveAspectRatio="none" aria-hidden="true">
       {[0, .5, 1].map(mark => <line key={mark} x1="32" x2="608" y1={y(maximum * mark)} y2={y(maximum * mark)} className="admin-chart-grid" />)}
-      {lines.map(line => <g key={line.key}><polyline points={data.map((row, index) => `${x(index)},${y(row[line.key])}`).join(' ')} fill="none" stroke={line.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        {data.map((row, index) => <circle key={row.day} cx={x(index)} cy={y(row[line.key])} r="4" fill={line.color}><title>{shortDate(row.day)} · {line.label}: {row[line.key] || 0}</title></circle>)}</g>)}
-    </svg><div className="admin-chart-labels">{data.map(row => <span key={row.day}>{shortDate(row.day)}</span>)}</div>
+      {lines.map(line => <g key={line.key}><polyline points={data.map((row, index) => row[line.key] == null ? null : `${x(index)},${y(row[line.key])}`).filter(Boolean).join(' ')} fill="none" stroke={line.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        {data.map((row, index) => row[line.key] == null ? null : <circle key={row.day} cx={x(index)} cy={y(row[line.key])} r="4" fill={line.color}><title>{row.label || shortDate(row.day)} · {line.label}: {row[line.key]}</title></circle>)}</g>)}
+    </svg><div className={`admin-chart-labels${data.length > 8 ? ' long' : ''}`}>{data.map(row => <span key={row.day}>{row.label || shortDate(row.day)}</span>)}</div>
     <div className="admin-legend">{lines.map(line => <span key={line.key}><i style={{ background: line.color }} />{line.label}</span>)}</div>
   </div>;
 }
-function Trend({ daily = [] }) {
-  return <section className="admin-panel admin-trend"><div className="admin-panel-heading"><div><h2>Consultas por día</h2><p>Flujo de recetas · últimos 7 días</p></div></div>
+function Trend({ daily = [], period }) {
+  return <section className="admin-panel admin-trend"><div className="admin-panel-heading"><div><h2>Consultas de recetas</h2><p>Flujo de recetas · vista {adminPeriods[period].toLowerCase()}</p></div></div>
     <LineChart rows={daily} label="Consultas por día" lines={[{ key: 'total', label: 'Total', color: '#087253' }, { key: 'errors', label: 'Errores', color: '#da7958' }, { key: 'empty', label: 'Sin resultados', color: '#dcad45' }]} />
   </section>;
+}
+function PeriodPicker({ value, onChange, year, onYearChange }) {
+  return <div className="admin-period-controls"><div className="admin-period-picker" role="group" aria-label="Período de las gráficas">{Object.entries(adminPeriods).map(([key, label]) =>
+    <button key={key} type="button" className={value === key ? 'active' : ''} aria-pressed={value === key} onClick={() => onChange(key)}>{label}</button>)}</div>
+    {value === 'year' && <label className="admin-year-select">Año <select value={year} onChange={event => onYearChange(Number(event.target.value))}>{adminPeriodYears().map(item => <option key={item} value={item}>{item}</option>)}</select></label>}</div>;
 }
 function EventList({ items, onSelect, compact = false }) {
   if (!items.length) return empty;
@@ -65,6 +72,10 @@ function EventList({ items, onSelect, compact = false }) {
 
 export default function AdminPortal() {
   const [view, setView] = useState('overview');
+  const [period, setPeriod] = useState('week');
+  const [year, setYear] = useState(() => adminPeriodYears()[0] || 2026);
+  const changePeriod = value => { setSummary(null); setApiSummary(null); setPeriod(value); };
+  const changeYear = value => { setSummary(null); setApiSummary(null); setYear(value); };
   const [summary, setSummary] = useState(null);
   const [apiSummary, setApiSummary] = useState(null);
   const [events, setEvents] = useState([]);
@@ -74,6 +85,7 @@ export default function AdminPortal() {
   const [filters, setFilters] = useState({ days: 7, outcome: 'error', provider: 'all', search: '', accountId: '' });
   const [accountQuery, setAccountQuery] = useState('');
   const [accountResult, setAccountResult] = useState(null);
+  const accountRequest = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -84,18 +96,18 @@ export default function AdminPortal() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([readAdmin('summary'), readAdmin('events?outcome=error&days=7&offset=0')])
+    Promise.all([readAdmin(`summary?period=${period}&year=${year}`), readAdmin('events?outcome=error&days=7&offset=0')])
       .then(([overview, list]) => { if (active) { setSummary(overview); setRecent(list.items.slice(0, 5)); setError(''); } })
       .catch(problem => { if (active) setError(problem.message); });
     return () => { active = false; };
-  }, [refreshKey]);
+  }, [refreshKey, period, year]);
   useEffect(() => {
     if (view !== 'usage') return;
     let active = true;
-    readAdmin('apis').then(data => { if (active) { setApiSummary(data); setError(''); } })
+    readAdmin(`apis?period=${period}&year=${year}`).then(data => { if (active) { setApiSummary(data); setError(''); } })
       .catch(problem => { if (active) setError(problem.message); });
     return () => { active = false; };
-  }, [view, refreshKey]);
+  }, [view, refreshKey, period, year]);
   useEffect(() => {
     if (view !== 'incidents') return;
     let active = true;
@@ -107,27 +119,46 @@ export default function AdminPortal() {
     }, 250);
     return () => { active = false; clearTimeout(timer); };
   }, [view, filters, refreshKey]);
+  useEffect(() => {
+    let active = true;
+    const restoreAccount = () => {
+      const request = ++accountRequest.current;
+      const query = adminAccountQuery(window);
+      if (!query) { setAccountResult(null); setAccountQuery(''); setBusy(false); return; }
+      setAccountQuery(query);
+      readAdmin(`account?q=${encodeURIComponent(query)}`)
+        .then(result => { if (active && request === accountRequest.current) { setAccountResult(result); setError(''); } })
+        .catch(problem => { if (active && request === accountRequest.current) setError(problem.message); });
+    };
+    if (adminAccountQuery(window)) restoreAccount();
+    window.addEventListener('popstate', restoreAccount);
+    return () => { active = false; window.removeEventListener('popstate', restoreAccount); };
+  }, []);
   async function loadMore() {
     if (nextOffset == null) return;
     setBusy(true);
     try { const list = await readAdmin(`events?${filterQuery(nextOffset)}`); setEvents(previous => [...previous, ...list.items]); setNextOffset(list.nextOffset); }
     catch (problem) { setError(problem.message); } finally { setBusy(false); }
   }
-  async function findAccount(event) {
-    event.preventDefault(); setBusy(true); setError(''); setAccountResult(null);
-    try { setAccountResult(await readAdmin(`account?q=${encodeURIComponent(accountQuery.trim())}`)); }
-    catch (problem) { setError(problem.message); } finally { setBusy(false); }
-  }
+  async function findAccount(event) { event.preventDefault(); await showAccount(accountQuery.trim()); }
   function openAccountIncidents(id) { setFilters(previous => ({ ...previous, accountId: String(id), outcome: 'all' })); setView('incidents'); }
-  async function showAccount(id) {
+  async function showAccount(query) {
+    const request = ++accountRequest.current;
     setBusy(true); setError('');
-    try { setAccountResult(await readAdmin(`account?q=${id}`)); setAccountQuery(String(id)); }
-    catch (problem) { setError(problem.message); } finally { setBusy(false); }
+    try {
+      const result = await readAdmin(`account?q=${encodeURIComponent(query)}`);
+      if (request !== accountRequest.current) return;
+      openAdminAccount(window, query);
+      setAccountResult(result); setAccountQuery(String(query));
+    }
+    catch (problem) { if (request === accountRequest.current) setError(problem.message); }
+    finally { if (request === accountRequest.current) setBusy(false); }
+  }
+  function backToUsers() {
+    if (!closeAdminAccount(window)) { setAccountResult(null); setAccountQuery(''); }
   }
   const users = summary?.users;
-  const dailyFeatures = sevenDays([]).map(row => ({ ...row,
-    ...Object.fromEntries(['recipes', 'vision', 'recipe_detail', 'shopping', 'meals', 'nutrition', 'chat'].map(feature =>
-      [feature, users?.features?.filter(item => item.day === row.day && item.feature === feature).reduce((sum, item) => sum + item.total, 0) || 0])) }));
+  const dailyFeatures = users?.features || adminPeriodBuckets(period, new Date(), year).map(bucket => ({ day: bucket.endDay, label: bucket.label }));
 
   return <section className="admin-portal page-enter" aria-labelledby="admin-title">
     <header className="admin-heading"><div><span className="admin-eyebrow">NUTRIBOT · ADMIN</span><h1 id="admin-title">Centro de operaciones</h1>
@@ -137,17 +168,18 @@ export default function AdminPortal() {
       <button key={id} className={view === id ? 'active' : ''} aria-current={view === id ? 'page' : undefined} onClick={() => { setView(id); setSelected(null); }}>{label}</button>)}</nav>
       <div className="admin-content">
         {error && <p className="admin-error" role="alert">{error}</p>}
-        {view === 'overview' && <><div className="admin-section-heading"><h2>Resumen</h2><p>Actividad de la plataforma y tiempos de respuesta · últimos 7 días</p></div>
+        {view === 'overview' && <><div className="admin-section-heading admin-section-with-controls"><div><h2>Resumen</h2><p>Actividad de la plataforma y tiempos de respuesta</p></div><PeriodPicker value={period} onChange={changePeriod} year={year} onYearChange={changeYear} /></div>
           <div className="admin-stats"><Stat label="Usuarios registrados" value={users?.total} hint="Cuentas con correo" />
             <Stat label="Activos · 30 días" value={users?.active} hint={`${users?.inactive ?? '—'} inactivos`} />
             <Stat label="Consultas de recetas · 24 h" value={summary?.total24h} hint={`${summary?.errors24h ?? '—'} errores`} />
             <Stat label="Valor mensual estimado" value={users ? money(users.estimatedMonthlyCents) : null} hint="Según planes asignados; no son cobros" /></div>
-          <div className="admin-stats"><Stat label="Servidor ≤ 2 s" value={users?.performance?.serverUnder2s == null ? '—' : `${users.performance.serverUnder2s}%`} hint={`p95 ${duration(users?.performance?.serverP95Ms)}`} />
-            <Stat label="APIs externas ≤ 2 s" value={users?.performance?.apiUnder2s == null ? '—' : `${users.performance.apiUnder2s}%`} hint={`p95 ${duration(users?.performance?.apiP95Ms)}`} />
-            <Stat label="Tasa de error de recetas" value={summary ? pct(summary.errors7d, summary.total7d) : null} hint={`${summary?.errors7d ?? 0} de ${summary?.total7d ?? 0}`} tone="warning" />
-            <Stat label="Dos opciones" value={summary ? pct(q.twoOptions, successes) : null} hint="De búsquedas con recetas" /></div>
-          <div className="admin-two-col"><Trend daily={summary?.daily} /><section className="admin-panel"><div className="admin-panel-heading"><h2>Uso por función</h2><p>Solicitudes HTTP, incluidas las fallidas</p></div>
+          <div className="admin-stats admin-performance-stats"><Stat label="Servidor ≤ 2 s" value={users?.performance?.serverUnder2s == null ? '—' : `${users.performance.serverUnder2s}%`} hint={`p95 últimos 30 días: ${duration(users?.performance?.serverP95Ms)}`} />
+            <Stat label="APIs externas ≤ 2 s" value={users?.performance?.apiUnder2s == null ? '—' : `${users.performance.apiUnder2s}%`} hint={`p95 últimos 30 días: ${duration(users?.performance?.apiP95Ms)}`} /></div>
+          <div className="admin-two-col"><Trend daily={summary?.daily} period={period} /><section className="admin-panel"><div className="admin-panel-heading"><div><h2>Uso por función</h2><p>Solicitudes HTTP, incluidas las fallidas</p></div></div>
             <LineChart rows={dailyFeatures} label="Uso por función" lines={[{ key: 'recipes', label: 'Recetas', color: '#087253' }, { key: 'vision', label: 'Nutri-Vision', color: '#8665b8' }, { key: 'recipe_detail', label: 'Fichas', color: '#d6a140' }, { key: 'meals', label: 'Comidas', color: '#4c86b6' }]} /></section></div>
+          <p className="admin-coverage-note">Los tramos sin línea son anteriores al registro de métricas; no se cuentan como cero consultas.</p>
+          <section className="admin-panel admin-plan-trend"><div className="admin-panel-heading"><div><h2>Evolución de planes</h2><p>Cuentas con plan Básico y de pago al cierre de cada período</p></div><span>{users?.paid ?? 0} de pago · {users?.free ?? 0} gratis hoy</span></div>
+            <LineChart rows={users?.planTrend} label="Evolución de planes" lines={[{ key: 'paid', label: 'De pago', color: '#087253' }, { key: 'free', label: 'Gratis', color: '#a780cf' }]} /></section>
           <div className="admin-two-col admin-overview-bottom"><section className="admin-panel"><h2>Planes asignados</h2><p className="admin-note">Proyección mensual a precios de la página pública. Todavía no hay cobros integrados.</p><div className="admin-revenue"><span>NutriPro · {users?.nutripro ?? '—'} × $2.99 <strong>{users ? money(users.nutripro * 299) : '—'}</strong></span><span>NutriMax · {users?.nutrimax ?? '—'} × $9.99 <strong>{users ? money(users.nutrimax * 999) : '—'}</strong></span><span>Total estimado <strong>{users ? money(users.estimatedMonthlyCents) : '—'}</strong></span></div></section>
             <section className="admin-panel"><div className="admin-panel-heading"><h2>Incidentes recientes</h2><button className="admin-text-link" onClick={() => setView('incidents')}>Ver todos</button></div><EventList items={recent} compact onSelect={setSelected} /></section></div>
         </>}
@@ -161,22 +193,23 @@ export default function AdminPortal() {
             {nextOffset != null && <button className="btn secondary admin-more" disabled={busy} onClick={loadMore}>Cargar más</button>}{busy && <p role="status">Cargando…</p>}</section>
         </>}
         {view === 'quality' && <><div className="admin-section-heading"><h2>Calidad de recetas</h2><p>Qué ocurre después de que la persona pide una receta · últimos 7 días</p></div>
-          <div className="admin-stats"><Stat label="Dos opciones" value={q.twoOptions} hint="Búsquedas exitosas" /><Stat label="Una opción" value={q.oneOption} hint="Búsquedas exitosas" /><Stat label="Sin resultados" value={q.noResults} hint="Filtros sin coincidencias" /><Stat label="Más alternativas" value={q.moreRequests} hint={`${q.moreSuccess ?? 0} terminaron con recetas`} /></div>
+          <div className="admin-stats"><Stat label="Tasa de error de recetas" value={summary ? pct(summary.errors7d, summary.total7d) : null} hint={`${summary?.errors7d ?? 0} de ${summary?.total7d ?? 0}`} tone="warning" />
+            <Stat label="Dos opciones" value={summary ? pct(q.twoOptions, successes) : null} hint="De búsquedas con recetas" />
+            <Stat label="Búsquedas con dos opciones" value={q.twoOptions} hint="Búsquedas exitosas" /><Stat label="Una opción" value={q.oneOption} hint="Búsquedas exitosas" />
+            <Stat label="Sin resultados" value={q.noResults} hint="Filtros sin coincidencias" /><Stat label="Más alternativas" value={q.moreRequests} hint={`${q.moreSuccess ?? 0} terminaron con recetas`} /></div>
           <section className="admin-panel admin-quality"><h3>Distribución de búsquedas</h3><div className="admin-quality-bar"><span style={{ width: pct(q.twoOptions, successes + (q.noResults || 0)) === '—' ? '0%' : pct(q.twoOptions, successes + (q.noResults || 0)) }} /><span style={{ width: pct(q.oneOption, successes + (q.noResults || 0)) === '—' ? '0%' : pct(q.oneOption, successes + (q.noResults || 0)) }} /></div>
             <p>{successes + (q.noResults || 0) ? `${pct(q.twoOptions, successes + q.noResults)} con dos opciones · ${pct(q.oneOption, successes + q.noResults)} con una · ${pct(q.noResults, successes + q.noResults)} sin resultados.` : 'Todavía no hay búsquedas de recetas registradas.'}</p>
             <small>Las conversaciones y solicitudes bloqueadas antes de la búsqueda no entran en esta distribución.</small></section>
         </>}
-        {view === 'usage' && <><div className="admin-section-heading"><h2>Uso de APIs</h2><p>Llamadas reales a proveedores externos · últimos 7 días</p></div>
+        {view === 'usage' && <><div className="admin-section-heading admin-section-with-controls"><div><h2>Uso de APIs</h2><p>Llamadas reales a proveedores externos</p></div><PeriodPicker value={period} onChange={changePeriod} year={year} onYearChange={changeYear} /></div>
           <p className="admin-note">Éxito significa respuesta HTTP 2xx. Se registran estado y duración, sin URL, clave, consulta ni contenido. Los contadores empiezan desde esta actualización y no sustituyen la facturación del proveedor.</p>
           <div className="admin-provider-grid">{[['gemini', 'Google AI Studio', summary?.model || 'Gemini'], ['edamam', 'Edamam', 'Recipe Search Enterprise Basic'], ['usda', 'USDA FoodData Central', 'FoodData Central API']].map(([provider, name, type]) => {
-            const rows = apiSummary?.providers?.filter(item => item.provider === provider) || [];
-            const totals = rows.reduce((acc, item) => ({ total: acc.total + item.total, success: acc.success + item.success, failed: acc.failed + item.failed }), { total: 0, success: 0, failed: 0 });
-            const trend = sevenDays([]).map(day => ({ ...day,
-              success: apiSummary?.daily?.filter(item => item.day === day.day && item.provider === provider).reduce((sum, item) => sum + item.success, 0) || 0,
-              failed: apiSummary?.daily?.filter(item => item.day === day.day && item.provider === provider).reduce((sum, item) => sum + item.failed, 0) || 0 }));
+            const totals = apiSummary?.providers?.find(item => item.provider === provider) || { total: 0, success: 0, failed: 0 };
+            const trend = apiSummary?.daily?.filter(item => item.provider === provider) || adminPeriodBuckets(period, new Date(), year).map(bucket => ({ day: bucket.endDay, label: bucket.label }));
+            const rows = apiSummary?.operations?.filter(item => item.provider === provider) || [];
             return <article className="admin-panel admin-api-card" key={provider}><span className="admin-api-kicker">{name}</span><h3>{type}</h3><div className="admin-api-totals"><strong>{totals.total}</strong><span>llamadas · {totals.success} exitosas · {totals.failed} fallidas</span></div>
               <LineChart rows={trend} label={`Llamadas a ${name}`} lines={[{ key: 'success', label: 'HTTP OK', color: '#087253' }, { key: 'failed', label: 'HTTP / red', color: '#d46d52' }]} />
-              {rows.length > 0 && <ul className="admin-api-operations">{rows.map(row => <li key={`${row.operation}-${row.model || ''}`}><span>{row.operation.replaceAll('_', ' ')}{row.model ? ` · ${row.model}` : ''}</span><strong>{row.total}</strong></li>)}</ul>}
+              {rows.length > 0 && <><small>Operaciones · últimos 30 días</small><ul className="admin-api-operations">{rows.map(row => <li key={`${row.operation}-${row.model || ''}`}><span>{row.operation.replaceAll('_', ' ')}{row.model ? ` · ${row.model}` : ''}</span><strong>{row.total}</strong></li>)}</ul></>}
             </article>;
           })}</div>
           <section className="admin-panel admin-api-log"><div className="admin-panel-heading"><div><h2>Últimas llamadas</h2><p>Hasta 30 registros recientes · éxito, HTTP o fallo de red</p></div></div>
@@ -184,11 +217,11 @@ export default function AdminPortal() {
           </section>
         </>}
         {view === 'users' && <><div className="admin-section-heading"><h2>Usuarios y soporte</h2><p>Actividad en los últimos 30 días · planes asignados, sin verificación de pago</p></div>
-          <div className="admin-stats"><Stat label="Total" value={users?.total} hint="Cuentas registradas" /><Stat label="Activas" value={users?.active} hint="Actividad en 30 días" /><Stat label="Inactivas" value={users?.inactive} hint="Sin actividad en 30 días" /><Stat label="Gratis / de pago" value={users ? `${users.free} / ${users.paid}` : null} hint="Según plan asignado" /></div>
+          <form className="admin-account-search" onSubmit={findAccount}><label htmlFor="admin-account-query">Buscar por correo completo o ID de cuenta</label><div><input id="admin-account-query" value={accountQuery} onChange={e => setAccountQuery(e.target.value)} placeholder="usuario@ejemplo.com" required /><button className="btn primary" disabled={busy}>Buscar</button></div></form>
+          {accountResult ? <button className="admin-back-button" type="button" onClick={backToUsers}>← Volver a usuarios</button> : <><div className="admin-stats"><Stat label="Total" value={users?.total} hint="Cuentas registradas" /><Stat label="Activas" value={users?.active} hint="Actividad en 30 días" /><Stat label="Inactivas" value={users?.inactive} hint="Sin actividad en 30 días" /><Stat label="Gratis / de pago" value={users ? `${users.free} / ${users.paid}` : null} hint="Según plan asignado" /></div>
           <section className="admin-panel admin-users-list"><div className="admin-panel-heading"><div><h2>Últimas 10 cuentas</h2><p>Ordenadas de registro más reciente a más antiguo</p></div></div>
             {users?.latest?.length ? <div className="admin-table-wrap"><table><thead><tr><th>Cuenta</th><th>Plan</th><th>Registro</th><th>Última actividad</th><th></th></tr></thead><tbody>{users.latest.map(user => <tr key={user.id}><td><strong>{user.name}</strong><small>#{user.id} · {user.email}</small></td><td>{user.plan === 'basico' ? 'Básico' : user.plan === 'nutripro' ? 'NutriPro' : 'NutriMax'}</td><td>{date(user.createdAt)}</td><td>{date(user.lastActiveAt)}</td><td><button className="admin-text-link" onClick={() => showAccount(user.id)}>Detalles</button></td></tr>)}</tbody></table></div> : empty}
-          </section>
-          <form className="admin-account-search" onSubmit={findAccount}><label htmlFor="admin-account-query">Buscar por correo completo o ID de cuenta</label><div><input id="admin-account-query" value={accountQuery} onChange={e => setAccountQuery(e.target.value)} placeholder="usuario@ejemplo.com" required /><button className="btn primary" disabled={busy}>Buscar</button></div></form>
+          </section></>}
           {accountResult && (accountResult.account ? <section className="admin-panel admin-account"><div className="admin-panel-heading"><div><h3>{accountResult.account.name}</h3><p>{accountResult.account.email} · Cuenta #{accountResult.account.id}</p></div><button className="btn secondary" disabled title="Restablecimiento de contraseña pendiente de implementar">Restablecer contraseña · próximamente</button></div>
             <dl><div><dt>ID</dt><dd>#{accountResult.account.id}</dd></div><div><dt>Nombre</dt><dd>{accountResult.account.name}</dd></div><div><dt>Plan asignado</dt><dd>{accountResult.detail?.effectivePlan || accountResult.account.plan}</dd></div><div><dt>Registro</dt><dd>{date(accountResult.account.createdAt)}</dd></div>
               <div><dt>Último cambio de perfil</dt><dd>{date(accountResult.detail?.updatedAt || accountResult.account.createdAt)}</dd></div><div><dt>Última actividad</dt><dd>{date(accountResult.detail?.lastActiveAt || accountResult.account.createdAt)}</dd></div>

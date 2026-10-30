@@ -334,7 +334,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 12) throw new Error("Esquema de una versión posterior");
+      if (version > 13) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -431,6 +431,10 @@ export async function openDatabase(options = {}) {
       if (version < 12) {
         await c.query(readFileSync(new URL('./postgres/012_admin_api_metrics.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(12)');
+      }
+      if (version < 13) {
+        await c.query(readFileSync(new URL('./postgres/013_admin_daily_metrics.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(13)');
       }
     });
   } catch (error) {

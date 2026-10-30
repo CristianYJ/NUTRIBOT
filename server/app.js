@@ -16,6 +16,7 @@ import { resolveAutomaticUsdaLinks, nutritionReferenceNotes } from './auto-nutri
 import { createEdamam, edamamFilters, planEdamam, validateEdamamUri } from './edamam.js';
 import { presentEdamamRecipe } from './edamam-presentation.js';
 import { hydrateEdamamMeals } from './meals.js';
+import { adminPeriods, adminPeriodYears } from '../src/admin-periods.js';
 
 const dist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -154,10 +155,14 @@ export function createAppServer({
         if (!session || !await rootStore?.isAdmin?.(session.profileId, adminEmail))
           throw new AppError('FORBIDDEN', 'Acceso administrativo no autorizado.', 403);
         if (req.method !== 'GET') throw new AppError('METHOD_NOT_ALLOWED', 'Utiliza GET.', 405);
+        const period = url.searchParams.get('period') || 'week';
+        if (!Object.hasOwn(adminPeriods, period)) throw new AppError('INVALID_FILTER', 'Período inválido.');
+        const year = period === 'year' ? Number(url.searchParams.get('year') || adminPeriodYears()[0]) : null;
+        if (period === 'year' && !adminPeriodYears().includes(year)) throw new AppError('INVALID_FILTER', 'Año inválido.');
         if (url.pathname === '/api/admin/access') return json(res, 200, { allowed: true });
         if (url.pathname === '/api/admin/summary') return json(res, 200, {
-          ...await rootStore.adminSummary(),
-          users: await rootStore.adminUsersSummary(),
+          ...await rootStore.adminSummary(period, year),
+          users: await rootStore.adminUsersSummary(period, year),
           providers: { gemini: Boolean(apiKey), edamam: Boolean(edamamAppId && edamamAppKey), usda: Boolean(usdaApiKey) },
           model,
           uptimeSeconds: Math.floor(process.uptime()),
@@ -170,7 +175,7 @@ export function createAppServer({
         if (url.pathname === '/api/admin/account') return json(res, 200,
           await (async () => { const found = await rootStore.findAdminAccount(url.searchParams.get('q'));
             return found.account ? { ...found, detail: await rootStore.adminAccountDetail(found.account.id) } : found; })());
-        if (url.pathname === '/api/admin/apis') return json(res, 200, await rootStore.adminApiSummary());
+        if (url.pathname === '/api/admin/apis') return json(res, 200, await rootStore.adminApiSummary(period, year));
         throw new AppError('NOT_FOUND', 'Ruta no encontrada.', 404);
       }
       const reserveUsage = async feature => {

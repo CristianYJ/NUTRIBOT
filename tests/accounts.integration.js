@@ -170,6 +170,14 @@ test('forgotten-password and admin requests email a reset form, never a sign-in 
   assert.equal(mail[1].to, 'recover@example.test');
   const audit = (await f.sql.query('SELECT requested_by_admin_id FROM password_reset_tokens ORDER BY created_at DESC')).rows;
   assert(audit.some(row => row.requested_by_admin_id === String(adminId)));
+  const changed = await post('/api/auth/password/change', {
+    oldPassword: 'Una frase larga de prueba 2026', newPassword: 'Another long password 2026',
+  }, { Cookie: cookie, 'X-Nutribot-CSRF': csrf });
+  assert.equal(changed.status, 200);
+  assert.deepEqual(await changed.json(), { changed: true });
+  assert.equal(changed.headers.get('set-cookie'), null);
+  const stillSignedIn = await fetch(base + '/api/auth/session', { headers: { Cookie: cookie } });
+  assert.equal((await stillSignedIn.json()).authenticated, true);
 });
 async function fixture(t) {
   const schema = "nutribot_test_" + randomBytes(8).toString("hex");

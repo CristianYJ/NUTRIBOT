@@ -6,6 +6,7 @@
 - En el portal administrativo, «Enviar enlace para cambiar contraseña» envía el mismo tipo de enlace al usuario seleccionado. El administrador no ve el token ni define la contraseña.
 - En «Mi perfil», el usuario autenticado puede cambiar la contraseña proporcionando la actual.
 - El enlace abre un formulario para elegir una contraseña nueva; no inicia sesión. Vence a los 20 minutos, se usa una vez y el cambio cierra todas las sesiones anteriores. Después hay que iniciar sesión con la nueva contraseña.
+- El cambio desde «Mi perfil» confirma el resultado y conserva la sesión actual. Cierra las otras sesiones de la cuenta.
 
 ## Correo de Hostinger
 

@@ -204,9 +204,8 @@ export function createAuthentication(store, { sendPasswordResetEmail = null, res
         requireCsrf(req, current);
         throttle(context.ip);
         const raw = await readJson(req, 4096);
-        await store.auth.changePassword(current.profileId, raw?.oldPassword, raw?.newPassword);
-        setCookie(res, '', context.secure, false, true);
-        json(res, 200, { authenticated: false, changed: true });
+        await store.auth.changePassword(current.profileId, raw?.oldPassword, raw?.newPassword, digest(current.token));
+        json(res, 200, { changed: true });
         return true;
       }
       if (

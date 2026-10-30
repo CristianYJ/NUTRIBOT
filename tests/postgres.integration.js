@@ -253,16 +253,18 @@ test('password reset links are one-use, expire, and revoke sessions without sign
   await assert.rejects(f.store.auth.completePasswordReset(third.token, original), { code: 'INVALID_RESET_LINK' });
 });
 
-test('signed-in password change requires the current password and invalidates sessions', async t => {
+test('signed-in password change requires the current password, keeps this session and revokes others', async t => {
   const f = await fixture(t);
   const email = 'change@example.test';
   const id = await f.store.auth.register({ name: 'Change user', email,
     password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
   await f.store.auth.createSession(id, 'b'.repeat(64), new Date(Date.now() + 600000));
-  await assert.rejects(f.store.auth.changePassword(id, 'wrong', 'A different password 2026'), { code: 'INVALID_CREDENTIALS' });
+  await f.store.auth.createSession(id, 'c'.repeat(64), new Date(Date.now() + 600000));
+  await assert.rejects(f.store.auth.changePassword(id, 'wrong', 'A different password 2026', 'b'.repeat(64)), { code: 'INVALID_CREDENTIALS' });
   assert(await f.store.auth.findSession('b'.repeat(64)));
-  await f.store.auth.changePassword(id, 'A long test password 2026', 'A different password 2026');
-  assert.equal(await f.store.auth.findSession('b'.repeat(64)), null);
+  await f.store.auth.changePassword(id, 'A long test password 2026', 'A different password 2026', 'b'.repeat(64));
+  assert(await f.store.auth.findSession('b'.repeat(64)));
+  assert.equal(await f.store.auth.findSession('c'.repeat(64)), null);
   assert.equal(await f.store.auth.login({ email, password: 'A different password 2026' }), id);
 });
 

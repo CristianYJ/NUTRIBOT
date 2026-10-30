@@ -174,8 +174,10 @@ export function createAuthStore(pool, transaction) {
         await c.query('DELETE FROM auth_sessions WHERE profile_id=$1', [row.profile_id]);
       });
     },
-    async changePassword(profileId, oldPassword, newPassword) {
+    async changePassword(profileId, oldPassword, newPassword, currentSessionHash) {
       if (oldPassword === newPassword) throw new AppError('INVALID_PASSWORD', 'Elige una contraseña nueva.');
+      if (typeof currentSessionHash !== 'string' || !/^[a-f0-9]{64}$/.test(currentSessionHash))
+        throw new AppError('INVALID_SESSION', 'La sesión actual no es válida.', 401);
       const passwordHash = await hashPassword(newPassword);
       return transaction(async c => {
         const row = (await c.query('SELECT password_hash FROM profiles WHERE id=$1 FOR UPDATE', [profileId])).rows[0];
@@ -183,7 +185,7 @@ export function createAuthStore(pool, transaction) {
           throw new AppError('INVALID_CREDENTIALS', 'La contraseña actual no es correcta.', 401);
         await c.query('UPDATE profiles SET password_hash=$1,updated_at=now() WHERE id=$2', [passwordHash, profileId]);
         await c.query('UPDATE password_reset_tokens SET consumed_at=now() WHERE profile_id=$1 AND consumed_at IS NULL', [profileId]);
-        await c.query('DELETE FROM auth_sessions WHERE profile_id=$1', [profileId]);
+        await c.query('DELETE FROM auth_sessions WHERE profile_id=$1 AND token_hash<>$2', [profileId, currentSessionHash]);
       });
     },
   };

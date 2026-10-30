@@ -855,7 +855,7 @@ function Workspace({ initial, onSignedOut }) {
                     Cambiar contraseña
                   </button>
                 </section>
-                {showPasswordChange && <PasswordChangeForm onChanged={onSignedOut} />}
+                {showPasswordChange && <PasswordChangeForm />}
                 <button
                   className="profile-logout"
                   disabled={loggingOut}
@@ -1085,27 +1085,32 @@ function Workspace({ initial, onSignedOut }) {
   );
 }
 
-function PasswordChangeForm({ onChanged }) {
+function PasswordChangeForm() {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   async function submit(event) {
     event.preventDefault();
     setError('');
+    setSuccess(false);
     if (newPassword !== confirm) { setError('Las contraseñas no coinciden.'); return; }
     setBusy(true);
     try {
       await accountRequest('password/change', { oldPassword, newPassword });
-      onChanged();
-    } catch (problem) { setError(problem.message); setBusy(false); }
+      setOldPassword(''); setNewPassword(''); setConfirm('');
+      setSuccess(true);
+    } catch (problem) { setError(problem.message); }
+    finally { setBusy(false); }
   }
   return <form className="password-change-form" onSubmit={submit}><fieldset disabled={busy}>
     <label>Contraseña actual<input type="password" autoComplete="current-password" required value={oldPassword} onChange={event => setOldPassword(event.target.value)} /></label>
     <label>Nueva contraseña<input type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={newPassword} onChange={event => setNewPassword(event.target.value)} /></label>
     <label>Confirmar contraseña nueva<input type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={confirm} onChange={event => setConfirm(event.target.value)} /></label>
     {error && <p role="alert" className="auth-error">{error}</p>}
+    {success && <p role="status" className="password-change-success">Tu contraseña se cambió correctamente. Puedes seguir usando esta sesión.</p>}
     <button className="btn primary" type="submit">{busy ? 'Guardando…' : 'Guardar nueva contraseña'}</button>
   </fieldset></form>;
 }

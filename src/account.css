@@ -475,6 +475,7 @@
 .password-change-form label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
 .password-change-form input { min-height: 44px; padding: 10px 12px; border: 1px solid #d8e2dc; border-radius: 9px; max-width: 420px; width: 100%; }
 .password-change-form .btn { justify-self: start; }
+.password-change-success { margin: 0; color: #006c49; font-size: 13px; font-weight: 700; }
 .profile-logout {
   display: flex;
   align-items: center;

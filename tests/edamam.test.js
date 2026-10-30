@@ -22,6 +22,7 @@ test('recipe result shows actual glycemic index and marks absent values unavaila
   assert.equal(shapeRecipe({ ...base, glycemicIndex: 42 }, terms).glycemicIndex, 42);
   assert.equal(shapeRecipe(base, terms).glycemicIndex, null);
   assert.equal(shapeRecipe(base, terms).caloriesPerServing, 250);
+  assert.deepEqual(shapeRecipe({ ...base, mealType: ['Breakfast'] }, terms).mealTypes, ['Breakfast']);
   assert.deepEqual(shapeRecipe(base, terms).matched, ['arroz']);
 });
 test('one search call ranks pantry terms and excludes results missing requested allergy labels', async () => {
@@ -69,6 +70,7 @@ test('Mexican dinner follow-up asks servings, then returns two distinct Edamam o
   const server = createAppServer({ authentication: false, store, edamamAppId: 'id', edamamAppKey: 'key',
     edamamPlan: async input => ({ intent: 'recipe', servings: requestedServings(input.message), query: 'chicken tortilla',
       terms: [{ id: 'pollo', english: 'chicken' }], mealType: 'Dinner', cuisineType: 'Mexican' }),
+    edamamChoices: async () => [{ titleEs: 'Tazón mexicano', meal: 'Cena' }, { titleEs: 'Tacos de pollo', meal: 'Cena' }],
     edamamFetch: async () => { searches++; return { ok: true, json: async () => ({ hits: [
       { recipe: { uri, label: 'Mexican bowl', healthLabels: [], ingredients: [{ food: 'chicken' }] } },
       { recipe: { uri: uri + 'two', label: 'Chicken tacos', healthLabels: [], ingredients: [{ food: 'chicken' }] } },
@@ -90,6 +92,8 @@ test('Mexican dinner follow-up asks servings, then returns two distinct Edamam o
   assert.equal(second.source, 'edamam');
   assert.equal(second.servings, 2);
   assert.deepEqual(second.externalRecipes.map(recipe => recipe.title), ['Mexican bowl', 'Chicken tacos']);
+  assert.deepEqual(second.externalRecipes.map(recipe => recipe.titleEs), ['Tazón mexicano', 'Tacos de pollo']);
+  assert.deepEqual(second.externalRecipes.map(recipe => recipe.meal), ['Cena', 'Cena']);
   assert.equal(searches, 1);
   assert.equal(legacySaves, 0);
 });

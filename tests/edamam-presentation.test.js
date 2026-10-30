@@ -1,18 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { presentEdamamRecipe } from '../server/edamam-presentation.js';
+import { presentEdamamRecipe, presentEdamamChoices } from '../server/edamam-presentation.js';
 import { hydrateEdamamMeals, summarizeMeals } from '../server/meals.js';
 
 test('Gemini translates Edamam ingredients without changing quantities and estimates difficulty', async () => {
   const input = { title: 'Chicken rolls', ingredientLines: ['75g low-fat cheese', '3 flour tortillas'], time: 15 };
   const result = await presentEdamamRecipe(input, { generate: async request => {
     assert.match(request.instruction, /no omitas alérgenos/i);
-    return { output: { ingredientLinesEs: ['75 g de queso bajo en grasa', '3 tortillas de harina'], difficulty: 'Fácil' } };
+    return { output: { titleEs: 'Rollitos de pollo', ingredientLinesEs: ['75 g de queso bajo en grasa', '3 tortillas de harina'], difficulty: 'Fácil' } };
   } });
-  assert.deepEqual(result, { ingredientLinesEs: ['75 g de queso bajo en grasa', '3 tortillas de harina'], difficulty: 'Fácil' });
+  assert.deepEqual(result, { titleEs: 'Rollitos de pollo', ingredientLinesEs: ['75 g de queso bajo en grasa', '3 tortillas de harina'], difficulty: 'Fácil' });
   await assert.rejects(presentEdamamRecipe(input, { generate: async () => ({ output: {
-    ingredientLinesEs: ['70 g de queso', '3 tortillas'], difficulty: 'Fácil',
+    titleEs: 'Rollitos de pollo', ingredientLinesEs: ['70 g de queso', '3 tortillas'], difficulty: 'Fácil',
   } }) }), { code: 'INVALID_AI_OUTPUT' });
+});
+
+test('Gemini translates both choice titles in one call and keeps the requested meal', async () => {
+  let calls = 0;
+  const choices = await presentEdamamChoices([{ title: 'Chicken tacos', mealTypes: ['Lunch'] }, { title: 'Rice bowl', mealTypes: [] }], 'Dinner', {
+    generate: async request => {
+      calls++;
+      assert.equal(JSON.parse(request.parts[0].text).recipes.length, 2);
+      return { output: { choices: [{ titleEs: 'Tacos de pollo', meal: 'Almuerzo' }, { titleEs: 'Tazón de arroz', meal: 'Almuerzo' }] } };
+    },
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(choices, [{ titleEs: 'Tacos de pollo', meal: 'Cena' }, { titleEs: 'Tazón de arroz', meal: 'Cena' }]);
 });
 
 test('Edamam meal nutrition is calculated live without adding nutrients to stored meal events', async () => {

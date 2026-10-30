@@ -14,7 +14,7 @@ import { validateRevision } from "./state-validation.js";
 import { getUsdaFood, searchUsdaFoods, translateFoodQuery } from "./nutrition.js";
 import { resolveAutomaticUsdaLinks, nutritionReferenceNotes } from './auto-nutrition.js';
 import { createEdamam, edamamFilters, planEdamam, validateEdamamUri } from './edamam.js';
-import { presentEdamamRecipe } from './edamam-presentation.js';
+import { presentEdamamRecipe, presentEdamamChoices, mealLabel } from './edamam-presentation.js';
 import { hydrateEdamamMeals } from './meals.js';
 import { adminPeriods, adminPeriodYears } from '../src/admin-periods.js';
 
@@ -50,6 +50,7 @@ export function createAppServer({
   edamamFetch = fetch,
   edamamPlan = planEdamam,
   edamamPresent = presentEdamamRecipe,
+  edamamChoices = presentEdamamChoices,
   adminEmail,
   usdaFetch = fetch,
   model = "gemini-3.5-flash-lite",
@@ -504,7 +505,20 @@ export function createAppServer({
             } else if (plan.intent === 'recipe') {
               recipeTrace.stage = 'edamam_search';
               const found = await edamam.search(input, plan, controller.signal);
-              result = { type: found.recipes.length ? 'success' : 'empty', source: 'edamam', recipes: [], externalRecipes: found.recipes, servings: plan.servings,
+              let choices = [];
+              if (found.recipes.length) {
+                recipeTrace.stage = 'gemini_titles';
+                try {
+                  choices = await edamamChoices(found.recipes, plan.mealType, { apiKey, model, fetchImpl: trackedGeminiFetch });
+                } catch (error) {
+                  if (controller.signal.aborted) throw error;
+                }
+              }
+              const externalRecipes = found.recipes.map((recipe, index) => ({
+                ...recipe, ...choices[index],
+                meal: mealLabel(plan.mealType) || choices[index]?.meal || mealLabel(recipe.mealTypes?.[0]),
+              }));
+              result = { type: found.recipes.length ? 'success' : 'empty', source: 'edamam', recipes: [], externalRecipes, servings: plan.servings,
                 text: found.recipes.length ? `Encontré ${found.recipes.length === 2 ? 'dos opciones distintas' : 'una opción'} para ${plan.servings} ${plan.servings === 1 ? 'persona' : 'personas'} en Edamam. Revisa los ingredientes y el enlace de preparación.` : 'No encontré recetas que cumplan los filtros. Prueba con otros ingredientes o más tiempo.' };
             } else result = { type: plan.intent === 'needs_review' ? 'review' : 'conversation', source: 'gemini', recipes: [], text: plan.reply || 'Cuéntame qué te gustaría cocinar.' };
           } else { recipeTrace.stage = 'gemini_recipe'; result = await generate(input, { apiKey, model, signal: controller.signal, fetchImpl: trackedGeminiFetch }); }

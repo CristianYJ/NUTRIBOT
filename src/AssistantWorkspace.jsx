@@ -357,8 +357,13 @@ export default function AssistantWorkspace({
                       Generar más alternativas
                     </button>
                   )}
-                  {m.externalRecipes?.map(recipe => <EdamamRecipeCard key={recipe.uri} initial={recipe} servings={m.servings} pantry={pantry} ingredients={ingredients} mealTracker={mealTracker} />)}
-                  {!m.externalRecipes?.length && m.edamamRefs?.map(ref => <EdamamRecipeCard key={ref.uri} reference={ref} servings={m.servings} pantry={pantry} ingredients={ingredients} mealTracker={mealTracker} />)}
+                  {(m.externalRecipes?.length || m.edamamRefs?.length) > 0 && (
+                    <div className="edamam-chat-options" aria-label="Opciones de recetas" role="group">
+                      {m.externalRecipes?.length
+                        ? m.externalRecipes.map(recipe => <EdamamRecipeCard key={recipe.uri} initial={recipe} compact servings={m.servings} pantry={pantry} ingredients={ingredients} mealTracker={mealTracker} />)
+                        : m.edamamRefs.map(ref => <EdamamRecipeCard key={ref.uri} reference={ref} compact servings={m.servings} pantry={pantry} ingredients={ingredients} mealTracker={mealTracker} />)}
+                    </div>
+                  )}
                   <MessageStamp message={m} name={profile.name} />
                 </div>
               </div>

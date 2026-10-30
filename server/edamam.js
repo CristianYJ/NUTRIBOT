@@ -90,7 +90,7 @@ export function shapeRecipe(raw, terms = []) {
   const portions = Number(raw.yield) || 1;
   const calories = Number(raw.calories);
   const gi = Number(raw.glycemicIndex);
-  return { uri: raw.uri, title: raw.label.slice(0, 150), image: safeUrl(raw.image), source: String(raw.source || '').slice(0, 100),
+  return { uri: raw.uri, title: raw.label.slice(0, 150), mealTypes: Array.isArray(raw.mealType) ? raw.mealType.filter(value => ['Breakfast', 'Lunch', 'Dinner'].includes(value)).slice(0, 3) : [], image: safeUrl(raw.image), source: String(raw.source || '').slice(0, 100),
     sourceUrl: safeUrl(raw.url), servings: portions, time: Number(raw.totalTime) || null,
     healthLabels: Array.isArray(raw.healthLabels) ? raw.healthLabels.filter(x => typeof x === 'string').slice(0, 80) : [],
     caloriesPerServing: Number.isFinite(calories) ? Math.round(calories / portions) : null,

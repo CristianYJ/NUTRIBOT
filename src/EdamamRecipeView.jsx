@@ -31,7 +31,7 @@ function GlycemicBar({ value }) {
 const nutrients = [['carbohydratesG', 'Carbohidratos', 'g'], ['fiberG', 'Fibra', 'g'], ['proteinG', 'Proteína', 'g'], ['fatG', 'Grasas', 'g'], ['sugarG', 'Azúcares', 'g'], ['sodiumMg', 'Sodio', 'mg']];
 const number = value => Number.isFinite(value) ? value.toLocaleString('es-SV', { maximumFractionDigits: 1 }) : '—';
 
-export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients = [], servings, onFavoriteChanged, isFavorite = false, prefetch = false, mealTracker }) {
+export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients = [], servings, onFavoriteChanged, isFavorite = false, prefetch = false, compact = false, mealTracker }) {
   const [recipe, setRecipe] = useState(initial || null);
   const [saved, setSaved] = useState(isFavorite);
   const [shopping, setShopping] = useState(null);
@@ -44,7 +44,8 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
   const [people, setPeople] = useState(servings || initial?.servings || 1);
   const dialog = useRef(null);
   const uri = initial?.uri || reference?.uri;
-  const title = recipe?.title || reference?.title || 'Receta de Edamam';
+  const title = presentation?.titleEs || recipe?.titleEs || reference?.title || recipe?.title || 'Receta';
+  const meal = recipe?.meal || reference?.meal || ({ Breakfast: 'Desayuno', Lunch: 'Almuerzo', Dinner: 'Cena' })[recipe?.mealTypes?.[0]] || null;
   useEffect(() => { setRecipe(initial || null); setSaved(isFavorite); setShopping(null); setShoppingTranslations(null); setPresentation(null); setPresentationError(''); }, [initial, uri, isFavorite]);
   useEffect(() => {
     if (!prefetch || initial || !uri) return;
@@ -84,14 +85,14 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
   }
   const present = recipe?.matched?.filter(id => pantry.includes(id)).map(id => ingredients.find(item => item.id === id)?.name || id) || [];
   return <>
-    <article className="recipe-card edamam-library-card">
+    <article className={`recipe-card edamam-library-card${compact ? ' edamam-chat-card' : ''}`}>
       <button className="recipe-image edamam-card-image" onClick={open} disabled={working} aria-label={`Ver ${title}`}>
         {recipe?.image ? <img src={recipe.image} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="food-illustration">🍽️</span>}
-        <span className="photo-label">Edamam</span>
+        {meal && <span className="photo-label">{meal}</span>}
       </button>
       <button className={`save-btn${saved ? ' saved' : ''}`} onClick={favorite} disabled={working} aria-label={`${saved ? 'Quitar de favoritas' : 'Guardar favorita'}: ${title}`} aria-pressed={saved}><Icon name="heart" size={19} /></button>
       <div className="recipe-copy">
-        <div className="recipe-meta"><span><Icon name="clock" size={14} />{recipe?.time ? `${recipe.time} min` : 'Tiempo no indicado'}</span><span>Edamam</span></div>
+        <div className="recipe-meta"><span><Icon name="clock" size={14} />{recipe?.time ? `${recipe.time} min` : 'Tiempo no indicado'}</span>{meal && <span>{meal}</span>}</div>
         <button className="title-link" onClick={open} disabled={working}><h3>{title}</h3></button>
         <p>{recipe?.caloriesPerServing != null ? `${number(recipe.caloriesPerServing)} kcal por porción` : 'Consulta los datos actualizados'}</p>
         <div className="availability"><Icon name="arrow" size={15} />Ver receta</div>
@@ -103,7 +104,7 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
         <div className="detail-photo edamam-detail-photo">
           {recipe.image ? <img src={recipe.image} alt="" referrerPolicy="no-referrer" /> : <span>🍽️</span>}
           <button className="detail-close" onClick={() => dialog.current?.close()} aria-label="Cerrar receta"><Icon name="close" /></button>
-          <span className="tag">Edamam</span>
+          {meal && <span className="tag">{meal}</span>}
         </div>
         <div className="detail-content">
           <div className="detail-title"><h2>{title}</h2><button className={`icon-button${saved ? ' saved' : ''}`} onClick={favorite} disabled={working} aria-label={saved ? 'Quitar de favoritas' : 'Guardar favorita'} aria-pressed={saved}><Icon name="heart" /></button></div>

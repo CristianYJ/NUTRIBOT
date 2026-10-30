@@ -17,19 +17,19 @@ test('diagnostic excerpts hide contact information and stay bounded', () => {
   assert.equal(excerpt.includes('5555 1234'), false);
   assert.ok(excerpt.length <= 300);
 });
-test('admin endpoints require the signed-in allowlisted account', async t => {
+test('admin endpoints require an account with the database admin role', async t => {
   let permitted = false;
   const store = {
     auth: { findSession: async () => ({ profileId: 7 }) },
     forProfile: () => ({}),
-    isAdmin: async (id, email) => { assert.equal(id, 7); assert.equal(email, 'admin@example.test'); return permitted; },
+    isAdmin: async id => { assert.equal(id, 7); return permitted; },
     adminSummary: async () => ({ total24h: 0 }),
     adminUsersSummary: async () => ({ total: 1 }),
     adminApiSummary: async () => ({ calls: [] }),
     findAdminAccount: async query => ({ account: { id: 7, email: query }, recent: [] }),
     adminAccountDetail: async () => ({ effectivePlan: 'GOAT Mode' }),
   };
-  const base = await start(t, { store, adminEmail: 'admin@example.test' });
+  const base = await start(t, { store });
   const headers = { Cookie: `nutribot_session=${'a'.repeat(64)}` };
   assert.equal((await fetch(base + '/api/admin/summary')).status, 401);
   assert.equal((await fetch(base + '/api/admin/summary', { headers })).status, 403);

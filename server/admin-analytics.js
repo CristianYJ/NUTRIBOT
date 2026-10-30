@@ -12,7 +12,7 @@ function bucketsFor(period, year) {
   catch { throw new AppError('INVALID_FILTER', 'Período inválido.'); }
 }
 
-export function createAdminAnalytics({ transaction, adminEmail = '' }) {
+export function createAdminAnalytics({ transaction }) {
   return {
     recordApiCall(event) {
       if (!allowedProviders.has(event.provider) || !allowedOutcomes.has(event.outcome) ||
@@ -105,14 +105,14 @@ export function createAdminAnalytics({ transaction, adminEmail = '' }) {
             count(*) FILTER (WHERE p.plan_code='nutripro')::integer AS nutripro,
             count(*) FILTER (WHERE p.plan_code='nutripro_plus')::integer AS nutrimax
           FROM profiles p LEFT JOIN latest ON latest.profile_id=p.id WHERE p.email IS NOT NULL`)).rows[0];
-        const latest = (await c.query(`SELECT p.id,p.name,p.email,p.plan_code,p.created_at,p.updated_at,
+        const latest = (await c.query(`SELECT p.id,p.name,p.email,p.plan_code,p.role_code,p.created_at,p.updated_at,
           greatest(p.created_at,coalesce((SELECT max(s.created_at) FROM auth_sessions s WHERE s.profile_id=p.id),p.created_at),
             coalesce((SELECT max(u.created_at) FROM plan_usage u WHERE u.profile_id=p.id),p.created_at),
             coalesce((SELECT max(d.created_at) FROM admin_diagnostics d WHERE d.profile_id=p.id),p.created_at),
             coalesce((SELECT max(a.created_at) FROM admin_api_calls a WHERE a.profile_id=p.id),p.created_at),
             coalesce((SELECT max(h.created_at) FROM admin_http_requests h WHERE h.profile_id=p.id),p.created_at)) AS last_active_at
           FROM profiles p WHERE p.email IS NOT NULL ORDER BY p.created_at DESC,p.id DESC LIMIT 10`)).rows.map(row => ({
-            id: Number(row.id), name: row.name, email: row.email, plan: row.plan_code,
+            id: Number(row.id), name: row.name, email: row.email, plan: row.plan_code, role: row.role_code,
             createdAt: iso(row.created_at), updatedAt: iso(row.updated_at), lastActiveAt: iso(row.last_active_at),
           }));
         const featureRaw = (await c.query(`SELECT day,category AS feature,total FROM admin_daily_metrics
@@ -151,7 +151,7 @@ export function createAdminAnalytics({ transaction, adminEmail = '' }) {
     adminAccountDetail(id) {
       if (!Number.isSafeInteger(id) || id < 1) throw new AppError('INVALID_FILTER', 'Cuenta inválida.');
       return transaction(async c => {
-        const profile = (await c.query(`SELECT id,name,email,plan_code,created_at,updated_at FROM profiles
+        const profile = (await c.query(`SELECT id,name,email,plan_code,role_code,created_at,updated_at FROM profiles
           WHERE id=$1 AND email IS NOT NULL`, [id])).rows[0];
         if (!profile) return null;
         const history = (await c.query(`SELECT from_plan,to_plan,changed_at FROM profile_plan_history
@@ -163,7 +163,7 @@ export function createAdminAnalytics({ transaction, adminEmail = '' }) {
           if (!paid && wasPaid) { paidSince = null; freeSinceAfterPaid = iso(change.changed_at); }
           wasPaid = paid;
         }
-        const effective = adminEmail && profile.email === adminEmail
+        const effective = profile.role_code === 'admin'
           ? { ...planCatalog.nutripro_plus, code: 'goat', name: 'GOAT Mode' } : planCatalog[profile.plan_code];
         const windows = { recipes: usageWindow('recipes'), vision: usageWindow('vision') };
         const usageRows = (await c.query(`SELECT feature,period_start,count(*) FILTER (WHERE succeeded)::integer AS used,

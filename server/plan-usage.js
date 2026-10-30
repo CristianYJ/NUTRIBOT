@@ -14,10 +14,10 @@ export function usageWindow(feature, now = new Date()) {
   return { periodStart: start.toISOString().slice(0, 10), resetsAt: new Date(end.getTime() + 6 * 3600000).toISOString() };
 }
 
-export function createPlanUsage({ transaction, profileId, adminEmail = '' }) {
+export function createPlanUsage({ transaction, profileId }) {
   async function account(c, lock = false) {
-    const { rows } = await c.query(`SELECT plan_code,email FROM profiles WHERE id=$1${lock ? ' FOR UPDATE' : ''}`, [profileId()]);
-    const isAdmin = Boolean(adminEmail && rows[0]?.email?.toLowerCase() === adminEmail.toLowerCase());
+    const { rows } = await c.query(`SELECT plan_code,role_code FROM profiles WHERE id=$1${lock ? ' FOR UPDATE' : ''}`, [profileId()]);
+    const isAdmin = rows[0]?.role_code === 'admin';
     const plan = isAdmin ? { ...planCatalog.nutripro_plus, code: 'goat', name: 'GOAT Mode' } : planCatalog[rows[0]?.plan_code];
     if (!plan) throw new AppError('PLAN_UNAVAILABLE', 'No se pudo comprobar el plan de tu cuenta.', 503);
     const now = (await c.query('SELECT clock_timestamp() AS now')).rows[0].now;

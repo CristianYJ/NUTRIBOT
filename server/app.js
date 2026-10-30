@@ -52,7 +52,6 @@ export function createAppServer({
   edamamPlan = planEdamam,
   edamamPresent = presentEdamamRecipe,
   edamamChoices = presentEdamamChoices,
-  adminEmail,
   usdaFetch = fetch,
   model = "gemini-3.5-flash-lite",
   generate = generateWithGemini,
@@ -154,7 +153,7 @@ export function createAppServer({
         }
       }
       if (url.pathname.startsWith('/api/admin/')) {
-        if (!session || !await rootStore?.isAdmin?.(session.profileId, adminEmail))
+        if (!session || !await rootStore?.isAdmin?.(session.profileId))
           throw new AppError('FORBIDDEN', 'Acceso administrativo no autorizado.', 403);
         if (req.method !== 'GET') throw new AppError('METHOD_NOT_ALLOWED', 'Utiliza GET.', 405);
         const period = url.searchParams.get('period') || 'week';

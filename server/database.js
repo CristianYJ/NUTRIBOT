@@ -334,7 +334,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 15) throw new Error("Esquema de una versión posterior");
+      if (version > 16) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -444,6 +444,11 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/015_edamam_presentation_cache.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(15)');
       }
+      if (version < 16) {
+        await c.query(readFileSync(new URL('./postgres/016_account_roles.sql', import.meta.url), 'utf8'));
+        if (adminEmail) await c.query("UPDATE profiles SET role_code='admin' WHERE email=$1", [adminEmail.trim().toLowerCase()]);
+        await c.query('INSERT INTO schema_migrations(version) VALUES(16)');
+      }
     });
   } catch (error) {
     await pool.end();
@@ -475,10 +480,10 @@ export async function openDatabase(options = {}) {
           maxSugarG: profile.max_sugar_g,
         }) };
   }
-  const usage = createPlanUsage({ transaction, profileId, adminEmail });
+  const usage = createPlanUsage({ transaction, profileId });
   const store = {
     ...createAdminDiagnostics({ transaction, profileId, pool }),
-    ...createAdminAnalytics({ transaction, adminEmail }),
+    ...createAdminAnalytics({ transaction }),
     ...mealStore({transaction,profileId,readRecipeNutrition}),
     getUsage: usage.getUsage,
     reserveUsage: usage.reserveUsage,

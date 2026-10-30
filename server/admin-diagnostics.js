@@ -10,9 +10,9 @@ export function diagnosticExcerpt(value) {
 }
 export function createAdminDiagnostics({ transaction, profileId, pool }) {
   return {
-    async isAdmin(id, adminEmail) {
-      if (!adminEmail || !Number.isSafeInteger(id)) return false;
-      const result = await pool.query('SELECT 1 FROM profiles WHERE id=$1 AND lower(email)=$2', [id, adminEmail]);
+    async isAdmin(id) {
+      if (!Number.isSafeInteger(id)) return false;
+      const result = await pool.query("SELECT 1 FROM profiles WHERE id=$1 AND email IS NOT NULL AND role_code='admin'", [id]);
       return result.rowCount === 1;
     },
     recordAdminEvent(event) {
@@ -122,12 +122,12 @@ export function createAdminDiagnostics({ transaction, profileId, pool }) {
       if (!value || value.length > 254 || (!/^\d{1,15}$/.test(value) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))
         throw new AppError('INVALID_FILTER', 'Busca por correo completo o ID de cuenta.');
       return transaction(async c => {
-        const row = (await c.query(`SELECT id,name,email,plan_code,created_at FROM profiles
+        const row = (await c.query(`SELECT id,name,email,plan_code,role_code,created_at FROM profiles
           WHERE ${/^\d{1,15}$/.test(value) ? 'id=$1' : 'email=$1'} LIMIT 1`, [value])).rows[0];
         if (!row) return { account: null, recent: [] };
         const recent = (await c.query(`SELECT request_id,outcome,error_code,stage,created_at FROM admin_diagnostics
           WHERE profile_id=$1 AND created_at >= now() - interval '30 days' ORDER BY created_at DESC LIMIT 8`, [row.id])).rows;
-        return { account: { id: Number(row.id), name: row.name, email: row.email, plan: row.plan_code,
+        return { account: { id: Number(row.id), name: row.name, email: row.email, plan: row.plan_code, role: row.role_code,
           createdAt: row.created_at.toISOString() }, recent: recent.map(item => ({ requestId: item.request_id,
           outcome: item.outcome, errorCode: item.error_code, stage: item.stage, createdAt: item.created_at.toISOString() })) };
       }, true);

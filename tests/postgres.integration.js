@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    15,
+    16,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -153,11 +153,13 @@ test('Spanish Edamam presentations persist once and are shared without storing o
   assert.equal(row.input_hash.trim(), hash);
 });
 
-test('admin diagnostics retain a bounded trace and allow only the configured account', async t => {
+test('admin diagnostics retain a bounded trace and allow only accounts granted the admin role', async t => {
   const f = await fixture(t);
   const id = await f.store.auth.register({ name: 'Administrator', email: 'admin@example.test', password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
-  assert.equal(await f.store.isAdmin(id, 'admin@example.test'), true);
-  assert.equal(await f.store.isAdmin(1, 'admin@example.test'), false);
+  assert.equal(await f.store.isAdmin(id), false);
+  await f.sql.query("UPDATE profiles SET role_code='admin' WHERE id=$1", [id]);
+  assert.equal(await f.store.isAdmin(id), true);
+  assert.equal(await f.store.isAdmin(1), false);
   await f.store.forProfile(id).recordAdminEvent({ requestId: randomUUID(), provider: 'gemini', outcome: 'error',
     stage: 'gemini_recipe', errorCode: 'INVALID_AI_OUTPUT', reasons: ['UNDECLARED_SEASONING'],
     message: '2 personas', previousMessage: 'Cena mexicana', pantryCount: 3, maxTime: 30, mode: 'initial', durationMs: 240 });
@@ -178,11 +180,13 @@ test('admin diagnostics retain a bounded trace and allow only the configured acc
   assert.equal((await f.store.findAdminAccount(String(id))).recent.length, 1);
 });
 
-test('configured administrator receives GOAT Mode quotas while other Basic accounts stay Basic', async t => {
-  const f = await fixture(t, { adminEmail: 'admin@example.test' });
+test('database administrator receives GOAT Mode quotas while other Basic accounts stay Basic', async t => {
+  const f = await fixture(t);
   const id = await f.store.auth.register({ name: 'Administrator', email: 'admin@example.test',
     password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
   const admin = f.store.forProfile(id);
+  assert.equal((await admin.getUsage()).plan.code, 'basico');
+  await f.sql.query("UPDATE profiles SET role_code='admin' WHERE id=$1", [id]);
   const goat = await admin.getUsage();
   assert.deepEqual(goat.plan, { code: 'goat', name: 'GOAT Mode' });
   assert.equal(goat.recipes.limit, 100);
@@ -196,6 +200,29 @@ test('configured administrator receives GOAT Mode quotas while other Basic accou
   assert.equal((await admin.getUsage()).recipes.pending, 1);
   await admin.finishUsage(token, true);
   assert.equal((await admin.getUsage()).recipes.used, 1);
+  await f.sql.query("UPDATE profiles SET role_code='user' WHERE id=$1", [id]);
+  assert.equal(await f.store.isAdmin(id), false);
+  assert.equal((await admin.getUsage()).plan.code, 'basico');
+  assert.deepEqual((await f.sql.query('SELECT from_role,to_role FROM profile_role_history WHERE profile_id=$1 ORDER BY id', [id])).rows,
+    [{ from_role: 'user', to_role: 'admin' }, { from_role: 'admin', to_role: 'user' }]);
+});
+
+test('role migration grants the configured existing account once and does not regrant after revocation', async t => {
+  const f = await fixture(t);
+  const id = await f.store.auth.register({ name: 'Original admin', email: 'admin@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  await f.sql.query('DROP TRIGGER profile_role_audit ON profiles');
+  await f.sql.query('DROP FUNCTION record_profile_role()');
+  await f.sql.query('DROP TABLE profile_role_history');
+  await f.sql.query('ALTER TABLE profiles DROP COLUMN role_code');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version=16');
+  const migrated = await openDatabase({ ...f.options, adminEmail: 'ADMIN@example.test' });
+  t.after(() => migrated.close());
+  assert.equal(await migrated.isAdmin(id), true);
+  await f.sql.query("UPDATE profiles SET role_code='user' WHERE id=$1", [id]);
+  const restarted = await openDatabase({ ...f.options, adminEmail: 'admin@example.test' });
+  t.after(() => restarted.close());
+  assert.equal(await restarted.isAdmin(id), false);
 });
 
 test('admin analytics counts measured provider calls, HTTP activity, plans and account history', async t => {
@@ -242,7 +269,11 @@ test('daily aggregate migration backfills available detailed metrics without acc
     outcome: 'success', statusCode: 200, durationMs: 300 });
   await f.sql.query('DROP TABLE admin_daily_metrics');
   await f.sql.query('DROP TABLE edamam_presentation_cache');
-  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14,15)');
+  await f.sql.query('DROP TRIGGER profile_role_audit ON profiles');
+  await f.sql.query('DROP FUNCTION record_profile_role()');
+  await f.sql.query('DROP TABLE profile_role_history');
+  await f.sql.query('ALTER TABLE profiles DROP COLUMN role_code');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14,15,16)');
   const reopened = await f.reopen();
   const rows = (await f.sql.query("SELECT source,category,outcome,total FROM admin_daily_metrics WHERE source='api'")).rows;
   assert.deepEqual(rows, [{ source: 'api', category: 'edamam', outcome: 'success', total: 1 }]);

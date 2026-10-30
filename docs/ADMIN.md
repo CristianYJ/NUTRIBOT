@@ -1,8 +1,18 @@
 # Portal administrativo y diagnósticos
 
-Configura `NUTRIBOT_ADMIN_EMAIL` en el `.env` privado del servidor con el correo de una cuenta ya registrada. Tras reiniciar, esa cuenta verá **Admin** como primera opción de la navegación principal y móvil. El servidor comprueba la sesión y el correo en cada petición a `/api/admin/*`; ocultar el enlace en la interfaz no es el control de acceso.
+Cada cuenta registrada tiene `profiles.role_code`, limitado por PostgreSQL a `user` o `admin`. El servidor consulta el rol en cada petición a `/api/admin/*`; conceder o revocar el rol surte efecto sin reiniciar ni volver a iniciar sesión. El enlace **Admin** aparece como primera opción de la navegación principal y móvil solo para cuentas autorizadas. No hay una ruta HTTP para cambiar roles.
 
-La cuenta administradora muestra **GOAT Mode** en el encabezado y recibe los mismos cupos de aplicación que NutriMax: 100 generaciones de recetas por semana y 60 análisis de Nutri-Vision por mes. El plan guardado de la cuenta no cambia; la distinción se aplica por correo configurado al comprobar y reservar usos en el servidor. Las cuentas ordinarias conservan sus cupos. Los límites propios de los proveedores externos siguen aplicando.
+La migración `016_account_roles.sql` concede el rol `admin` **una sola vez** a la cuenta existente indicada por `NUTRIBOT_ADMIN_EMAIL` en el entorno privado del servidor. Configura esa variable antes de desplegar la migración para conservar el acceso actual. Después, la variable no concede acceso ni vuelve a asignar el rol al reiniciar; la base de datos es la autoridad. Si la cuenta aún no existía al migrar, concede el rol explícitamente en la base.
+
+Para autorizar a otro miembro del equipo desde Oracle, un operador con acceso administrativo a PostgreSQL ejecuta (sustituye el correo por una cuenta ya registrada):
+
+```bash
+sudo -u postgres /usr/pgsql-18/bin/psql -d nutribot_project -c "UPDATE nutribot.profiles SET role_code='admin' WHERE email='persona@ejemplo.com' RETURNING id,email,role_code;"
+```
+
+La salida debe contener exactamente una cuenta. Para revocar, usa la misma instrucción con `role_code='user'`. `profile_role_history` registra cada cambio, fecha y usuario de PostgreSQL que lo ejecutó. Mantén este acceso SQL entre operadores de confianza; un administrador del portal puede consultar diagnósticos de cuentas.
+
+Las cuentas con rol `admin` muestran **GOAT Mode** en el encabezado y reciben los mismos cupos de aplicación que NutriMax: 100 generaciones de recetas por semana y 60 análisis de Nutri-Vision por mes. El plan guardado no cambia. Las cuentas ordinarias conservan sus cupos. Los límites propios de los proveedores externos siguen aplicando.
 
 ## Vistas incluidas
 
@@ -21,4 +31,4 @@ Los nuevos registros de llamadas externas y solicitudes HTTP guardan solamente c
 
 Los incidentes anteriores a esta versión no tienen datos de validación recuperables: `generation_events` solo guardaba resultado, modelo y cantidad de recetas de respuestas validadas.
 
-Las migraciones `010_admin_diagnostics.sql`, `012_admin_api_metrics.sql` y `013_admin_daily_metrics.sql` crean las tablas de diagnósticos y métricas. Igual que la migración de Edamam, un despliegue futuro requiere el procedimiento manual con respaldo descrito en [despliegue continuo](CONTINUOUS-DEPLOYMENT.md). Esta rama local no modifica producción.
+Las migraciones `010_admin_diagnostics.sql`, `012_admin_api_metrics.sql`, `013_admin_daily_metrics.sql` y `016_account_roles.sql` crean los diagnósticos, las métricas y los roles. El despliegue requiere el procedimiento manual con respaldo descrito en [despliegue continuo](CONTINUOUS-DEPLOYMENT.md).

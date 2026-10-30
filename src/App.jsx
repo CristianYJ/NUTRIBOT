@@ -20,7 +20,7 @@ import CulinaryHeader from "./CulinaryHeader.jsx";
 import {useMeals, MealFeedback, CalorieGoal} from './MealTracking.jsx';
 import HomeDashboard from "./HomeDashboard.jsx";
 import AssistantWorkspace from "./AssistantWorkspace.jsx";
-import { EdamamFavorites } from './EdamamRecipes.jsx';
+import { EdamamBadge, EdamamFavorites } from './EdamamRecipeView.jsx';
 import AdminPortal from './AdminPortal.jsx';
 import NutritionPanel from "./NutritionPanel.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
@@ -788,7 +788,6 @@ function Workspace({ initial, onSignedOut }) {
                 <div className="page-title">
                   <h1>Mis Recetas</h1>
                 </div>
-                <EdamamFavorites />
                 <div className="filter-row">
                   {["Todas", "Favoritas", "Desayuno", "Almuerzo", "Cena"].map((c) => (
                     <button
@@ -811,6 +810,7 @@ function Workspace({ initial, onSignedOut }) {
                 ) : (
                   <>
                     <div className="recipe-grid library">
+                      <EdamamFavorites meal={meal} />
                       {allRecipes
                         .filter(
                           (r) =>
@@ -908,13 +908,14 @@ function Workspace({ initial, onSignedOut }) {
               </div>
             )}
           </main>
-          <footer className="app-footer">
+          <footer className={`app-footer${page === 'assistant' || page === 'recipes' ? ' edamam-footer' : ''}`}>
             <Brand small />
             <span>Menos dudas. Más cocina.</span>
             <button className="footer-privacy" onClick={() => {
               go("profile");
               setFocusPrivacy(true);
             }}>Política de privacidad</button>
+            {(page === 'assistant' || page === 'recipes') && <EdamamBadge compact />}
           </footer>
         </div>
         <nav className="mobile-nav" aria-label="Navegación móvil">

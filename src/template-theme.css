@@ -306,7 +306,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .assistant-shell>.culinary-header{flex-shrink:0}
 .assistant-shell>.main-area{display:flex;flex:1;flex-direction:column;min-height:0;overflow:hidden}
 .culinary-shell.assistant-shell .main-area>main{flex:1;min-height:0;overflow:hidden;padding:20px 40px}
-.assistant-shell .app-footer{display:none}
+.assistant-shell .app-footer.edamam-footer{display:flex;flex-shrink:0;padding:4px 40px;background:#f0f1fa;}
+@media(max-width:700px){
+  .culinary-shell .app-footer.edamam-footer{display:flex;flex-wrap:wrap;padding:5px 14px;gap:8px;}
+  .app-footer.edamam-footer .brand,.app-footer.edamam-footer > span{display:none;}
+  .app-footer.edamam-footer .edamam-attribution{margin-left:auto;}
+  .assistant-shell .app-footer.edamam-footer{padding:5px 14px;}
+}
 .assistant-shell .culinary-assistant,.assistant-shell .culinary-assistant-grid{height:100%;min-height:0}
 .assistant-shell .culinary-assistant-grid{grid-template-columns:minmax(0,1fr) 280px;align-items:stretch}
 .assistant-shell .culinary-chat{display:flex;flex-direction:column;min-height:0;overflow:hidden}

@@ -2743,3 +2743,29 @@ main {
 .edamam-attribution img {display:block;width:200px;height:40px;object-fit:contain;}
 .edamam-favorites {margin:18px 0 28px;}
 .edamam-favorites h2 {font-size:21px;}
+
+.edamam-library-card {min-width:0;}
+.edamam-card-image {background:#f0e2cb;}
+.edamam-card-image > .food-illustration {display:grid;place-items:center;height:100%;font-size:58px;}
+.edamam-library-card .recipe-copy > p {min-height:1.5em;}
+.edamam-library-card .availability {margin-top:12px;}
+.edamam-detail-photo {background:#f0e2cb;}
+.edamam-glycemic {margin-top:22px;}
+.edamam-glycemic > div:first-child {display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#526057;margin-bottom:8px;}
+.edamam-glycemic strong {color:#142b21;}
+.edamam-glycemic-track {height:7px;border-radius:999px;background:linear-gradient(90deg,#64b97b 0%,#b6d765 45%,#f6c65e 68%,#df775f 100%);position:relative;}
+.edamam-glycemic-track.unavailable {background:#e5e9e4;}
+.edamam-glycemic-track > span {position:absolute;top:50%;width:13px;height:13px;border:2px solid #fff;border-radius:50%;background:#233a2c;box-shadow:0 1px 4px #0005;transform:translate(-50%,-50%);}
+.edamam-nutrition h3 {margin-bottom:6px;}
+.edamam-nutrient-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:14px;}
+.edamam-nutrient-grid > div {display:flex;flex-direction:column;gap:5px;background:#eff3e9;border-radius:12px;padding:14px;min-width:0;}
+.edamam-nutrient-grid small {color:#677e6d;font-size:11px;}
+.edamam-nutrient-grid strong {color:#193a29;font-size:19px;}
+.edamam-nutrient-grid strong span {font-size:11px;font-weight:400;}
+.edamam-source-link {display:inline-flex;margin-top:18px;text-decoration:none;}
+.edamam-dialog .detail-ingredients li {align-items:flex-start;}
+.edamam-attribution.compact {display:inline-flex;background:transparent;vertical-align:middle;margin:4px 0;}
+.edamam-attribution.compact img {width:125px;height:25px;}
+.edamam-footer > .edamam-attribution {margin-left:auto;flex-shrink:0;}
+.edamam-more-button {margin:14px 0 4px;}
+@media(max-width:600px){.edamam-nutrient-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.edamam-glycemic > div:first-child{font-size:11px;}}

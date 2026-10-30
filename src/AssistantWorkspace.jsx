@@ -4,7 +4,7 @@ import Icon from "./Icons.jsx";
 import ChatComposer from './ChatComposer.jsx';
 import RecipePantryImpact from "./RecipePantryImpact.jsx";
 import { availability, matchesProfile } from "./engine.js";
-import { EdamamRecipeCard, EdamamBadge } from './EdamamRecipes.jsx';
+import { EdamamRecipeCard } from './EdamamRecipeView.jsx';
 
 function MessageStamp({ message, name }) {
   const date = message.createdAt ? new Date(message.createdAt) : null;
@@ -348,17 +348,16 @@ export default function AssistantWorkspace({
                       ingredients={ingredients}
                     />
                   ))}
-                  {m.externalRecipes?.map(recipe => <EdamamRecipeCard key={recipe.uri} initial={recipe} servings={m.servings} pantry={pantry} ingredients={ingredients} />)}
-                  {!m.externalRecipes?.length && m.edamamRefs?.map(ref => <EdamamRecipeCard key={ref.uri} reference={ref} servings={m.servings} pantry={pantry} ingredients={ingredients} />)}
-                  {(m.externalRecipes?.length > 0 || m.edamamRefs?.length > 0) && <EdamamBadge />}
                   {m.role === "bot" && ["success", "empty"].includes(m.type) && (
-                    <button className="btn secondary" disabled={busy} onClick={() =>
+                    <button className="btn secondary edamam-more-button" disabled={busy} onClick={() =>
                       generate([...messages.slice(0, index)].reverse().find((item) => item.role === "user")?.text || "¿Qué puedo cocinar con lo que tengo?", "more")
                     }>
                       <Icon name="reset" size={16} />
                       Generar más alternativas
                     </button>
                   )}
+                  {m.externalRecipes?.map(recipe => <EdamamRecipeCard key={recipe.uri} initial={recipe} servings={m.servings} pantry={pantry} ingredients={ingredients} />)}
+                  {!m.externalRecipes?.length && m.edamamRefs?.map(ref => <EdamamRecipeCard key={ref.uri} reference={ref} servings={m.servings} pantry={pantry} ingredients={ingredients} />)}
                   <MessageStamp message={m} name={profile.name} />
                 </div>
               </div>

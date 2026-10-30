@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from './auth-api.js';
 import Icon from './Icons.jsx';
+import { MealFeedback } from './MealTracking.jsx';
 
 async function request(path, method = 'GET', body) {
   const response = await authenticatedFetch('/api/edamam/' + path, {
@@ -30,10 +31,13 @@ function GlycemicBar({ value }) {
 const nutrients = [['carbohydratesG', 'Carbohidratos', 'g'], ['fiberG', 'Fibra', 'g'], ['proteinG', 'Proteína', 'g'], ['fatG', 'Grasas', 'g'], ['sugarG', 'Azúcares', 'g'], ['sodiumMg', 'Sodio', 'mg']];
 const number = value => Number.isFinite(value) ? value.toLocaleString('es-SV', { maximumFractionDigits: 1 }) : '—';
 
-export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients = [], servings, onFavoriteChanged, isFavorite = false, prefetch = false }) {
+export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients = [], servings, onFavoriteChanged, isFavorite = false, prefetch = false, mealTracker }) {
   const [recipe, setRecipe] = useState(initial || null);
   const [saved, setSaved] = useState(isFavorite);
   const [shopping, setShopping] = useState(null);
+  const [shoppingTranslations, setShoppingTranslations] = useState(null);
+  const [presentation, setPresentation] = useState(null);
+  const [presentationError, setPresentationError] = useState('');
   const [error, setError] = useState('');
   const [working, setWorking] = useState(false);
   const [tab, setTab] = useState('ingredients');
@@ -41,7 +45,7 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
   const dialog = useRef(null);
   const uri = initial?.uri || reference?.uri;
   const title = recipe?.title || reference?.title || 'Receta de Edamam';
-  useEffect(() => { setRecipe(initial || null); setSaved(isFavorite); setShopping(null); }, [initial, uri, isFavorite]);
+  useEffect(() => { setRecipe(initial || null); setSaved(isFavorite); setShopping(null); setShoppingTranslations(null); setPresentation(null); setPresentationError(''); }, [initial, uri, isFavorite]);
   useEffect(() => {
     if (!prefetch || initial || !uri) return;
     let active = true;
@@ -57,6 +61,10 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
       setPeople(servings || Math.max(1, Math.min(12, Math.round(current.servings || 1))));
       setTab('ingredients');
       dialog.current?.showModal();
+      if (!presentation) {
+        request('presentation', 'POST', { title: current.title, ingredientLines: current.ingredientLines, time: current.time })
+          .then(setPresentation).catch(e => setPresentationError(e.message));
+      }
     } catch (e) { setError(e.message); } finally { setWorking(false); }
   }
   async function favorite() {
@@ -66,7 +74,12 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
   }
   async function makeShopping() {
     setWorking(true); setError('');
-    try { setShopping(await request('shopping', 'POST', { uri, servings: people })); }
+    try {
+      const result = await request('shopping', 'POST', { uri, servings: people });
+      setShopping(result); setShoppingTranslations(null);
+      if (result.items.length) request('presentation', 'POST', { title, ingredientLines: result.items.map(item => item.food), time: recipe?.time })
+        .then(data => setShoppingTranslations(data.ingredientLinesEs)).catch(() => {});
+    }
     catch (e) { setError(e.message); } finally { setWorking(false); }
   }
   const present = recipe?.matched?.filter(id => pantry.includes(id)).map(id => ingredients.find(item => item.id === id)?.name || id) || [];
@@ -98,7 +111,7 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
           <GlycemicBar value={recipe.glycemicIndex} />
           <div className="detail-meta recipe-summary">
             <span><small>Tiempo</small><strong>{recipe.time ? `${recipe.time} min` : 'Sin dato'}</strong></span>
-            <span><small>Dificultad</small><strong>No indicada</strong></span>
+            <span><small>Dificultad estimada por IA</small><strong>{presentation?.difficulty || (presentationError ? 'Sin estimar' : 'Calculando…')}</strong></span>
             <span><small>Personas</small><strong>{people}</strong></span>
             <span><small>Calorías por persona</small><strong>{recipe.caloriesPerServing == null ? 'Sin dato' : `${number(recipe.caloriesPerServing)} kcal`}</strong></span>
           </div>
@@ -113,16 +126,19 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
               <button role="tab" aria-selected={tab === 'ingredients'} onClick={() => setTab('ingredients')}>Ingredientes</button>
               <button role="tab" aria-selected={tab === 'steps'} onClick={() => setTab('steps')}>Pasos</button>
             </div>
-            {tab === 'ingredients' ? <div role="tabpanel"><div className="serving-row"><h3>Ingredientes</h3><label>Personas <select aria-label="Personas" value={people} onChange={event => { setPeople(Number(event.target.value)); setShopping(null); }}>{Array.from({ length: 12 }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}</select></label></div>
+            {tab === 'ingredients' ? <div role="tabpanel"><div className="serving-row"><h3>Ingredientes</h3><label>Personas <select aria-label="Personas" value={people} onChange={event => { setPeople(Number(event.target.value)); setShopping(null); setShoppingTranslations(null); }}>{Array.from({ length: 12 }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}</select></label></div>
               <p className="microcopy">Lista original para {number(recipe.servings)} porciones. La lista de compras ajusta las cantidades a {people} {people === 1 ? 'persona' : 'personas'}.</p>
-              <ul className="detail-ingredients">{recipe.ingredientLines.map((line, i) => <li key={`${line}-${i}`}><span className="detail-ingredient-emoji">🥬</span><span>{line}</span></li>)}</ul>
+              {presentationError && <p className="microcopy" role="status">No se pudo traducir: {presentationError}. Se muestra el texto original.</p>}
+              <ul className="detail-ingredients">{recipe.ingredientLines.map((line, i) => <li key={`${line}-${i}`}><span className="detail-ingredient-emoji">🥬</span><span>{presentation?.ingredientLinesEs?.[i] || line}{presentation?.ingredientLinesEs?.[i] && <small className="edamam-original-line">Original: {line}</small>}</span></li>)}</ul>
               <p className="microcopy">Verifica ingredientes y alérgenos antes de cocinar.</p>
             </div> : <div role="tabpanel"><h3 className="steps-heading">Manos a la cocina</h3><p>Esta receta web no incluye pasos en la API de Edamam. Consulta la preparación en el sitio de origen.</p>
               {recipe.sourceUrl && <a className="btn primary edamam-source-link" href={recipe.sourceUrl} target="_blank" rel="noopener noreferrer">Ver preparación en {recipe.source || 'el sitio original'} ↗</a>}
             </div>}
           </section>
-          <div className="culinary-recipe-actions"><button className="btn secondary" disabled={working} onClick={makeShopping}>Lista de compras</button></div>
-          {shopping && <section className="recipe-method"><h3>Lista de compras para {people}</h3><ul className="detail-ingredients">{shopping.items.map((item, i) => <li key={i}>{item.food}{item.quantities.map(q => ` · ${q.quantity} ${q.measure.split('#Measure_').at(-1).replaceAll('_', ' ')}`).join('')}{item.aisle ? ` · ${item.aisle}` : ''}</li>)}</ul>{shopping.cartUrl && <a href={shopping.cartUrl} target="_blank" rel="noopener noreferrer">Abrir carrito de compras ↗</a>}</section>}
+          <p className="microcopy">La lista de compras incluye toda la receta. Revisa lo que ya tienes en tu despensa antes de comprar; todavía no conocemos tus cantidades disponibles.</p>
+          <div className="culinary-recipe-actions"><button className="btn secondary" disabled={working} onClick={makeShopping}>Lista de compras completa</button></div>
+          {shopping && <section className="recipe-method"><h3>Lista de compras para {people}</h3><ul className="detail-ingredients">{shopping.items.map((item, i) => <li key={i}>{shoppingTranslations?.[i] || item.food}{item.quantities.map(q => ` · ${q.quantity} ${q.measure.split('#Measure_').at(-1).replaceAll('_', ' ')}`).join('')}{item.aisle ? ` · ${item.aisle}` : ''}</li>)}</ul>{shopping.cartUrl && <a href={shopping.cartUrl} target="_blank" rel="noopener noreferrer">Abrir carrito de compras ↗</a>}</section>}
+          {mealTracker && <MealFeedback key={recipe.uri} recipe={recipe} tracker={mealTracker} />}
           {error && <p role="alert">{error}</p>}
         </div>
       </>}
@@ -130,11 +146,11 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
   </>;
 }
 
-export function EdamamFavorites({ meal = 'Todas' }) {
+export function EdamamFavorites({ meal = 'Todas', mealTracker }) {
   const [items, setItems] = useState([]);
   const [error, setError] = useState('');
   const refresh = () => request('favorites').then(data => setItems(data.items)).catch(e => setError(e.message));
   useEffect(() => { refresh(); }, []);
   if (!['Todas', 'Favoritas'].includes(meal)) return null;
-  return <>{items.map((item, index) => <EdamamRecipeCard key={item.uri} reference={item} isFavorite prefetch={index < 3} onFavoriteChanged={refresh} />)}{error && <p role="alert">{error}</p>}</>;
+  return <>{items.map((item, index) => <EdamamRecipeCard key={item.uri} reference={item} isFavorite prefetch={index < 3} onFavoriteChanged={refresh} mealTracker={mealTracker} />)}{error && <p role="alert">{error}</p>}</>;
 }

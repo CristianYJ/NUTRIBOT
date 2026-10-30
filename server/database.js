@@ -423,6 +423,10 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/010_admin_diagnostics.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(10)');
       }
+      if (version < 11) {
+        await c.query(readFileSync(new URL('./postgres/011_edamam_meals.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(11)');
+      }
     });
   } catch (error) {
     await pool.end();
@@ -649,6 +653,7 @@ export async function openDatabase(options = {}) {
         await checkRevision(c, expected);
         for (const table of [
           "meal_log",
+          "edamam_meal_log",
           "nutrition_goals",
           "recipe_gram_overrides",
           "ingredient_usda_links",
@@ -751,7 +756,7 @@ export async function openDatabase(options = {}) {
       transaction(
         async (c) => ({
           provider: "postgresql",
-          schemaVersion: 10,
+          schemaVersion: 11,
           ingredients: Number(
             (await c.query("SELECT count(*) AS n FROM ingredients")).rows[0].n,
           ),
@@ -808,6 +813,7 @@ export async function openDatabase(options = {}) {
       "getTodayMeals",
         "setNutritionGoal",
       "recordMeal",
+      "recordEdamamMeal",
       "rateMeal",
       "removeMeal",
       "getUsage",

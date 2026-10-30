@@ -2768,4 +2768,5 @@ main {
 .edamam-attribution.compact img {width:125px;height:25px;}
 .edamam-footer > .edamam-attribution {margin-left:auto;flex-shrink:0;}
 .edamam-more-button {margin:14px 0 4px;}
+.edamam-original-line {display:block;margin-top:3px;color:#83918a;font-size:10px;}
 @media(max-width:600px){.edamam-nutrient-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.edamam-glycemic > div:first-child{font-size:11px;}}

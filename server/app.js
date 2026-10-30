@@ -13,6 +13,8 @@ import { validateRevision } from "./state-validation.js";
 import { getUsdaFood, searchUsdaFoods, translateFoodQuery } from "./nutrition.js";
 import { resolveAutomaticUsdaLinks, nutritionReferenceNotes } from './auto-nutrition.js';
 import { createEdamam, edamamFilters, planEdamam, validateEdamamUri } from './edamam.js';
+import { presentEdamamRecipe } from './edamam-presentation.js';
+import { hydrateEdamamMeals } from './meals.js';
 
 const dist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -45,6 +47,7 @@ export function createAppServer({
   edamamAppKey,
   edamamFetch = fetch,
   edamamPlan = planEdamam,
+  edamamPresent = presentEdamamRecipe,
   adminEmail,
   usdaFetch = fetch,
   model = "gemini-3.5-flash-lite",
@@ -127,10 +130,19 @@ export function createAppServer({
         if (!store?.getUsage) throw new AppError('PLAN_UNAVAILABLE', 'No se pudo consultar tu plan.', 503);
         return json(res, 200, await store.getUsage());
       }
-      if (url.pathname === '/api/meals/today' && req.method === 'GET') return json(res,200,await store.getTodayMeals());
+      if (url.pathname === '/api/meals/today' && req.method === 'GET') {
+        const data = await store.getTodayMeals();
+        return json(res,200,url.searchParams.get('includeEdamam') === '1' ? await hydrateEdamamMeals(data, uri => edamam.detail(uri)) : data);
+      }
       if (url.pathname === '/api/meals/goal') {
         if(req.method!=='PUT') throw new AppError('METHOD_NOT_ALLOWED','Utiliza PUT.',405);
         return json(res,200,await store.setNutritionGoal((await readJson(req)).kcal));
+      }
+      const edamamMealRoute = url.pathname.match(/^\/api\/meals\/edamam\/([0-9a-f-]{36})$/i);
+      if (edamamMealRoute && req.method === 'PUT') {
+        const body = await readJson(req, 1000);
+        const recipe = await edamam.detail(validateEdamamUri(body.uri));
+        return json(res,200,await store.recordEdamamMeal(edamamMealRoute[1],{uri:recipe.uri,title:recipe.title,mealType:body.mealType}));
       }
       const mealRoute = url.pathname.match(/^\/api\/meals\/([^/]+)$/);
       if (mealRoute) {
@@ -212,6 +224,15 @@ export function createAppServer({
         return json(res, 200, { recipe });
       }
       if (url.pathname === '/api/edamam/shopping' && req.method === 'POST') { const body = await readJson(req, 1000); return json(res, 200, await edamam.shopping(body.uri, body.servings)); }
+      if (url.pathname === '/api/edamam/presentation' && req.method === 'POST') {
+        const key = 'edamam-presentation:' + (session?.profileId || context.ip);
+        const now = Date.now();
+        const recent = (requests.get(key) || []).filter(time => now - time < 60000);
+        if (recent.length >= 8) throw new AppError('LOCAL_RATE_LIMIT', 'Espera un momento antes de traducir más recetas.', 429);
+        requests.set(key, [...recent, now]);
+        const body = await readJson(req, 12000);
+        return json(res, 200, await edamamPresent(body, { apiKey, model }));
+      }
       const nutritionOptions = url.pathname.match(/^\/api\/nutrition\/ingredients\/([a-zA-Z0-9_-]+)\/options$/);
       if (nutritionOptions && req.method === 'GET') {
         const [item] = await store.getIngredientNutritionItems([nutritionOptions[1]]);

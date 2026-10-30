@@ -119,6 +119,7 @@ export default function AssistantWorkspace({
   onImport,
   onOpenRecipe,
   onSave,
+  mealTracker,
 }) {
   const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 800px)").matches);
   const workspaceRef = useRef(null);
@@ -356,8 +357,8 @@ export default function AssistantWorkspace({
                       Generar más alternativas
                     </button>
                   )}
-                  {m.externalRecipes?.map(recipe => <EdamamRecipeCard key={recipe.uri} initial={recipe} servings={m.servings} pantry={pantry} ingredients={ingredients} />)}
-                  {!m.externalRecipes?.length && m.edamamRefs?.map(ref => <EdamamRecipeCard key={ref.uri} reference={ref} servings={m.servings} pantry={pantry} ingredients={ingredients} />)}
+                  {m.externalRecipes?.map(recipe => <EdamamRecipeCard key={recipe.uri} initial={recipe} servings={m.servings} pantry={pantry} ingredients={ingredients} mealTracker={mealTracker} />)}
+                  {!m.externalRecipes?.length && m.edamamRefs?.map(ref => <EdamamRecipeCard key={ref.uri} reference={ref} servings={m.servings} pantry={pantry} ingredients={ingredients} mealTracker={mealTracker} />)}
                   <MessageStamp message={m} name={profile.name} />
                 </div>
               </div>

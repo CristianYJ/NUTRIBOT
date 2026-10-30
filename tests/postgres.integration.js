@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    10,
+    11,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -588,6 +588,27 @@ test('meal log stores unknown nutrients honestly and ignores client totals',asyn
   await f.store.recordMeal(randomUUID(),{recipeId:'bowl',nutrition:{kcal:123}});
   const today=await f.store.getTodayMeals();
   assert.equal(today.complete,false);assert.equal(today.totals.kcal,null);assert.equal(today.missing.kcal,1);
+});
+
+test('Edamam meal events retain only URI and title, and stay isolated by account',async t=>{
+  const f=await fixture(t),id=randomUUID();
+  const uri='http://www.edamam.com/ontologies/edamam.owl#recipe_abc123';
+  const body={uri,title:'Chicken rolls',mealType:'Cena',nutrition:{kcal:9999}};
+  await f.store.recordEdamamMeal(id,body);
+  await f.store.recordEdamamMeal(id,body);
+  const today=await f.store.getTodayMeals();
+  assert.equal(today.meals.length,1);
+  assert.equal(today.meals[0].externalUri,uri);
+  assert.equal(today.meals[0].nutrition,null);
+  assert.equal(today.totals.kcal,null);
+  const row=(await f.sql.query('SELECT * FROM edamam_meal_log WHERE id=$1',[id])).rows[0];
+  assert.deepEqual(Object.keys(row).sort(),['eaten_at','id','meal_date','meal_type','profile_id','recipe_title','recipe_uri'].sort());
+  const otherId=await f.store.auth.register({name:'Another user',email:'edamam-meal@example.test',password:'A long test password 2026',birthDate:'2000-01-01'},false);
+  assert.equal((await f.store.forProfile(otherId).getTodayMeals()).meals.length,0);
+  await f.store.forProfile(otherId).removeMeal(id);
+  assert.equal((await f.store.getTodayMeals()).meals.length,1);
+  await f.store.removeMeal(id);
+  assert.equal((await f.store.getTodayMeals()).meals.length,0);
 });
 
 test('calorie goal and estimate profile persist per account, while meal types survive recipe edits',async t=>{

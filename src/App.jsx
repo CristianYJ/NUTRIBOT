@@ -175,7 +175,6 @@ function Workspace({ initial, onSignedOut }) {
     return () => { active = false; };
   }, []);
   const { usage, usageError, refreshUsage } = usePlanUsage();
-  const meals = useMeals();
   const [loggingOut, setLoggingOut] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [ingredients, setIngredients] = useState(initial.ingredients);
@@ -185,6 +184,7 @@ function Workspace({ initial, onSignedOut }) {
     readNavigation(new URL(location.href)),
   );
   const { page } = navigation;
+  const meals = useMeals(page === 'home');
   const [focusPrivacy, setFocusPrivacy] = useState(false);
   const privacyPanel = useRef(null);
   useEffect(() => {
@@ -755,6 +755,7 @@ function Workspace({ initial, onSignedOut }) {
             )}
             {page === "assistant" && (
               <AssistantWorkspace
+                mealTracker={meals}
                 usage={usage}
                 profile={profile}
                 pantry={pantry}
@@ -810,7 +811,7 @@ function Workspace({ initial, onSignedOut }) {
                 ) : (
                   <>
                     <div className="recipe-grid library">
-                      <EdamamFavorites meal={meal} />
+                      <EdamamFavorites meal={meal} mealTracker={meals} />
                       {allRecipes
                         .filter(
                           (r) =>

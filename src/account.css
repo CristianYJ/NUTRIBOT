@@ -191,8 +191,8 @@
 }
 .auth-forgot-link { color: #006c49; font-size: 13px; font-weight: 700; text-decoration: underline; margin: 0 0 16px; }
 .auth-reset-message { color: #253c30; line-height: 1.6; }
-.auth-card label > input { display: block; width: 100%; min-height: 49px; padding: 12px; margin-top: 8px; border: 1px solid #d8e2dc; border-radius: 10px; background: #f2f3ff; }
-.auth-card label > input:focus { outline: 3px solid #10b98133; border-color: #10b981; }
+.auth-card label:not(.auth-checkbox) > input { display: block; width: 100%; min-height: 49px; padding: 12px; margin-top: 8px; border: 1px solid #d8e2dc; border-radius: 10px; background: #f2f3ff; }
+.auth-card label:not(.auth-checkbox) > input:focus { outline: 3px solid #10b98133; border-color: #10b981; }
 .auth-error {
   display: flex;
   align-items: flex-start;

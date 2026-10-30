@@ -5,6 +5,7 @@ import PantryWorkspace from "./PantryWorkspace.jsx";
 import { authenticatedFetch } from "./auth-api.js";
 import AuthPage from "./AuthPage.jsx";
 import LandingPage from "./LandingPage.jsx";
+import PrivacyPage from "./PrivacyPage.jsx";
 import { publicPage } from "./public-navigation.js";
 import PhoneConnection from "./PhoneConnection.jsx";
 import { accountRequest, acceptSession } from "./auth-api.js";
@@ -15,7 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import PantryImport from "./PantryImport.jsx";
 import PlanUsage, { usePlanUsage } from './PlanUsage.jsx';
-import RecipePantryImpact from "./RecipePantryImpact.jsx";
+import RecipeCardCalories from "./RecipeCardCalories.jsx";
 import CulinaryHeader from "./CulinaryHeader.jsx";
 import {useMeals, MealFeedback, CalorieGoal} from './MealTracking.jsx';
 import HomeDashboard from "./HomeDashboard.jsx";
@@ -29,7 +30,7 @@ import { readNavigation, navigationUrl, openRecipeInHistory, closeRecipeInHistor
 import { readChat } from "./chat-session.js";
 import { profileRestrictions } from "./profile-rules.js";
 import { allergyOptions } from "./data.js";
-import { availability, matchesProfile, requiresReview } from "./engine.js";
+import { matchesProfile, requiresReview } from "./engine.js";
 
 const pages = [
   { id: "home", label: "Inicio", icon: "home" },
@@ -62,6 +63,29 @@ function Empty({ icon = "book", title, children, action }) {
       {action}
     </div>
   );
+}
+
+function RecipeCard({ recipe: r, saved, onOpen, onSave }) {
+  const isSaved = saved.includes(r.id);
+  return <article className="recipe-card">
+    <button className={`recipe-image ${r.photo ? "" : "illustrated " + r.id}`} onClick={() => onOpen(r)} aria-label={`Ver ${r.title}`}>
+      {r.photo ? <img src="/bowl-nutribot.png" alt="Bowl de arroz, frijoles, aguacate y tomate" />
+        : <><span className="food-illustration">{r.emoji}</span><span className="food-ring" /></>}
+      <span className="photo-label">{r.category}</span>
+    </button>
+    <button className={`save-btn ${isSaved ? "saved" : ""}`} onClick={() => onSave(r.id)}
+      aria-label={`${isSaved ? "Quitar" : "Guardar"} ${r.title}`} aria-pressed={isSaved}>
+      <Icon name="heart" size={19} />
+    </button>
+    <div className="recipe-copy">
+      <div className="recipe-meta"><span><Icon name="clock" size={14} />{r.time} min</span><span>{r.category}</span></div>
+      <button className="title-link" onClick={() => onOpen(r)}><h3>{r.title}</h3></button>
+      <RecipeCardCalories recipeId={r.id} />
+      <button className="availability recipe-view-button" type="button" onClick={() => onOpen(r)}>
+        <Icon name="arrow" size={15} />Ver receta
+      </button>
+    </div>
+  </article>;
 }
 
 export default function App() {
@@ -121,6 +145,7 @@ export default function App() {
       /* storage can be disabled */
     }
   }
+  if (entryPage === "privacy") return <PrivacyPage />;
   if (entryPage === "landing" && !auth?.authenticated)
     return <LandingPage brand={<Brand />} />;
   if (auth && !auth.authenticated)
@@ -604,61 +629,6 @@ function Workspace({ initial, onSignedOut }) {
       <Icon name={icon} size={18} />
     </button>
   );
-  function RecipeCard({ recipe: r }) {
-    const a = availability(r, pantry);
-    return (
-      <article className="recipe-card">
-        <button
-          className={`recipe-image ${r.photo ? "" : "illustrated " + r.id}`}
-          onClick={() => openRecipe(r)}
-          aria-label={`Ver ${r.title}`}
-        >
-          {r.photo ? (
-            <img
-              src="/bowl-nutribot.png"
-              alt="Bowl de arroz, frijoles, aguacate y tomate"
-            />
-          ) : (
-            <>
-              <span className="food-illustration">{r.emoji}</span>
-              <span className="food-ring" />
-            </>
-          )}
-          <span className="photo-label">
-            {r.category}
-          </span>
-        </button>
-        <button
-          className={`save-btn ${saved.includes(r.id) ? "saved" : ""}`}
-          onClick={() => toggleSave(r.id)}
-          aria-label={`${saved.includes(r.id) ? "Quitar" : "Guardar"} ${r.title}`}
-          aria-pressed={saved.includes(r.id)}
-        >
-          <Icon name="heart" size={19} />
-        </button>
-        <div className="recipe-copy">
-          <div className="recipe-meta">
-            <span>
-              <Icon name="clock" size={14} />
-              {r.time} min
-            </span>
-            <span>{r.vegan ? "Vegetal" : "Casera"}</span>
-          </div>
-          <button className="title-link" onClick={() => openRecipe(r)}>
-            <h3>{r.title}</h3>
-          </button>
-          <p>{r.subtitle}</p>
-          <RecipePantryImpact recipe={r} pantry={pantry} />
-          <div className={`availability ${a.missing.length ? "missing" : ""}`}>
-            <Icon name={a.missing.length ? "bag" : "check"} size={15} />
-            {a.missing.length
-              ? `Te falta${a.missing.length > 1 ? "n" : ""}: ${a.missing.map((id) => ingredients.find((item) => item.id === id)?.name || id).join(", ")}`
-              : "Tienes todos los ingredientes"}
-          </div>
-        </div>
-      </article>
-    );
-  }
   return (
     <>
       <div className={`app-shell culinary-shell ${page === "assistant" ? "assistant-shell" : ""}`}>
@@ -819,7 +789,7 @@ function Workspace({ initial, onSignedOut }) {
                             (meal === "Todas" || r.category === meal),
                         )
                         .map((r) => (
-                          <RecipeCard key={r.id} recipe={r} />
+                          <RecipeCard key={r.id} recipe={r} saved={saved} onOpen={openRecipe} onSave={toggleSave} />
                         ))}
                     </div>
                   </>
@@ -855,7 +825,7 @@ function Workspace({ initial, onSignedOut }) {
                     <p>
                       Tu perfil, despensa y recetas se guardan en nuestros servidores.
                       Al generar tus recetas algunos datos se comparten con nuestros colaboradores.
-                      Para mas informacion revisa nuestra <a href="#">politica de privacidad</a>
+                      Para más información revisa nuestra <a href="#politica-privacidad">política de privacidad</a>
                     </p>
                   </div>
                   <button
@@ -895,12 +865,11 @@ function Workspace({ initial, onSignedOut }) {
           </main>
           <footer className={`app-footer${page === 'assistant' || page === 'recipes' ? ' edamam-footer' : ''}`}>
             <Brand small />
-            <span>Menos dudas. Más cocina.</span>
-            <button className="footer-privacy" onClick={() => {
-              go("profile");
-              setFocusPrivacy(true);
-            }}>Política de privacidad</button>
-            {(page === 'assistant' || page === 'recipes') && <EdamamBadge compact />}
+            <span>2026</span>
+            <div className="footer-actions">
+              {(page === 'assistant' || page === 'recipes') && <EdamamBadge compact />}
+              <a className="footer-privacy" href="#politica-privacidad">Política de privacidad</a>
+            </div>
           </footer>
         </div>
         <nav className="mobile-nav" aria-label="Navegación móvil">

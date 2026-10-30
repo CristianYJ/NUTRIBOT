@@ -433,6 +433,9 @@
 .privacy-reset:focus-visible,
 .footer-privacy:focus-visible { outline: 3px solid #93a2af; outline-offset: 3px; }
 .app-footer .footer-privacy { margin-left: auto; color: #606b76; padding: 8px 0; }
+.app-footer .footer-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 16px; margin-left: auto; }
+.app-footer .footer-actions .footer-privacy,
+.app-footer .footer-actions .edamam-attribution { margin-left: 0; }
 .footer-privacy:hover { text-decoration: underline; text-underline-offset: 3px; }
 .profile-account-actions {
   margin-top: 28px;

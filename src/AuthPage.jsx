@@ -265,7 +265,7 @@ export default function AuthPage({ brand, canClaimLegacy, onAuthenticated }) {
           </p>
         </section>
       </main>
-      <footer className="auth-footer">© 2026 NutriBot</footer>
+      <footer className="auth-footer">© 2026 NutriBot · <a href="#politica-privacidad">Política de privacidad</a></footer>
     </div>
   );
 }

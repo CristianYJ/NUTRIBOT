@@ -275,7 +275,7 @@ export default function LandingPage({ brand }) {
               </span>
               <h3>Privacidad</h3>
               <p>
-                Para conversar y reconocer alimentos usamos Gemini. Para buscar recetas enviamos a Edamam la consulta de ingredientes y los filtros alimentarios que elegiste. Conservamos durante 30 días extractos limitados de consultas fallidas para diagnosticar errores. Las claves de ambos servicios permanecen en el servidor. Evita escribir datos personales en el chat.
+                Para conversar y reconocer alimentos usamos Gemini. Para buscar recetas enviamos a Edamam la consulta de ingredientes y los filtros alimentarios que elegiste. Conservamos durante 30 días extractos limitados de consultas fallidas para diagnosticar errores. Las claves permanecen en el servidor. <a href="#politica-privacidad">Lee la política de privacidad</a> para conocer los detalles.
               </p>
             </article>
           </div>
@@ -363,7 +363,7 @@ export default function LandingPage({ brand }) {
           </div>
           <nav aria-label="Más sobre NutriBot">
             <a href="#como-funciona">Cómo funciona</a>
-            <a href="#privacidad">Privacidad y datos</a>
+            <a href="#politica-privacidad">Política de privacidad</a>
             <a href="#auth">Entrar a mi cocina</a>
           </nav>
         </div>

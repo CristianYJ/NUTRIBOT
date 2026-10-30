@@ -22,8 +22,31 @@ test('recipe result shows actual glycemic index and marks absent values unavaila
   assert.equal(shapeRecipe({ ...base, glycemicIndex: 42 }, terms).glycemicIndex, 42);
   assert.equal(shapeRecipe(base, terms).glycemicIndex, null);
   assert.equal(shapeRecipe(base, terms).caloriesPerServing, 250);
+  assert.equal(shapeRecipe(base, terms).servings, 2);
+  assert.equal(shapeRecipe({ ...base, yield: 12 }, terms).servings, 12);
+  assert.equal(shapeRecipe({ ...base, yield: undefined }, terms).servings, null);
+  assert.equal(shapeRecipe({ ...base, yield: undefined }, terms).caloriesPerServing, null);
   assert.deepEqual(shapeRecipe({ ...base, mealType: ['Breakfast'] }, terms).mealTypes, ['Breakfast']);
   assert.deepEqual(shapeRecipe(base, terms).matched, ['arroz']);
+});
+
+test('recipe detail returns a matching cached Spanish presentation with the Edamam data', async t => {
+  let lookups = 0;
+  const translated = { titleEs: 'Tazón de arroz', ingredientLinesEs: ['1 taza de arroz'], difficulty: 'Fácil', meal: 'Almuerzo' };
+  const server = createAppServer({ authentication: false, store: { getEdamamPresentation: async () => { lookups++; return translated; } },
+    edamamAppId: 'id', edamamAppKey: 'key',
+    edamamFetch: async () => ({ ok: true, json: async () => ({ hits: [{ recipe: {
+      uri, label: 'Rice bowl', yield: 2, ingredientLines: ['1 cup rice'], ingredients: [{ food: 'rice' }], mealType: ['Lunch'],
+    } }] }) }),
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/edamam/detail?uri=${encodeURIComponent(uri)}&meal=Almuerzo`);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.recipe.title, 'Rice bowl');
+  assert.deepEqual(body.presentation, translated);
+  assert.equal(lookups, 1);
 });
 test('one search call ranks pantry terms and excludes results missing requested allergy labels', async () => {
   let calls = 0;

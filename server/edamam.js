@@ -87,13 +87,14 @@ export function shapeRecipe(raw, terms = []) {
   const foods = Array.isArray(raw.ingredients) ? raw.ingredients.map(i => normalized(i.food)).filter(Boolean) : [];
   const matched = terms.filter(({ english }) => foods.some(food => food.includes(normalized(english)) || normalized(english).includes(food)));
   const missing = terms.filter(term => !matched.includes(term));
-  const portions = Number(raw.yield) || 1;
+  const yieldCount = Number(raw.yield);
+  const portions = raw.yield != null && Number.isInteger(yieldCount) && yieldCount > 0 ? yieldCount : null;
   const calories = Number(raw.calories);
   const gi = Number(raw.glycemicIndex);
   return { uri: raw.uri, title: raw.label.slice(0, 150), mealTypes: Array.isArray(raw.mealType) ? raw.mealType.filter(value => ['Breakfast', 'Lunch', 'Dinner'].includes(value)).slice(0, 3) : [], image: safeUrl(raw.image), source: String(raw.source || '').slice(0, 100),
     sourceUrl: safeUrl(raw.url), servings: portions, time: Number(raw.totalTime) || null,
     healthLabels: Array.isArray(raw.healthLabels) ? raw.healthLabels.filter(x => typeof x === 'string').slice(0, 80) : [],
-    caloriesPerServing: Number.isFinite(calories) ? Math.round(calories / portions) : null,
+    caloriesPerServing: portions && Number.isFinite(calories) ? Math.round(calories / portions) : null,
     glycemicIndex: raw.glycemicIndex != null && Number.isFinite(gi) ? gi : null,
     ingredientLines: Array.isArray(raw.ingredientLines) ? raw.ingredientLines.filter(x => typeof x === 'string').slice(0, 35) : [],
     ingredients: Array.isArray(raw.ingredients) ? raw.ingredients.slice(0, 35).map(i => ({ food: String(i.food || ''), quantity: Number(i.quantity) || 0, measure: i.measure || '', aisle: i.foodCategory || '' })) : [],
@@ -101,7 +102,7 @@ export function shapeRecipe(raw, terms = []) {
     co2Class: raw.co2EmissionsClass || null, totalCO2Emissions: Number.isFinite(raw.totalCO2Emissions) ? raw.totalCO2Emissions : null,
     nutrientsPerServing: Object.fromEntries([['saturatedFatG', 'FASAT'], ['sodiumMg', 'NA'], ['sugarG', 'SUGAR'],
       ['proteinG', 'PROCNT'], ['carbohydratesG', 'CHOCDF'], ['fatG', 'FAT'], ['fiberG', 'FIBTG']].map(([name, code]) =>
-      [name, Number.isFinite(Number(raw.totalNutrients?.[code]?.quantity)) ? Number(raw.totalNutrients[code].quantity) / portions : null])),
+      [name, portions && Number.isFinite(Number(raw.totalNutrients?.[code]?.quantity)) ? Number(raw.totalNutrients[code].quantity) / portions : null])),
   };
 }
 export function createEdamam({ appId, appKey, fetchImpl = fetch, now = Date.now } = {}) {
@@ -144,7 +145,7 @@ export function createEdamam({ appId, appKey, fetchImpl = fetch, now = Date.now 
       if (!recipe) throw new AppError('RECIPE_UNAVAILABLE', 'Esta receta ya no está disponible en Edamam.', 404);
       return recipe; },
     async shopping(uri, servings, signal) { validateEdamamUri(uri);
-      if (!Number.isInteger(servings) || servings < 1 || servings > 12) throw new AppError('INVALID_SERVINGS', 'Elige entre 1 y 12 porciones.');
+      if (!Number.isInteger(servings) || servings < 1 || servings > 100) throw new AppError('INVALID_SERVINGS', 'Esta receta no tiene un número de porciones válido para la lista de compras.');
       const url = new URL('https://api.edamam.com/api/shopping-list/v2'); url.searchParams.set('app_id', appId); url.searchParams.set('app_key', appKey);
       url.searchParams.set('beta', 'true'); url.searchParams.set('shopping-cart', 'true');
       const data = await call(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries: [{ quantity: servings, measure: 'http://www.edamam.com/ontologies/edamam.owl#Measure_serving', item: uri }] }), signal });

@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    14,
+    15,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -134,6 +134,23 @@ test('Edamam saved recipes retain URI, title and meal without nutrition, stay wi
   const state = await f.store.getState();
   await f.store.reset(state.revision);
   assert.deepEqual(await f.store.listEdamamFavorites(), []);
+});
+
+test('Spanish Edamam presentations persist once and are shared without storing original ingredients', async t => {
+  const f = await fixture(t);
+  const uri = 'http://www.edamam.com/ontologies/edamam.owl#recipe_shared123';
+  const hash = 'a'.repeat(64);
+  await f.store.saveEdamamPresentation({ uri, title: 'Chicken rolls', kind: 'detail', hash,
+    titleEs: 'Rollitos de pollo', ingredientLinesEs: ['3 tortillas de harina'], difficulty: 'Fácil', meal: 'Almuerzo' });
+  const otherId = await f.store.auth.register({ name: 'Another cook', email: 'translation-cache@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  const cached = await (await f.reopen()).forProfile(otherId).getEdamamPresentation(uri, 'detail', hash);
+  assert.deepEqual(cached, { titleEs: 'Rollitos de pollo', ingredientLinesEs: ['3 tortillas de harina'],
+    difficulty: 'Fácil', meal: 'Almuerzo' });
+  const row = (await f.sql.query('SELECT recipe_title,ingredient_lines_es,input_hash FROM edamam_presentation_cache WHERE recipe_uri=$1', [uri])).rows[0];
+  assert.equal(row.recipe_title, 'Chicken rolls');
+  assert.deepEqual(row.ingredient_lines_es, ['3 tortillas de harina']);
+  assert.equal(row.input_hash.trim(), hash);
 });
 
 test('admin diagnostics retain a bounded trace and allow only the configured account', async t => {
@@ -224,7 +241,8 @@ test('daily aggregate migration backfills available detailed metrics without acc
   await f.store.recordApiCall({ provider: 'edamam', operation: 'recipe_search',
     outcome: 'success', statusCode: 200, durationMs: 300 });
   await f.sql.query('DROP TABLE admin_daily_metrics');
-  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14)');
+  await f.sql.query('DROP TABLE edamam_presentation_cache');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14,15)');
   const reopened = await f.reopen();
   const rows = (await f.sql.query("SELECT source,category,outcome,total FROM admin_daily_metrics WHERE source='api'")).rows;
   assert.deepEqual(rows, [{ source: 'api', category: 'edamam', outcome: 'success', total: 1 }]);

@@ -15,6 +15,7 @@ import { getUsdaFood, searchUsdaFoods, translateFoodQuery } from "./nutrition.js
 import { resolveAutomaticUsdaLinks, nutritionReferenceNotes } from './auto-nutrition.js';
 import { createEdamam, edamamFilters, planEdamam, validateEdamamUri } from './edamam.js';
 import { presentEdamamRecipe, presentEdamamChoices, mealLabel } from './edamam-presentation.js';
+import { cachedRecipePresentation, cachedChoicePresentations, getCachedRecipePresentation } from './edamam-presentation-cache.js';
 import { hydrateEdamamMeals } from './meals.js';
 import { adminPeriods, adminPeriodYears } from '../src/admin-periods.js';
 
@@ -301,17 +302,25 @@ export function createAppServer({
             throw new AppError('PROFILE_RESTRICTION', 'Esta receta supera un límite nutricional de tu perfil.', 409);
           recipe = { ...recipe, nutritionLimitsUnverified: limits.some(([name]) => recipe.nutrientsPerServing[name] == null) };
         }
-        return json(res, 200, { recipe });
+        const requestedMeal = url.searchParams.get('meal');
+        const meal = ['Desayuno', 'Almuerzo', 'Cena'].includes(requestedMeal)
+          ? requestedMeal : mealLabel(recipe.mealTypes?.[0]);
+        const presentation = await getCachedRecipePresentation({ uri: recipe.uri, title: recipe.title,
+          ingredientLines: recipe.ingredientLines, time: recipe.time, meal, mealTypes: recipe.mealTypes }, store);
+        return json(res, 200, { recipe, presentation });
       }
       if (url.pathname === '/api/edamam/shopping' && req.method === 'POST') { const body = await readJson(req, 1000); return json(res, 200, await edamam.shopping(body.uri, body.servings)); }
       if (url.pathname === '/api/edamam/presentation' && req.method === 'POST') {
-        const key = 'edamam-presentation:' + (session?.profileId || context.ip);
-        const now = Date.now();
-        const recent = (requests.get(key) || []).filter(time => now - time < 60000);
-        if (recent.length >= 8) throw new AppError('LOCAL_RATE_LIMIT', 'Espera un momento antes de traducir más recetas.', 429);
-        requests.set(key, [...recent, now]);
         const body = await readJson(req, 12000);
-        return json(res, 200, await edamamPresent(body, { apiKey, model, fetchImpl: trackedGeminiFetch }));
+        const present = (input, settings) => {
+          const key = 'edamam-presentation:' + (session?.profileId || context.ip);
+          const now = Date.now();
+          const recent = (requests.get(key) || []).filter(time => now - time < 60000);
+          if (recent.length >= 8) throw new AppError('LOCAL_RATE_LIMIT', 'Espera un momento antes de traducir más recetas.', 429);
+          requests.set(key, [...recent, now]);
+          return edamamPresent(input, settings);
+        };
+        return json(res, 200, await cachedRecipePresentation(body, { apiKey, model, fetchImpl: trackedGeminiFetch }, store, present));
       }
       const nutritionOptions = url.pathname.match(/^\/api\/nutrition\/ingredients\/([a-zA-Z0-9_-]+)\/options$/);
       if (nutritionOptions && req.method === 'GET') {
@@ -529,7 +538,7 @@ export function createAppServer({
               if (found.recipes.length) {
                 recipeTrace.stage = 'gemini_titles';
                 try {
-                  choices = await edamamChoices(found.recipes, plan.mealType, { apiKey, model, fetchImpl: trackedGeminiFetch });
+                  choices = await cachedChoicePresentations(found.recipes, plan.mealType, { apiKey, model, fetchImpl: trackedGeminiFetch }, store, edamamChoices);
                 } catch (error) {
                   if (controller.signal.aborted) throw error;
                 }

@@ -334,7 +334,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 14) throw new Error("Esquema de una versión posterior");
+      if (version > 15) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -440,6 +440,10 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/014_edamam_saved_meal.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(14)');
       }
+      if (version < 15) {
+        await c.query(readFileSync(new URL('./postgres/015_edamam_presentation_cache.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(15)');
+      }
     });
   } catch (error) {
     await pool.end();
@@ -487,6 +491,22 @@ export async function openDatabase(options = {}) {
       return true;
     },
     getState: () => transaction(readState, true),
+    getEdamamPresentation(uri, kind, hash) { return transaction(async c => {
+      const row = (await c.query(
+        'SELECT title_es,ingredient_lines_es,difficulty,meal FROM edamam_presentation_cache WHERE recipe_uri=$1 AND kind=$2 AND input_hash=$3',
+        [uri, kind, hash],
+      )).rows[0];
+      return row ? { titleEs: row.title_es, ingredientLinesEs: row.ingredient_lines_es,
+        difficulty: row.difficulty, meal: row.meal } : null;
+    }, true); },
+    saveEdamamPresentation({ uri, title, kind, hash, titleEs, ingredientLinesEs = null, difficulty = null, meal = null }) {
+      return transaction(async c => {
+        await c.query(`INSERT INTO edamam_presentation_cache
+          (recipe_uri,recipe_title,kind,input_hash,title_es,ingredient_lines_es,difficulty,meal)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
+        [uri, title, kind, hash, titleEs, ingredientLinesEs === null ? null : JSON.stringify(ingredientLinesEs), difficulty, meal]);
+      });
+    },
     listEdamamFavorites: () => transaction(async c => (await c.query(
       'SELECT recipe_uri AS uri,title,meal FROM edamam_favorites WHERE profile_id=$1 ORDER BY created_at DESC', [profileId()],
     )).rows, true),
@@ -846,6 +866,8 @@ export async function openDatabase(options = {}) {
       "saveGenerated",
       "recordAdminEvent",
       "listEdamamFavorites",
+      "getEdamamPresentation",
+      "saveEdamamPresentation",
       "saveEdamamFavorite",
       "removeEdamamFavorite",
       "getRecipeNutrition",

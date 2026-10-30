@@ -24,7 +24,10 @@ test('admin endpoints require the signed-in allowlisted account', async t => {
     forProfile: () => ({}),
     isAdmin: async (id, email) => { assert.equal(id, 7); assert.equal(email, 'admin@example.test'); return permitted; },
     adminSummary: async () => ({ total24h: 0 }),
+    adminUsersSummary: async () => ({ total: 1 }),
+    adminApiSummary: async () => ({ calls: [] }),
     findAdminAccount: async query => ({ account: { id: 7, email: query }, recent: [] }),
+    adminAccountDetail: async () => ({ effectivePlan: 'GOAT Mode' }),
   };
   const base = await start(t, { store, adminEmail: 'admin@example.test' });
   const headers = { Cookie: `nutribot_session=${'a'.repeat(64)}` };
@@ -37,6 +40,7 @@ test('admin endpoints require the signed-in allowlisted account', async t => {
   assert.equal((await fetch(base + '/api/admin/account?q=admin@example.test')).status, 401);
   assert.deepEqual((await (await fetch(base + '/api/admin/account?q=admin@example.test', { headers })).json()).account,
     { id: 7, email: 'admin@example.test' });
+  assert.equal((await fetch(base + '/api/admin/apis', { headers })).status, 200);
 });
 test('failed recipe request records safe validation reasons and returns a trace reference', async t => {
   const events = [];
@@ -59,4 +63,20 @@ test('failed recipe request records safe validation reasons and returns a trace 
   assert.deepEqual(events[0].reasons, ['UNDECLARED_SEASONING']);
   assert.equal(events[0].message, '2 personas');
   assert.equal(events[0].previousMessage, 'Cena mexicana');
+});
+
+test('provider telemetry records an actual Edamam HTTP failure without URL or credentials', async t => {
+  const calls = [];
+  const base = await start(t, { authentication: false, store: { recordApiCall: async event => { calls.push(event); } },
+    edamamAppId: 'test-id', edamamAppKey: 'private-test-key',
+    edamamFetch: async () => ({ ok: false, status: 429 }) });
+  const uri = 'http://www.edamam.com/ontologies/edamam.owl#recipe_test123';
+  const response = await fetch(base + '/api/edamam/detail?uri=' + encodeURIComponent(uri));
+  assert.equal(response.status, 429);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].provider, 'edamam');
+  assert.equal(calls[0].operation, 'recipe_detail');
+  assert.equal(calls[0].outcome, 'http_error');
+  assert.equal(calls[0].statusCode, 429);
+  assert.equal(JSON.stringify(calls).includes('private-test-key'), false);
 });

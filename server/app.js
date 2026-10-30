@@ -1,5 +1,6 @@
 import { requireRecipeNutrition, nutritionQuestion, hasCompleteNutrients, referenceChoices } from './nutrition-readiness.js';
 import { createServer } from "node:http";
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { createAuthentication, requestContext } from "./auth.js";
 import { readFile } from "node:fs/promises";
@@ -63,9 +64,38 @@ export function createAppServer({
     throw new Error("La autenticación requiere PostgreSQL actualizado.");
   const auth = authentication ? createAuthentication(rootStore) : null;
   const requests = new Map();
-  const edamam = createEdamam({ appId: edamamAppId, appKey: edamamAppKey, fetchImpl: edamamFetch });
+  const requestMetrics = new AsyncLocalStorage();
+  const operation = (provider, target) => {
+    const path = new URL(target).pathname;
+    if (provider === 'gemini') return 'generate_content';
+    if (provider === 'edamam') return path.includes('shopping-list') ? 'shopping_list'
+      : path.endsWith('/by-uri') ? 'recipe_detail' : 'recipe_search';
+    return path.endsWith('/search') ? 'food_search' : 'food_detail';
+  };
+  const trackedFetch = (provider, impl) => async (target, options) => {
+    const startedAt = Date.now();
+    const profileId = requestMetrics.getStore()?.profileId ?? null;
+    const record = async (outcome, statusCode) => {
+      if (!rootStore?.recordApiCall) return;
+      await rootStore.recordApiCall({ provider, operation: operation(provider, target),
+        model: provider === 'gemini' ? model : null, profileId, outcome, statusCode,
+        durationMs: Date.now() - startedAt }).catch(() => {});
+    };
+    try {
+      const response = await impl(target, options);
+      await record(response.ok ? 'success' : 'http_error', response.status);
+      return response;
+    } catch (error) {
+      await record('network_error', null);
+      throw error;
+    }
+  };
+  const trackedGeminiFetch = trackedFetch('gemini', fetch);
+  const trackedUsdaFetch = trackedFetch('usda', usdaFetch);
+  const edamam = createEdamam({ appId: edamamAppId, appKey: edamamAppKey,
+    fetchImpl: trackedFetch('edamam', edamamFetch) });
   let active = 0;
-  const handler = async (req, res) => {
+  const handle = async (req, res) => {
     let store = rootStore;
     let session = null;
     let recipeTrace = null;
@@ -106,6 +136,19 @@ export function createAppServer({
         if (!["GET", "HEAD"].includes(req.method))
           auth.requireCsrf(req, session);
         store = rootStore.forProfile(session.profileId);
+        requestMetrics.enterWith({ profileId: session.profileId });
+        if (rootStore?.recordHttpRequest && !url.pathname.startsWith('/api/admin/')) {
+          const startedAt = Date.now();
+          const feature = url.pathname === '/api/recipes/suggest' ? 'recipes'
+            : url.pathname === '/api/pantry/analyze' ? 'vision'
+            : url.pathname === '/api/edamam/detail' ? 'recipe_detail'
+            : url.pathname === '/api/edamam/shopping' ? 'shopping'
+            : url.pathname.startsWith('/api/meals/') ? 'meals'
+            : url.pathname.startsWith('/api/nutrition/') ? 'nutrition'
+            : url.pathname.startsWith('/api/chat/') ? 'chat' : 'other';
+          res.once('finish', () => { void rootStore.recordHttpRequest({ profileId: session.profileId,
+            feature, statusCode: res.statusCode, durationMs: Date.now() - startedAt }).catch(() => {}); });
+        }
       }
       if (url.pathname.startsWith('/api/admin/')) {
         if (!session || !await rootStore?.isAdmin?.(session.profileId, adminEmail))
@@ -114,6 +157,7 @@ export function createAppServer({
         if (url.pathname === '/api/admin/access') return json(res, 200, { allowed: true });
         if (url.pathname === '/api/admin/summary') return json(res, 200, {
           ...await rootStore.adminSummary(),
+          users: await rootStore.adminUsersSummary(),
           providers: { gemini: Boolean(apiKey), edamam: Boolean(edamamAppId && edamamAppKey), usda: Boolean(usdaApiKey) },
           model,
           uptimeSeconds: Math.floor(process.uptime()),
@@ -124,7 +168,9 @@ export function createAppServer({
             provider: url.searchParams.get('provider') || 'all', search: url.searchParams.get('search') || '',
             accountId: url.searchParams.get('accountId') ? Number(url.searchParams.get('accountId')) : null }));
         if (url.pathname === '/api/admin/account') return json(res, 200,
-          await rootStore.findAdminAccount(url.searchParams.get('q')));
+          await (async () => { const found = await rootStore.findAdminAccount(url.searchParams.get('q'));
+            return found.account ? { ...found, detail: await rootStore.adminAccountDetail(found.account.id) } : found; })());
+        if (url.pathname === '/api/admin/apis') return json(res, 200, await rootStore.adminApiSummary());
         throw new AppError('NOT_FOUND', 'Ruta no encontrada.', 404);
       }
       const reserveUsage = async feature => {
@@ -208,7 +254,7 @@ export function createAppServer({
         const recent = (requests.get(key) || []).filter((time) => now - time < 60000);
         if (recent.length >= 20) throw new AppError('LOCAL_RATE_LIMIT', 'Espera un momento antes de volver a buscar alimentos.', 429);
         requests.set(key, [...recent, now]);
-        return json(res, 200, { foods: await searchUsdaFoods(url.searchParams.get('q'), usdaApiKey, usdaFetch) });
+        return json(res, 200, { foods: await searchUsdaFoods(url.searchParams.get('q'), usdaApiKey, trackedUsdaFetch) });
       }
       if (url.pathname === '/api/edamam/favorites') {
         if (req.method === 'GET') return json(res, 200, { items: await store.listEdamamFavorites() });
@@ -239,7 +285,7 @@ export function createAppServer({
         if (recent.length >= 8) throw new AppError('LOCAL_RATE_LIMIT', 'Espera un momento antes de traducir más recetas.', 429);
         requests.set(key, [...recent, now]);
         const body = await readJson(req, 12000);
-        return json(res, 200, await edamamPresent(body, { apiKey, model }));
+        return json(res, 200, await edamamPresent(body, { apiKey, model, fetchImpl: trackedGeminiFetch }));
       }
       const nutritionOptions = url.pathname.match(/^\/api\/nutrition\/ingredients\/([a-zA-Z0-9_-]+)\/options$/);
       if (nutritionOptions && req.method === 'GET') {
@@ -260,15 +306,15 @@ export function createAppServer({
         const text = url.searchParams.get('q') || item.name;
         if (text.length > 100) throw new AppError('INVALID_QUERY', 'Usa un nombre de alimento más corto.');
         const query = nutritionQuestion(item).query && !url.searchParams.get('q')
-          ? nutritionQuestion(item).query : await translateFoodQuery(text, { apiKey, model }, generateStructured);
-        return json(res, 200, { query, foods: await searchUsdaFoods(query, usdaApiKey, usdaFetch) });
+          ? nutritionQuestion(item).query : await translateFoodQuery(text, { apiKey, model, fetchImpl: trackedGeminiFetch }, generateStructured);
+        return json(res, 200, { query, foods: await searchUsdaFoods(query, usdaApiKey, trackedUsdaFetch) });
       }
       const nutritionRecipe = url.pathname.match(/^\/api\/nutrition\/recipes\/([a-zA-Z0-9_-]+)$/);
       if (nutritionRecipe && req.method === 'GET') {
         const servings = Number(url.searchParams.get('servings') || 1);
         const before = await store.getRecipeNutrition(nutritionRecipe[1], servings);
         const needsLookup = before.ingredients.some((item) => !item.usda || !Object.hasOwn(item.usda.nutrients || {}, 'fiber'));
-        const lookup = await resolveAutomaticUsdaLinks(store, before.ingredients, usdaApiKey, usdaFetch);
+        const lookup = await resolveAutomaticUsdaLinks(store, before.ingredients, usdaApiKey, trackedUsdaFetch);
         const current = needsLookup ? await store.getRecipeNutrition(nutritionRecipe[1], servings) : before;
         return json(res, 200, { ...current, lookup, referenceNotes: nutritionReferenceNotes(current.ingredients) });
       }
@@ -292,7 +338,7 @@ export function createAppServer({
         const option = referenceChoices(item.name).find(option => option.fdcId === body.fdcId);
         if (option?.allergen && state.profile.allergies.includes(option.allergen))
           throw new AppError('PROFILE_RESTRICTION', 'Esta opción no coincide con las alergias de tu perfil.');
-        const food = await getUsdaFood(body.fdcId, usdaApiKey, usdaFetch);
+        const food = await getUsdaFood(body.fdcId, usdaApiKey, trackedUsdaFetch);
         if (!hasCompleteNutrients(food)) throw new AppError('INCOMPLETE_NUTRIENTS', 'Esta ficha no trae todos los nutrientes necesarios. Elige otra ficha del mismo alimento o deja la preparación pendiente.');
         return json(res, 200, await store.setIngredientUsda(nutritionLink[1], food));
       }
@@ -344,6 +390,7 @@ export function createAppServer({
             apiKey,
             model,
             signal: controller.signal,
+            fetchImpl: trackedGeminiFetch,
           });
           if (!res.destroyed) {
             if (usageToken) await store.finishUsage(usageToken, result.items.length > 0);
@@ -444,7 +491,8 @@ export function createAppServer({
           let result;
           if (edamamAppId && edamamAppKey) {
             recipeTrace.stage = 'gemini_intent';
-            const plan = await edamamPlan(input, { apiKey, model, signal: controller.signal });
+            const plan = await edamamPlan(input, { apiKey, model, signal: controller.signal,
+              plan: (payload, settings) => generateStructured(payload, { ...settings, fetchImpl: trackedGeminiFetch }) });
             if (plan.intent === 'recipe' && !plan.servings) {
               result = { type: 'conversation', source: 'gemini', recipes: [],
                 text: '¿Para cuántas personas quieres cocinar? Puedes responder, por ejemplo, “2 personas”.' };
@@ -454,11 +502,11 @@ export function createAppServer({
               result = { type: found.recipes.length ? 'success' : 'empty', source: 'edamam', recipes: [], externalRecipes: found.recipes, servings: plan.servings,
                 text: found.recipes.length ? `Encontré ${found.recipes.length === 2 ? 'dos opciones distintas' : 'una opción'} para ${plan.servings} ${plan.servings === 1 ? 'persona' : 'personas'} en Edamam. Revisa los ingredientes y el enlace de preparación.` : 'No encontré recetas que cumplan los filtros. Prueba con otros ingredientes o más tiempo.' };
             } else result = { type: plan.intent === 'needs_review' ? 'review' : 'conversation', source: 'gemini', recipes: [], text: plan.reply || 'Cuéntame qué te gustaría cocinar.' };
-          } else { recipeTrace.stage = 'gemini_recipe'; result = await generate(input, { apiKey, model, signal: controller.signal }); }
+          } else { recipeTrace.stage = 'gemini_recipe'; result = await generate(input, { apiKey, model, signal: controller.signal, fetchImpl: trackedGeminiFetch }); }
           if (!res.destroyed) {
             recipeTrace.stage = 'nutrition';
             if (!(edamamAppId && edamamAppKey) && requireCompleteNutrition && store?.getIngredientNutritionItems) {
-              result = await requireRecipeNutrition(result, store, usdaApiKey, usdaFetch, state.profile, input.message, input.mode);
+              result = await requireRecipeNutrition(result, store, usdaApiKey, trackedUsdaFetch, state.profile, input.message, input.mode);
             }
             if (!(edamamAppId && edamamAppKey) && store?.screenGeneratedNutrition) result = await store.screenGeneratedNutrition(result, state.profile);
             // Only validated provider output enters history. An old response cannot
@@ -557,6 +605,7 @@ export function createAppServer({
         });
     }
   };
+  const handler = (req, res) => requestMetrics.run({ profileId: null }, () => handle(req, res));
   return createServer({ headersTimeout: 15000, requestTimeout: 30000, maxHeaderSize: 16384 }, handler);
 }
 

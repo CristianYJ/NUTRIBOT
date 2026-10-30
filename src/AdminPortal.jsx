@@ -11,6 +11,13 @@ async function readAdmin(path) {
 const date = value => new Intl.DateTimeFormat('es-GT', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 const shortDate = value => new Intl.DateTimeFormat('es-GT', { day: '2-digit', month: 'short' }).format(new Date(`${value}T12:00:00`));
 const pct = (part, total) => total ? `${Math.round(part / total * 100)}%` : '—';
+const money = cents => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents || 0) / 100);
+const duration = value => value == null ? '—' : `${(value / 1000).toFixed(1)} s`;
+const since = value => {
+  if (!value) return '—';
+  const days = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86400000));
+  return days >= 365 ? `${Math.floor(days / 365)} año(s)` : days >= 30 ? `${Math.floor(days / 30)} mes(es)` : `${days} día(s)`;
+};
 const views = [['overview', 'Resumen'], ['incidents', 'Incidentes'], ['quality', 'Calidad de recetas'], ['usage', 'Uso de APIs'], ['users', 'Usuarios y soporte'], ['system', 'Sistema']];
 const outcomes = { error: 'Error', success: 'Recetas', empty: 'Sin resultados', conversation: 'Conversación', review: 'Revisión' };
 const empty = <p className="admin-empty">Aún no hay datos para este período.</p>;
@@ -18,18 +25,32 @@ const empty = <p className="admin-empty">Aún no hay datos para este período.</
 function Stat({ label, value, hint, tone = '' }) {
   return <article className={`admin-stat ${tone}`}><span>{label}</span><strong>{value ?? '—'}</strong>{hint && <small>{hint}</small>}</article>;
 }
+function sevenDays(rows = []) {
+  const today = new Date(Date.now() - 6 * 3600000);
+  const start = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(start - (6 - index) * 86400000).toISOString().slice(0, 10);
+    return { day, ...(rows.find(row => row.day === day) || {}) };
+  });
+}
+function LineChart({ rows, lines, label }) {
+  const data = sevenDays(rows);
+  const maximum = Math.max(1, ...data.flatMap(row => lines.map(line => Number(row[line.key]) || 0)));
+  const x = index => 32 + index * 96;
+  const y = value => 174 - (Number(value) || 0) / maximum * 145;
+  return <div className="admin-line-chart" role="img" aria-label={`${label}. ${data.map(row => `${shortDate(row.day)}: ${lines.map(line => `${line.label} ${row[line.key] || 0}`).join(', ')}`).join('; ')}`}>
+    <svg viewBox="0 0 640 190" preserveAspectRatio="none" aria-hidden="true">
+      {[0, .5, 1].map(mark => <line key={mark} x1="32" x2="608" y1={y(maximum * mark)} y2={y(maximum * mark)} className="admin-chart-grid" />)}
+      {lines.map(line => <g key={line.key}><polyline points={data.map((row, index) => `${x(index)},${y(row[line.key])}`).join(' ')} fill="none" stroke={line.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        {data.map((row, index) => <circle key={row.day} cx={x(index)} cy={y(row[line.key])} r="4" fill={line.color}><title>{shortDate(row.day)} · {line.label}: {row[line.key] || 0}</title></circle>)}</g>)}
+    </svg><div className="admin-chart-labels">{data.map(row => <span key={row.day}>{shortDate(row.day)}</span>)}</div>
+    <div className="admin-legend">{lines.map(line => <span key={line.key}><i style={{ background: line.color }} />{line.label}</span>)}</div>
+  </div>;
+}
 function Trend({ daily = [] }) {
-  const max = Math.max(1, ...daily.map(day => day.total));
-  return <figure className="admin-panel admin-trend"><div className="admin-panel-heading"><div><h2>Consultas por día</h2><p>Últimos 7 días · registros del flujo de recetas</p></div></div>
-    {daily.length ? <div className="admin-chart" role="img" aria-label={daily.map(day => `${shortDate(day.day)}: ${day.total} consultas, ${day.errors} errores`).join('; ')}>
-      {daily.map(day => <div className="admin-chart-column" key={day.day} title={`${day.total} consultas · ${day.errors} errores`}>
-        <div className="admin-chart-track" style={{ height: `${Math.max(8, day.total / max * 100)}%` }}>
-          <span className="admin-chart-errors" style={{ height: `${day.total ? day.errors / day.total * 100 : 0}%` }} />
-          <span className="admin-chart-empty" style={{ height: `${day.total ? day.empty / day.total * 100 : 0}%` }} />
-        </div><small>{shortDate(day.day)}</small></div>)}
-    </div> : empty}
-    <figcaption className="admin-legend"><span><i className="success" />Resultados y conversaciones</span><span><i className="empty" />Sin resultados</span><span><i className="error" />Errores</span></figcaption>
-  </figure>;
+  return <section className="admin-panel admin-trend"><div className="admin-panel-heading"><div><h2>Consultas por día</h2><p>Flujo de recetas · últimos 7 días</p></div></div>
+    <LineChart rows={daily} label="Consultas por día" lines={[{ key: 'total', label: 'Total', color: '#087253' }, { key: 'errors', label: 'Errores', color: '#da7958' }, { key: 'empty', label: 'Sin resultados', color: '#dcad45' }]} />
+  </section>;
 }
 function EventList({ items, onSelect, compact = false }) {
   if (!items.length) return empty;
@@ -45,6 +66,7 @@ function EventList({ items, onSelect, compact = false }) {
 export default function AdminPortal() {
   const [view, setView] = useState('overview');
   const [summary, setSummary] = useState(null);
+  const [apiSummary, setApiSummary] = useState(null);
   const [events, setEvents] = useState([]);
   const [recent, setRecent] = useState([]);
   const [nextOffset, setNextOffset] = useState(null);
@@ -68,6 +90,13 @@ export default function AdminPortal() {
     return () => { active = false; };
   }, [refreshKey]);
   useEffect(() => {
+    if (view !== 'usage') return;
+    let active = true;
+    readAdmin('apis').then(data => { if (active) { setApiSummary(data); setError(''); } })
+      .catch(problem => { if (active) setError(problem.message); });
+    return () => { active = false; };
+  }, [view, refreshKey]);
+  useEffect(() => {
     if (view !== 'incidents') return;
     let active = true;
     const timer = setTimeout(() => {
@@ -90,21 +119,37 @@ export default function AdminPortal() {
     catch (problem) { setError(problem.message); } finally { setBusy(false); }
   }
   function openAccountIncidents(id) { setFilters(previous => ({ ...previous, accountId: String(id), outcome: 'all' })); setView('incidents'); }
+  async function showAccount(id) {
+    setBusy(true); setError('');
+    try { setAccountResult(await readAdmin(`account?q=${id}`)); setAccountQuery(String(id)); }
+    catch (problem) { setError(problem.message); } finally { setBusy(false); }
+  }
+  const users = summary?.users;
+  const dailyFeatures = sevenDays([]).map(row => ({ ...row,
+    ...Object.fromEntries(['recipes', 'vision', 'recipe_detail', 'shopping', 'meals', 'nutrition', 'chat'].map(feature =>
+      [feature, users?.features?.filter(item => item.day === row.day && item.feature === feature).reduce((sum, item) => sum + item.total, 0) || 0])) }));
 
   return <section className="admin-portal page-enter" aria-labelledby="admin-title">
     <header className="admin-heading"><div><span className="admin-eyebrow">NUTRIBOT · ADMIN</span><h1 id="admin-title">Centro de operaciones</h1>
-      <p>Diagnósticos de los últimos 30 días. Los extractos están limitados y ocultan correos y teléfonos.</p></div>
+      <p>Actividad, uso de proveedores y diagnósticos. Los registros detallados se conservan hasta 30 días.</p></div>
       <button className="btn secondary" onClick={() => setRefreshKey(value => value + 1)} disabled={busy}>Actualizar datos</button></header>
     <div className="admin-layout"><nav className="admin-nav" aria-label="Secciones administrativas">{views.map(([id, label]) =>
       <button key={id} className={view === id ? 'active' : ''} aria-current={view === id ? 'page' : undefined} onClick={() => { setView(id); setSelected(null); }}>{label}</button>)}</nav>
       <div className="admin-content">
         {error && <p className="admin-error" role="alert">{error}</p>}
-        {view === 'overview' && <><div className="admin-section-heading"><h2>Resumen</h2><p>Salud del flujo de recetas en los últimos 7 días</p></div>
-          <div className="admin-stats"><Stat label="Consultas · 24 h" value={summary?.total24h} hint="Solicitudes registradas" />
-            <Stat label="Tasa de error · 7 días" value={summary ? pct(summary.errors7d, summary.total7d) : null} hint={`${summary?.errors7d ?? 0} errores de ${summary?.total7d ?? 0}`} tone="warning" />
-            <Stat label="Dos opciones" value={summary ? pct(q.twoOptions, successes) : null} hint="De búsquedas con recetas" />
-            <Stat label="Tiempo p95" value={q.p95Ms == null ? '—' : `${(q.p95Ms / 1000).toFixed(1)} s`} hint="95 % de solicitudes más rápidas" /></div>
-          <div className="admin-two-col"><Trend daily={summary?.daily} /><section className="admin-panel"><div className="admin-panel-heading"><h2>Incidentes recientes</h2><button className="admin-text-link" onClick={() => setView('incidents')}>Ver todos</button></div><EventList items={recent} compact onSelect={setSelected} /></section></div>
+        {view === 'overview' && <><div className="admin-section-heading"><h2>Resumen</h2><p>Actividad de la plataforma y tiempos de respuesta · últimos 7 días</p></div>
+          <div className="admin-stats"><Stat label="Usuarios registrados" value={users?.total} hint="Cuentas con correo" />
+            <Stat label="Activos · 30 días" value={users?.active} hint={`${users?.inactive ?? '—'} inactivos`} />
+            <Stat label="Consultas de recetas · 24 h" value={summary?.total24h} hint={`${summary?.errors24h ?? '—'} errores`} />
+            <Stat label="Valor mensual estimado" value={users ? money(users.estimatedMonthlyCents) : null} hint="Según planes asignados; no son cobros" /></div>
+          <div className="admin-stats"><Stat label="Servidor ≤ 2 s" value={users?.performance?.serverUnder2s == null ? '—' : `${users.performance.serverUnder2s}%`} hint={`p95 ${duration(users?.performance?.serverP95Ms)}`} />
+            <Stat label="APIs externas ≤ 2 s" value={users?.performance?.apiUnder2s == null ? '—' : `${users.performance.apiUnder2s}%`} hint={`p95 ${duration(users?.performance?.apiP95Ms)}`} />
+            <Stat label="Tasa de error de recetas" value={summary ? pct(summary.errors7d, summary.total7d) : null} hint={`${summary?.errors7d ?? 0} de ${summary?.total7d ?? 0}`} tone="warning" />
+            <Stat label="Dos opciones" value={summary ? pct(q.twoOptions, successes) : null} hint="De búsquedas con recetas" /></div>
+          <div className="admin-two-col"><Trend daily={summary?.daily} /><section className="admin-panel"><div className="admin-panel-heading"><h2>Uso por función</h2><p>Solicitudes HTTP, incluidas las fallidas</p></div>
+            <LineChart rows={dailyFeatures} label="Uso por función" lines={[{ key: 'recipes', label: 'Recetas', color: '#087253' }, { key: 'vision', label: 'Nutri-Vision', color: '#8665b8' }, { key: 'recipe_detail', label: 'Fichas', color: '#d6a140' }, { key: 'meals', label: 'Comidas', color: '#4c86b6' }]} /></section></div>
+          <div className="admin-two-col admin-overview-bottom"><section className="admin-panel"><h2>Planes asignados</h2><p className="admin-note">Proyección mensual a precios de la página pública. Todavía no hay cobros integrados.</p><div className="admin-revenue"><span>NutriPro · {users?.nutripro ?? '—'} × $2.99 <strong>{users ? money(users.nutripro * 299) : '—'}</strong></span><span>NutriMax · {users?.nutrimax ?? '—'} × $9.99 <strong>{users ? money(users.nutrimax * 999) : '—'}</strong></span><span>Total estimado <strong>{users ? money(users.estimatedMonthlyCents) : '—'}</strong></span></div></section>
+            <section className="admin-panel"><div className="admin-panel-heading"><h2>Incidentes recientes</h2><button className="admin-text-link" onClick={() => setView('incidents')}>Ver todos</button></div><EventList items={recent} compact onSelect={setSelected} /></section></div>
         </>}
         {view === 'incidents' && <><div className="admin-section-heading"><h2>Incidentes</h2><p>Busca una referencia del chat o filtra los resultados registrados.</p></div>
           <div className="admin-filters"><label>Período<select value={filters.days} onChange={e => setFilters({ ...filters, days: Number(e.target.value) })}><option value={1}>24 horas</option><option value={7}>7 días</option><option value={30}>30 días</option></select></label>
@@ -121,16 +166,38 @@ export default function AdminPortal() {
             <p>{successes + (q.noResults || 0) ? `${pct(q.twoOptions, successes + q.noResults)} con dos opciones · ${pct(q.oneOption, successes + q.noResults)} con una · ${pct(q.noResults, successes + q.noResults)} sin resultados.` : 'Todavía no hay búsquedas de recetas registradas.'}</p>
             <small>Las conversaciones y solicitudes bloqueadas antes de la búsqueda no entran en esta distribución.</small></section>
         </>}
-        {view === 'usage' && <><div className="admin-section-heading"><h2>Uso de APIs</h2><p>Solicitudes de recetas atribuidas al proveedor final · últimos 7 días</p></div>
-          <p className="admin-note">Estos son eventos del flujo de recetas, no llamadas reales ni importes de facturación. Una búsqueda puede usar Gemini y Edamam en la misma solicitud.</p>
-          <div className="admin-provider-grid">{summary?.byProvider?.length ? summary.byProvider.map(item => <article className="admin-panel" key={item.provider}><h3>{item.provider}</h3><strong>{item.total}</strong><span>solicitudes registradas</span><p>{item.success} con recetas · {item.errors} errores</p></article>) : empty}</div>
-          <div className="admin-stats"><Stat label="Cuentas activas" value={q.activeAccounts} hint="Con solicitudes registradas" /><Stat label="Tiempo p50" value={q.p50Ms == null ? '—' : `${(q.p50Ms / 1000).toFixed(1)} s`} hint="Mediana del flujo" /><Stat label="Tiempo p95" value={q.p95Ms == null ? '—' : `${(q.p95Ms / 1000).toFixed(1)} s`} hint="Flujo completo" /></div>
+        {view === 'usage' && <><div className="admin-section-heading"><h2>Uso de APIs</h2><p>Llamadas reales a proveedores externos · últimos 7 días</p></div>
+          <p className="admin-note">Éxito significa respuesta HTTP 2xx. Se registran estado y duración, sin URL, clave, consulta ni contenido. Los contadores empiezan desde esta actualización y no sustituyen la facturación del proveedor.</p>
+          <div className="admin-provider-grid">{[['gemini', 'Google AI Studio', summary?.model || 'Gemini'], ['edamam', 'Edamam', 'Recipe Search Enterprise Basic'], ['usda', 'USDA FoodData Central', 'FoodData Central API']].map(([provider, name, type]) => {
+            const rows = apiSummary?.providers?.filter(item => item.provider === provider) || [];
+            const totals = rows.reduce((acc, item) => ({ total: acc.total + item.total, success: acc.success + item.success, failed: acc.failed + item.failed }), { total: 0, success: 0, failed: 0 });
+            const trend = sevenDays([]).map(day => ({ ...day,
+              success: apiSummary?.daily?.filter(item => item.day === day.day && item.provider === provider).reduce((sum, item) => sum + item.success, 0) || 0,
+              failed: apiSummary?.daily?.filter(item => item.day === day.day && item.provider === provider).reduce((sum, item) => sum + item.failed, 0) || 0 }));
+            return <article className="admin-panel admin-api-card" key={provider}><span className="admin-api-kicker">{name}</span><h3>{type}</h3><div className="admin-api-totals"><strong>{totals.total}</strong><span>llamadas · {totals.success} exitosas · {totals.failed} fallidas</span></div>
+              <LineChart rows={trend} label={`Llamadas a ${name}`} lines={[{ key: 'success', label: 'HTTP OK', color: '#087253' }, { key: 'failed', label: 'HTTP / red', color: '#d46d52' }]} />
+              {rows.length > 0 && <ul className="admin-api-operations">{rows.map(row => <li key={`${row.operation}-${row.model || ''}`}><span>{row.operation.replaceAll('_', ' ')}{row.model ? ` · ${row.model}` : ''}</span><strong>{row.total}</strong></li>)}</ul>}
+            </article>;
+          })}</div>
+          <section className="admin-panel admin-api-log"><div className="admin-panel-heading"><div><h2>Últimas llamadas</h2><p>Hasta 30 registros recientes · éxito, HTTP o fallo de red</p></div></div>
+            {apiSummary?.calls?.length ? <div className="admin-table-wrap"><table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Operación</th><th>Cuenta</th><th>Estado</th><th>Tiempo</th></tr></thead><tbody>{apiSummary.calls.map(call => <tr key={call.id}><td>{date(call.createdAt)}</td><td>{call.provider}</td><td>{call.operation.replaceAll('_', ' ')}</td><td>{call.accountId ? `#${call.accountId}` : '—'}</td><td><span className={`admin-status ${call.outcome === 'success' ? 'success' : 'error'}`}>{call.outcome === 'success' ? 'OK' : call.statusCode || 'Red'}</span></td><td>{duration(call.durationMs)}</td></tr>)}</tbody></table></div> : empty}
+          </section>
         </>}
-        {view === 'users' && <><div className="admin-section-heading"><h2>Usuarios y soporte</h2><p>Busca una cuenta exacta para revisar su plan y referencias recientes.</p></div>
-          <form className="admin-account-search" onSubmit={findAccount}><label htmlFor="admin-account-query">Correo completo o ID de cuenta</label><div><input id="admin-account-query" value={accountQuery} onChange={e => setAccountQuery(e.target.value)} placeholder="usuario@ejemplo.com" required /><button className="btn primary" disabled={busy}>Buscar</button></div></form>
-          {accountResult && (accountResult.account ? <section className="admin-panel admin-account"><h3>{accountResult.account.name}</h3><p>{accountResult.account.email} · Cuenta #{accountResult.account.id}</p><dl><div><dt>Plan</dt><dd>{accountResult.account.plan}</dd></div><div><dt>Registro</dt><dd>{date(accountResult.account.createdAt)}</dd></div></dl>
-            <button className="btn secondary" onClick={() => openAccountIncidents(accountResult.account.id)}>Ver actividad de esta cuenta</button><h4>Referencias recientes</h4>
+        {view === 'users' && <><div className="admin-section-heading"><h2>Usuarios y soporte</h2><p>Actividad en los últimos 30 días · planes asignados, sin verificación de pago</p></div>
+          <div className="admin-stats"><Stat label="Total" value={users?.total} hint="Cuentas registradas" /><Stat label="Activas" value={users?.active} hint="Actividad en 30 días" /><Stat label="Inactivas" value={users?.inactive} hint="Sin actividad en 30 días" /><Stat label="Gratis / de pago" value={users ? `${users.free} / ${users.paid}` : null} hint="Según plan asignado" /></div>
+          <section className="admin-panel admin-users-list"><div className="admin-panel-heading"><div><h2>Últimas 10 cuentas</h2><p>Ordenadas de registro más reciente a más antiguo</p></div></div>
+            {users?.latest?.length ? <div className="admin-table-wrap"><table><thead><tr><th>Cuenta</th><th>Plan</th><th>Registro</th><th>Última actividad</th><th></th></tr></thead><tbody>{users.latest.map(user => <tr key={user.id}><td><strong>{user.name}</strong><small>#{user.id} · {user.email}</small></td><td>{user.plan === 'basico' ? 'Básico' : user.plan === 'nutripro' ? 'NutriPro' : 'NutriMax'}</td><td>{date(user.createdAt)}</td><td>{date(user.lastActiveAt)}</td><td><button className="admin-text-link" onClick={() => showAccount(user.id)}>Detalles</button></td></tr>)}</tbody></table></div> : empty}
+          </section>
+          <form className="admin-account-search" onSubmit={findAccount}><label htmlFor="admin-account-query">Buscar por correo completo o ID de cuenta</label><div><input id="admin-account-query" value={accountQuery} onChange={e => setAccountQuery(e.target.value)} placeholder="usuario@ejemplo.com" required /><button className="btn primary" disabled={busy}>Buscar</button></div></form>
+          {accountResult && (accountResult.account ? <section className="admin-panel admin-account"><div className="admin-panel-heading"><div><h3>{accountResult.account.name}</h3><p>{accountResult.account.email} · Cuenta #{accountResult.account.id}</p></div><button className="btn secondary" disabled title="Restablecimiento de contraseña pendiente de implementar">Restablecer contraseña · próximamente</button></div>
+            <dl><div><dt>ID</dt><dd>#{accountResult.account.id}</dd></div><div><dt>Nombre</dt><dd>{accountResult.account.name}</dd></div><div><dt>Plan asignado</dt><dd>{accountResult.detail?.effectivePlan || accountResult.account.plan}</dd></div><div><dt>Registro</dt><dd>{date(accountResult.account.createdAt)}</dd></div>
+              <div><dt>Último cambio de perfil</dt><dd>{date(accountResult.detail?.updatedAt || accountResult.account.createdAt)}</dd></div><div><dt>Última actividad</dt><dd>{date(accountResult.detail?.lastActiveAt || accountResult.account.createdAt)}</dd></div>
+              <div><dt>Tiempo de pago continuo</dt><dd>{accountResult.detail?.paidSince ? `${since(accountResult.detail.paidSince)} · desde ${date(accountResult.detail.paidSince)}` : 'No está en un plan de pago'}</dd></div>
+              <div><dt>Tiempo sin pago tras un plan de pago</dt><dd>{accountResult.detail?.freeSinceAfterPaid ? `${since(accountResult.detail.freeSinceAfterPaid)} · desde ${date(accountResult.detail.freeSinceAfterPaid)}` : 'No aplica'}</dd></div></dl>
+            <h4>Uso del período actual</h4><div className="admin-account-usage"><span>Generaciones <strong>{accountResult.detail?.usage?.recipes?.used ?? '—'} / {accountResult.detail?.usage?.recipes?.limit ?? '—'}</strong><small>Esta semana</small></span><span>Fotos reconocidas <strong>{accountResult.detail?.usage?.vision?.used ?? '—'} / {accountResult.detail?.usage?.vision?.limit ?? '—'}</strong><small>Este mes</small></span></div>
+            <div className="admin-account-actions"><button className="btn secondary" onClick={() => openAccountIncidents(accountResult.account.id)}>Ver diagnósticos de esta cuenta</button></div><h4>Logs de recetas</h4>
             {accountResult.recent.length ? <ul>{accountResult.recent.map(item => <li key={item.requestId}><code>#{item.requestId.slice(0, 8)}</code> · {outcomes[item.outcome] || item.outcome} · {date(item.createdAt)}</li>)}</ul> : <p>Sin eventos recientes.</p>}
+            <h4>Llamadas externas recientes</h4>{accountResult.detail?.calls?.length ? <ul>{accountResult.detail.calls.map((call, index) => <li key={`${call.createdAt}-${index}`}>{date(call.createdAt)} · {call.provider} / {call.operation} · {call.outcome === 'success' ? 'OK' : call.statusCode || 'Red'} · {duration(call.durationMs)}</li>)}</ul> : <p>Sin llamadas medidas.</p>}
           </section> : <p className="admin-empty">No se encontró esa cuenta.</p>)}
         </>}
         {view === 'system' && <><div className="admin-section-heading"><h2>Sistema</h2><p>Configuración observada por este servidor. “Configurado” no prueba disponibilidad externa.</p></div>

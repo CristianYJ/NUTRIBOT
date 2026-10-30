@@ -27,6 +27,7 @@ import { estimatedGrams } from "./auto-nutrition.js";
 import { mealStore } from './meals.js';
 import { createPlanUsage } from './plan-usage.js';
 import { createAdminDiagnostics } from './admin-diagnostics.js';
+import { createAdminAnalytics } from './admin-analytics.js';
 
 export async function openDatabase(options = {}) {
   const { schema = "nutribot", adminEmail = '', ...connection } = options;
@@ -333,7 +334,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 11) throw new Error("Esquema de una versión posterior");
+      if (version > 12) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -427,6 +428,10 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/011_edamam_meals.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(11)');
       }
+      if (version < 12) {
+        await c.query(readFileSync(new URL('./postgres/012_admin_api_metrics.sql', import.meta.url), 'utf8'));
+        await c.query('INSERT INTO schema_migrations(version) VALUES(12)');
+      }
     });
   } catch (error) {
     await pool.end();
@@ -461,6 +466,7 @@ export async function openDatabase(options = {}) {
   const usage = createPlanUsage({ transaction, profileId, adminEmail });
   const store = {
     ...createAdminDiagnostics({ transaction, profileId, pool }),
+    ...createAdminAnalytics({ transaction, adminEmail }),
     ...mealStore({transaction,profileId,readRecipeNutrition}),
     getUsage: usage.getUsage,
     reserveUsage: usage.reserveUsage,

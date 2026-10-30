@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    11,
+    12,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -168,6 +168,41 @@ test('configured administrator receives GOAT Mode quotas while other Basic accou
   assert.equal((await admin.getUsage()).recipes.pending, 1);
   await admin.finishUsage(token, true);
   assert.equal((await admin.getUsage()).recipes.used, 1);
+});
+
+test('admin analytics counts measured provider calls, HTTP activity, plans and account history', async t => {
+  const f = await fixture(t, { adminEmail: 'admin@example.test' });
+  const id = await f.store.auth.register({ name: 'Analytics user', email: 'analytics@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  await f.store.recordApiCall({ profileId: id, provider: 'edamam', operation: 'recipe_search',
+    outcome: 'success', statusCode: 200, durationMs: 320 });
+  await f.store.recordApiCall({ profileId: id, provider: 'gemini', operation: 'generate_content',
+    model: 'gemini-test', outcome: 'http_error', statusCode: 429, durationMs: 2100 });
+  await f.store.recordHttpRequest({ profileId: id, feature: 'recipes', statusCode: 200, durationMs: 850 });
+  const dormant = await f.store.auth.register({ name: 'Dormant user', email: 'dormant@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  await f.sql.query("UPDATE profiles SET created_at=now()-interval '31 days' WHERE id=$1", [dormant]);
+  const api = await f.store.adminApiSummary();
+  assert.equal(api.calls.length, 2);
+  assert.equal(api.providers.find(row => row.provider === 'edamam').success, 1);
+  assert.equal(api.providers.find(row => row.provider === 'gemini').failed, 1);
+  const users = await f.store.adminUsersSummary();
+  assert.equal(users.total, 2);
+  assert.equal(users.active, 1);
+  assert.equal(users.inactive, 1);
+  assert.equal(users.free, 2);
+  assert.equal(users.features.find(row => row.feature === 'recipes').total, 1);
+  assert.equal(users.performance.serverUnder2s, 100);
+  assert.equal(users.performance.apiUnder2s, 50);
+  const detail = await f.store.adminAccountDetail(id);
+  assert.equal(detail.usage.recipes.limit, 4);
+  assert.equal(detail.calls.length, 2);
+  assert.equal(detail.effectivePlan, 'Básico');
+  await f.sql.query("UPDATE profiles SET plan_code='nutripro' WHERE id=$1", [id]);
+  assert.equal((await f.store.adminUsersSummary()).estimatedMonthlyCents, 299);
+  assert.ok((await f.store.adminAccountDetail(id)).paidSince);
+  await f.sql.query("UPDATE profiles SET plan_code='basico' WHERE id=$1", [id]);
+  assert.ok((await f.store.adminAccountDetail(id)).freeSinceAfterPaid);
 });
 
 test('USDA links and grams persist per recipe and enforce structured limits', async (t) => {

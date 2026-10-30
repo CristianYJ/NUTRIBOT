@@ -47,9 +47,9 @@ const result = () =>
     },
     "fake-test-model",
   );
-async function fixture(t) {
+async function fixture(t, overrides = {}) {
   const schema = "nutribot_test_" + randomBytes(8).toString("hex");
-  const options = { database, schema };
+  const options = { database, schema, ...overrides };
   const store = await openDatabase(options);
   const sql = new pg.Client(
     postgresOptions({ database, options: `-c search_path=${schema},public` }),
@@ -138,7 +138,36 @@ test('admin diagnostics retain a bounded trace and allow only the configured acc
   assert.equal(events.items.length, 1);
   assert.equal(events.items[0].accountId, id);
   assert.deepEqual(events.items[0].reasons, ['UNDECLARED_SEASONING']);
-  assert.equal((await f.store.adminSummary()).errors24h, 1);
+  const summary = await f.store.adminSummary();
+  assert.equal(summary.errors24h, 1);
+  assert.equal(summary.quality.activeAccounts, 1);
+  assert.equal(summary.byProvider[0].provider, 'gemini');
+  assert.equal(summary.daily.length, 1);
+  assert.equal((await f.store.listAdminEvents({ provider: 'edamam' })).items.length, 0);
+  assert.equal((await f.store.listAdminEvents({ accountId: id, search: 'INVALID_AI_OUTPUT' })).items.length, 1);
+  assert.equal((await f.store.listAdminEvents({ accountId: 1 })).items.length, 0);
+  assert.equal((await f.store.findAdminAccount('admin@example.test')).account.id, id);
+  assert.equal((await f.store.findAdminAccount(String(id))).recent.length, 1);
+});
+
+test('configured administrator receives GOAT Mode quotas while other Basic accounts stay Basic', async t => {
+  const f = await fixture(t, { adminEmail: 'admin@example.test' });
+  const id = await f.store.auth.register({ name: 'Administrator', email: 'admin@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  const admin = f.store.forProfile(id);
+  const goat = await admin.getUsage();
+  assert.deepEqual(goat.plan, { code: 'goat', name: 'GOAT Mode' });
+  assert.equal(goat.recipes.limit, 100);
+  assert.equal(goat.vision.limit, 60);
+  const normal = await f.store.getUsage();
+  assert.deepEqual(normal.plan, { code: 'basico', name: 'Básico' });
+  assert.equal(normal.recipes.limit, 4);
+  assert.equal(normal.vision.limit, 1);
+  assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'basico');
+  const token = await admin.reserveUsage('recipes');
+  assert.equal((await admin.getUsage()).recipes.pending, 1);
+  await admin.finishUsage(token, true);
+  assert.equal((await admin.getUsage()).recipes.used, 1);
 });
 
 test('USDA links and grams persist per recipe and enforce structured limits', async (t) => {

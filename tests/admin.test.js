@@ -24,6 +24,7 @@ test('admin endpoints require the signed-in allowlisted account', async t => {
     forProfile: () => ({}),
     isAdmin: async (id, email) => { assert.equal(id, 7); assert.equal(email, 'admin@example.test'); return permitted; },
     adminSummary: async () => ({ total24h: 0 }),
+    findAdminAccount: async query => ({ account: { id: 7, email: query }, recent: [] }),
   };
   const base = await start(t, { store, adminEmail: 'admin@example.test' });
   const headers = { Cookie: `nutribot_session=${'a'.repeat(64)}` };
@@ -33,6 +34,9 @@ test('admin endpoints require the signed-in allowlisted account', async t => {
   const response = await fetch(base + '/api/admin/summary', { headers });
   assert.equal(response.status, 200);
   assert.equal((await response.json()).total24h, 0);
+  assert.equal((await fetch(base + '/api/admin/account?q=admin@example.test')).status, 401);
+  assert.deepEqual((await (await fetch(base + '/api/admin/account?q=admin@example.test', { headers })).json()).account,
+    { id: 7, email: 'admin@example.test' });
 });
 test('failed recipe request records safe validation reasons and returns a trace reference', async t => {
   const events = [];

@@ -116,9 +116,15 @@ export function createAppServer({
           ...await rootStore.adminSummary(),
           providers: { gemini: Boolean(apiKey), edamam: Boolean(edamamAppId && edamamAppKey), usda: Boolean(usdaApiKey) },
           model,
+          uptimeSeconds: Math.floor(process.uptime()),
         });
         if (url.pathname === '/api/admin/events') return json(res, 200,
-          await rootStore.listAdminEvents({ outcome: url.searchParams.get('outcome') || 'error', offset: Number(url.searchParams.get('offset') || 0) }));
+          await rootStore.listAdminEvents({ outcome: url.searchParams.get('outcome') || 'error',
+            offset: Number(url.searchParams.get('offset') || 0), days: Number(url.searchParams.get('days') || 30),
+            provider: url.searchParams.get('provider') || 'all', search: url.searchParams.get('search') || '',
+            accountId: url.searchParams.get('accountId') ? Number(url.searchParams.get('accountId')) : null }));
+        if (url.pathname === '/api/admin/account') return json(res, 200,
+          await rootStore.findAdminAccount(url.searchParams.get('q')));
         throw new AppError('NOT_FOUND', 'Ruta no encontrada.', 404);
       }
       const reserveUsage = async feature => {

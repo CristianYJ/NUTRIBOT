@@ -6,7 +6,6 @@ export default function AccountMenu({
   onProfile,
   onLogout,
   onConnect,
-  onAdmin,
   loggingOut,
 }) {
   const [open, setOpen] = useState(false);
@@ -74,7 +73,6 @@ export default function AccountMenu({
             <Icon name="qr" size={18} />
             Instalar en mi teléfono
           </button>
-          {onAdmin && <button onClick={() => choose(onAdmin)}><Icon name="shield" size={18} />Portal administrativo</button>}
           <button
             className="logout-option"
             disabled={loggingOut}

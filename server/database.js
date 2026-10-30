@@ -29,7 +29,7 @@ import { createPlanUsage } from './plan-usage.js';
 import { createAdminDiagnostics } from './admin-diagnostics.js';
 
 export async function openDatabase(options = {}) {
-  const { schema = "nutribot", ...connection } = options;
+  const { schema = "nutribot", adminEmail = '', ...connection } = options;
   if (!/^[a-z][a-z0-9_]{0,62}$/.test(schema))
     throw new Error("Esquema inválido");
   const pool = new pg.Pool(
@@ -458,7 +458,7 @@ export async function openDatabase(options = {}) {
           maxSugarG: profile.max_sugar_g,
         }) };
   }
-  const usage = createPlanUsage({ transaction, profileId });
+  const usage = createPlanUsage({ transaction, profileId, adminEmail });
   const store = {
     ...createAdminDiagnostics({ transaction, profileId, pool }),
     ...mealStore({transaction,profileId,readRecipeNutrition}),

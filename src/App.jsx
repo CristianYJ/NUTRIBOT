@@ -665,7 +665,7 @@ function Workspace({ initial, onSignedOut }) {
         <CulinaryHeader
           brand={<Brand />}
           page={page}
-          profile={profile}
+          profile={adminAccess ? { ...profile, plan: { code: 'goat', name: 'GOAT Mode' } } : profile}
           ingredients={ingredients}
           recipes={allRecipes.filter((recipe) =>
             matchesProfile(recipe, profile, ingredients),
@@ -920,9 +920,10 @@ function Workspace({ initial, onSignedOut }) {
           </footer>
         </div>
         <nav className="mobile-nav" aria-label="Navegación móvil">
-          {pages.map((p) => (
+          {(adminAccess ? [{ id: 'admin', label: 'Admin', icon: 'shield' }, ...pages] : pages).map((p) => (
             <button
               key={p.id}
+              data-page={p.id}
               className={page === p.id ? "active" : ""}
               aria-current={page === p.id ? "page" : undefined}
               onClick={() => go(p.id)}

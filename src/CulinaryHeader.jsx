@@ -113,6 +113,7 @@ export default function CulinaryHeader({
       </form>
       <nav className="culinary-navigation" aria-label="Navegación principal">
         {[
+          ...(onAdmin ? [["admin", "Admin"]] : []),
           ["home", "Inicio"],
           ["pantry", "Mi despensa"],
           ["assistant", "NutriBot IA"],
@@ -135,7 +136,6 @@ export default function CulinaryHeader({
           onLogout={onLogout}
           loggingOut={loggingOut}
           onConnect={onConnect}
-          onAdmin={onAdmin}
         />
       </div>
     </header>

@@ -4,12 +4,14 @@ La implementación ofrece tres niveles. No incluye cobros, renovación de suscri
 
 | Función | Básico | NutriPro | NutriMax |
 | --- | --- | --- | --- |
-| Generaciones de recetas por semana | 4 | 35 | 100 |
-| Análisis de fotos con Nutri-Vision por mes | 1 | 15 | 60 |
+| Generaciones de recetas por semana | 4 | 14 | 22 |
+| Análisis de fotos con Nutri-Vision por mes | 1 | 3 | 6 |
 | Agregar alimentos manualmente, sin IA | Incluido | Incluido | Incluido |
 | Perfil, alergias, restricciones, catálogo, favoritos e historial | Incluido | Incluido | Incluido |
 
 Las cuotas están definidas en `src/plan-catalog.js` y se comprueban en el servidor. Se conservan los límites técnicos generales de almacenamiento y de solicitudes por minuto. La nutrición USDA disponible y los filtros alimentarios siguen incluidos en todos los planes; no se anuncian funciones premium sin implementar.
+
+Las cuentas con rol Admin tienen el plan efectivo **Staff**, con los mismos cupos que NutriMax. Staff no es una membresía gratis ni de pago; el plan asignado en la base de datos permanece intacto.
 
 ## Cómo se cuenta
 

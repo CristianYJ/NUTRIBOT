@@ -180,17 +180,27 @@ test('admin diagnostics retain a bounded trace and allow only accounts granted t
   assert.equal((await f.store.findAdminAccount(String(id))).recent.length, 1);
 });
 
-test('database administrator receives GOAT Mode quotas while other Basic accounts stay Basic', async t => {
+test('database administrator receives Staff quotas and is excluded from memberships', async t => {
   const f = await fixture(t);
   const id = await f.store.auth.register({ name: 'Administrator', email: 'admin@example.test',
     password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
   const admin = f.store.forProfile(id);
   assert.equal((await admin.getUsage()).plan.code, 'basico');
   await f.sql.query("UPDATE profiles SET role_code='admin' WHERE id=$1", [id]);
-  const goat = await admin.getUsage();
-  assert.deepEqual(goat.plan, { code: 'goat', name: 'GOAT Mode' });
-  assert.equal(goat.recipes.limit, 100);
-  assert.equal(goat.vision.limit, 60);
+  const staff = await admin.getUsage();
+  assert.deepEqual(staff.plan, { code: 'staff', name: 'Staff' });
+  assert.equal(staff.recipes.limit, 22);
+  assert.equal(staff.vision.limit, 6);
+  assert.deepEqual((await admin.getState()).profile.plan, { code: 'staff', name: 'Staff' });
+  const adminSummary = await f.store.adminUsersSummary();
+  assert.equal(adminSummary.staff, 1);
+  assert.equal(adminSummary.free, 0);
+  assert.equal(adminSummary.paid, 0);
+  assert.equal(adminSummary.planTrend.at(-1).total, 0);
+  await f.sql.query("UPDATE profiles SET plan_code='nutripro_plus' WHERE id=$1", [id]);
+  assert.equal((await f.store.adminUsersSummary()).paid, 0);
+  assert.equal((await admin.getUsage()).plan.code, 'staff');
+  await f.sql.query("UPDATE profiles SET plan_code='basico' WHERE id=$1", [id]);
   const normal = await f.store.getUsage();
   assert.deepEqual(normal.plan, { code: 'basico', name: 'Básico' });
   assert.equal(normal.recipes.limit, 4);
@@ -606,12 +616,13 @@ test('plan quotas serialize concurrent reservations across connections and survi
   assert.equal(after.recipes.pending, 0);
   await assert.rejects(other.reserveUsage('recipes'), {code: 'PLAN_LIMIT'});
   await f.sql.query("UPDATE profiles SET plan_code='nutripro' WHERE id=1");
-  assert.equal((await other.getUsage()).recipes.remaining, 31);
+  assert.equal((await other.getUsage()).recipes.remaining, 10);
+  assert.equal((await other.getUsage()).vision.limit, 3);
   await f.sql.query("UPDATE profiles SET plan_code='nutripro_plus' WHERE id=1");
   const max = await other.getUsage();
   assert.equal(max.plan.name, 'NutriMax');
-  assert.equal(max.recipes.remaining, 96);
-  assert.equal(max.vision.limit, 60);
+  assert.equal(max.recipes.remaining, 18);
+  assert.equal(max.vision.limit, 6);
   await f.sql.query("UPDATE profiles SET plan_code='basico' WHERE id=1");
   await assert.rejects(other.reserveUsage('recipes'), {code: 'PLAN_LIMIT'});
   // Only the disposable test schema is altered to simulate previous periods.

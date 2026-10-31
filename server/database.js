@@ -234,7 +234,7 @@ export async function openDatabase(options = {}) {
   async function readState(c) {
     const p = (
       await c.query(
-        `SELECT id,name,weight_kg,height_cm,calorie_sex,calorie_activity,calorie_estimate_eligible,goal,diet,exclusions,medical_notes,max_saturated_fat_g,max_sodium_mg,max_sugar_g,revision,email,plan_code,(SELECT name FROM plans WHERE code=profiles.plan_code) AS plan_name,to_char(birth_date,'YYYY-MM-DD') AS birth_date FROM profiles WHERE id=${profileId()}`,
+        `SELECT id,name,weight_kg,height_cm,calorie_sex,calorie_activity,calorie_estimate_eligible,goal,diet,exclusions,medical_notes,max_saturated_fat_g,max_sodium_mg,max_sugar_g,revision,email,plan_code,role_code,(SELECT name FROM plans WHERE code=profiles.plan_code) AS plan_name,to_char(birth_date,'YYYY-MM-DD') AS birth_date FROM profiles WHERE id=${profileId()}`,
       )
     ).rows[0];
     const all = await readRecipes(c);
@@ -246,7 +246,7 @@ export async function openDatabase(options = {}) {
         birthDate: p.birth_date || "",
         age: ageFromBirthDate(p.birth_date),
         name: p.name,
-        plan: { code: p.plan_code, name: p.plan_name },
+        plan: p.role_code === 'admin' ? { code: 'staff', name: 'Staff' } : { code: p.plan_code, name: p.plan_name },
         calorieSex:p.calorie_sex,calorieActivity:p.calorie_activity,calorieEstimateEligible:p.calorie_estimate_eligible,
         weight: p.weight_kg === null ? "" : String(Number(p.weight_kg)),
         height: p.height_cm === null ? "" : String(Number(p.height_cm)),

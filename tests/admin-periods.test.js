@@ -30,3 +30,16 @@ test('plan mix is a snapshot at each month end, including free-to-paid changes',
   assert.equal(covered[0].total, null);
   assert.equal(covered.at(-1).total, 3);
 });
+
+test('plan trend separates NutriPro and NutriMax through plan changes', () => {
+  const now = new Date('2026-10-29T22:00:00Z');
+  const accounts = [1, 2, 3].map(id => ({ id, created_at: new Date('2026-08-05T14:00:00Z') }));
+  const history = [
+    { profile_id: 1, to_plan: 'nutripro', changed_at: new Date('2026-09-10T14:00:00Z') },
+    { profile_id: 1, to_plan: 'nutripro_plus', changed_at: new Date('2026-10-15T14:00:00Z') },
+    { profile_id: 2, to_plan: 'nutripro', changed_at: new Date('2026-10-10T14:00:00Z') },
+  ];
+  const trend = planMixTrend(accounts, history, adminPeriodBuckets('quarter', now), now);
+  assert.deepEqual(trend.map(({ free, nutripro, nutrimax, paid }) => [free, nutripro, nutrimax, paid]),
+    [[3, 0, 0, 0], [2, 1, 0, 1], [1, 1, 1, 2]]);
+});

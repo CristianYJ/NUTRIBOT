@@ -55,13 +55,15 @@ export function planMixTrend(accounts, history, buckets, now = new Date()) {
   }
   return buckets.map(bucket => {
     const end = Math.min(now.getTime(), new Date(`${bucket.endDay}T06:00:00.000Z`).getTime() + dayMs - 1);
-    let free = 0, paid = 0;
+    let free = 0, nutripro = 0, nutrimax = 0;
     for (const account of accounts) {
       if (new Date(account.created_at).getTime() > end) continue;
       const last = (changes.get(Number(account.id)) || []).filter(change => new Date(change.changed_at).getTime() <= end).at(-1);
-      if (last?.to_plan && last.to_plan !== 'basico') paid++;
+      if (last?.to_plan === 'nutripro') nutripro++;
+      else if (last?.to_plan === 'nutripro_plus') nutrimax++;
       else free++;
     }
-    return { label: bucket.label, day: bucket.endDay, free, paid, total: free + paid };
+    return { label: bucket.label, day: bucket.endDay, free, nutripro, nutrimax,
+      paid: nutripro + nutrimax, total: free + nutripro + nutrimax };
   });
 }

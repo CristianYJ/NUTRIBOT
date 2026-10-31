@@ -638,7 +638,7 @@ function Workspace({ initial, onSignedOut }) {
         <CulinaryHeader
           brand={<Brand />}
           page={page}
-          profile={adminAccess ? { ...profile, plan: { code: 'goat', name: 'GOAT Mode' } } : profile}
+          profile={adminAccess ? { ...profile, plan: { code: 'staff', name: 'Staff' } } : profile}
           ingredients={ingredients}
           recipes={allRecipes.filter((recipe) =>
             matchesProfile(recipe, profile, ingredients),

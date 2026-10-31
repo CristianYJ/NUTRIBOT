@@ -35,23 +35,29 @@ function sevenDays(rows = []) {
     return { day, ...(rows.find(row => row.day === day) || {}) };
   });
 }
-function LineChart({ rows, lines, label }) {
+function LineChart({ rows, lines, label, compact = false }) {
   const data = rows?.length ? rows : sevenDays([]);
-  const maximum = Math.max(1, ...data.flatMap(row => lines.map(line => Number(row[line.key]) || 0)));
-  const x = index => 32 + index * (576 / Math.max(1, data.length - 1));
+  const highest = Math.max(0, ...data.flatMap(row => lines.map(line => Number(row[line.key]) || 0)));
+  const roughStep = Math.max(1, highest / 3);
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const step = [1, 2, 5, 10].map(value => value * magnitude).find(value => value >= roughStep);
+  const maximum = Math.ceil(Math.max(1, highest) / step) * step;
+  const ticks = Array.from({ length: Math.round(maximum / step) + 1 }, (_, index) => index * step);
+  const x = index => 50 + index * (558 / Math.max(1, data.length - 1));
   const y = value => 174 - (Number(value) || 0) / maximum * 145;
-  return <div className="admin-line-chart" role="img" aria-label={`${label}. ${data.map(row => `${row.label || shortDate(row.day)}: ${lines.map(line => `${line.label} ${row[line.key] == null ? 'sin datos' : row[line.key]}`).join(', ')}`).join('; ')}`}>
-    <svg viewBox="0 0 640 190" preserveAspectRatio="none" aria-hidden="true">
-      {[0, .5, 1].map(mark => <line key={mark} x1="32" x2="608" y1={y(maximum * mark)} y2={y(maximum * mark)} className="admin-chart-grid" />)}
-      {lines.map(line => <g key={line.key}><polyline points={data.map((row, index) => row[line.key] == null ? null : `${x(index)},${y(row[line.key])}`).filter(Boolean).join(' ')} fill="none" stroke={line.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        {data.map((row, index) => row[line.key] == null ? null : <circle key={row.day} cx={x(index)} cy={y(row[line.key])} r="4" fill={line.color}><title>{row.label || shortDate(row.day)} · {line.label}: {row[line.key]}</title></circle>)}</g>)}
+  const firstMeasured = data.findIndex(row => lines.some(line => row[line.key] != null));
+  return <div className={`admin-line-chart${compact ? ' compact' : ''}`} role="img" aria-label={`${label}. ${data.map(row => `${row.label || shortDate(row.day)}: ${lines.map(line => `${line.label} ${row[line.key] == null ? 'sin datos' : row[line.key]}`).join(', ')}`).join('; ')}`}>
+    <svg viewBox="0 0 640 190" preserveAspectRatio={compact ? 'xMidYMid meet' : 'none'} aria-hidden="true">
+      {ticks.map(value => <g key={value}><line x1="50" x2="608" y1={y(value)} y2={y(value)} className="admin-chart-grid" /><text x="39" y={y(value) + 4} textAnchor="end" className="admin-chart-axis-value">{value}</text></g>)}
+      {lines.map(line => <g key={line.key}><polyline points={data.map((row, index) => row[line.key] == null ? null : `${x(index)},${y(row[line.key])}`).filter(Boolean).join(' ')} fill="none" stroke={line.color} strokeWidth={compact ? 2 : 3} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        {(!compact || data.filter(row => row[line.key] != null).length === 1) && data.map((row, index) => row[line.key] == null ? null : <circle key={row.day} cx={x(index)} cy={y(row[line.key])} r="4" fill={line.color}><title>{row.label || shortDate(row.day)} · {line.label}: {row[line.key]}</title></circle>)}</g>)}
     </svg><div className={`admin-chart-labels${data.length > 8 ? ' long' : ''}`}>{data.map(row => <span key={row.day}>{row.label || shortDate(row.day)}</span>)}</div>
     <div className="admin-legend">{lines.map(line => <span key={line.key}><i style={{ background: line.color }} />{line.label}</span>)}</div>
   </div>;
 }
 function Trend({ daily = [], period }) {
   return <section className="admin-panel admin-trend"><div className="admin-panel-heading"><div><h2>Consultas de recetas</h2></div></div>
-    <LineChart rows={daily} label="Consultas por día" lines={[{ key: 'total', label: 'Total', color: '#087253' }, { key: 'errors', label: 'Errores', color: '#da7958' }, { key: 'empty', label: 'Sin resultados', color: '#dcad45' }]} />
+    <LineChart rows={daily} label="Consultas por día" compact lines={[{ key: 'total', label: 'Total', color: '#087253' }, { key: 'errors', label: 'Errores', color: '#da7958' }, { key: 'empty', label: 'Sin resultados', color: '#dcad45' }]} />
   </section>;
 }
 function PeriodPicker({ value, onChange, year, onYearChange }) {
@@ -188,9 +194,9 @@ export default function AdminPortal() {
           <div className="admin-stats admin-performance-stats"><Stat label="Servidor ≤ 2 s" value={users?.performance?.serverUnder2s == null ? '—' : `${users.performance.serverUnder2s}%`} hint={`p95 últimos 30 días: ${duration(users?.performance?.serverP95Ms)}`} />
             <Stat label="APIs externas ≤ 2 s" value={users?.performance?.apiUnder2s == null ? '—' : `${users.performance.apiUnder2s}%`} hint={`p95 últimos 30 días: ${duration(users?.performance?.apiP95Ms)}`} /></div>
           <div className="admin-two-col"><Trend daily={summary?.daily} period={period} /><section className="admin-panel"><div className="admin-panel-heading"><div><h2>Uso por función</h2><p>Solicitudes HTTP, incluidas las fallidas</p></div></div>
-            <LineChart rows={dailyFeatures} label="Uso por función" lines={[{ key: 'recipes', label: 'Recetas', color: '#087253' }, { key: 'vision', label: 'Nutri-Vision', color: '#8665b8' }, { key: 'recipe_detail', label: 'Fichas', color: '#d6a140' }, { key: 'meals', label: 'Comidas', color: '#4c86b6' }]} /></section></div>
-          <section className="admin-panel admin-plan-trend"><div className="admin-panel-heading"><div><h2>Evolución de planes</h2></div><span>{users?.paid ?? 0} de pago · {users?.free ?? 0} gratis hoy</span></div>
-            <LineChart rows={users?.planTrend} label="Evolución de planes" lines={[{ key: 'paid', label: 'De pago', color: '#087253' }, { key: 'free', label: 'Gratis', color: '#a780cf' }]} /></section>
+            <LineChart rows={dailyFeatures} label="Uso por función" compact lines={[{ key: 'recipes', label: 'Recetas', color: '#087253' }, { key: 'vision', label: 'Nutri-Vision', color: '#8665b8' }, { key: 'recipe_detail', label: 'Fichas', color: '#d6a140' }, { key: 'meals', label: 'Comidas', color: '#4c86b6' }]} /></section></div>
+          <section className="admin-panel admin-plan-trend"><div className="admin-panel-heading"><div><h2>Evolución de planes</h2></div></div>
+            <LineChart rows={users?.planTrend} label="Evolución de planes" compact lines={[{ key: 'free', label: 'Básico', color: '#252e78' }, { key: 'nutripro', label: 'NutriPro', color: '#1688c4' }, { key: 'nutrimax', label: 'NutriMax', color: '#087253' }]} /></section>
           <div className="admin-two-col admin-overview-bottom"><section className="admin-panel"><h2>Planes asignados</h2><div className="admin-revenue"><span>NutriPro · {users?.nutripro ?? '—'} × $2.99 <strong>{users ? money(users.nutripro * 299) : '—'}</strong></span><span>NutriMax · {users?.nutrimax ?? '—'} × $9.99 <strong>{users ? money(users.nutrimax * 999) : '—'}</strong></span><span>Total <strong>{users ? money(users.estimatedMonthlyCents) : '—'}</strong></span></div></section>
             <section className="admin-panel"><div className="admin-panel-heading"><h2>Incidentes recientes</h2><button className="admin-text-link" onClick={() => setView('incidents')}>Ver todos</button></div><EventList items={recent} compact onSelect={setSelected} /></section></div>
         </>}
@@ -228,9 +234,9 @@ export default function AdminPortal() {
         </>}
         {view === 'users' && <><div className="admin-section-heading"><h2>Usuarios y soporte</h2><p>Actividad en los últimos 30 días</p></div>
           <form className="admin-account-search" onSubmit={findAccount}><label htmlFor="admin-account-query">Buscar por correo completo o ID de cuenta</label><div><input id="admin-account-query" value={accountQuery} onChange={e => setAccountQuery(e.target.value)} placeholder="usuario@ejemplo.com" required /><button className="btn primary" disabled={busy}>Buscar</button></div></form>
-          {accountResult ? <button className="admin-back-button" type="button" onClick={backToUsers}>← Volver a usuarios</button> : <><div className="admin-stats"><Stat label="Cuentas Registradas" value={users?.total} /><Stat label="Cuentas Activas" value={users?.active} hint="Actividad en 30 días" /><Stat label="Inactivas" value={users?.inactive} hint="Sin actividad en 30 días" /><Stat label="Gratis / de pago" value={users ? `${users.free} / ${users.paid}` : null}/></div>
+          {accountResult ? <button className="admin-back-button" type="button" onClick={backToUsers}>← Volver a usuarios</button> : <><div className="admin-stats"><Stat label="Cuentas Registradas" value={users?.total} /><Stat label="Cuentas Activas" value={users?.active} hint="Actividad en 30 días" /><Stat label="Inactivas" value={users?.inactive} hint="Sin actividad en 30 días" /><Stat label="Gratis / de pago / Staff" value={users ? `${users.free} / ${users.paid} / ${users.staff}` : null}/></div>
           <section className="admin-panel admin-users-list"><div className="admin-panel-heading"><div><h2>Últimas 10 cuentas</h2><p>Ordenadas de registro más reciente a más antiguo</p></div></div>
-            {users?.latest?.length ? <div className="admin-table-wrap"><table><thead><tr><th>Cuenta</th><th>Plan</th><th>Registro</th><th>Última actividad</th><th></th></tr></thead><tbody>{users.latest.map(user => <tr key={user.id}><td><strong>{user.name}</strong><small>#{user.id} · {user.email}{user.role === 'admin' ? ' · Admin' : ''}</small></td><td>{user.plan === 'basico' ? 'Básico' : user.plan === 'nutripro' ? 'NutriPro' : 'NutriMax'}</td><td>{date(user.createdAt)}</td><td>{date(user.lastActiveAt)}</td><td><button className="admin-text-link" onClick={() => showAccount(user.id)}>Detalles</button></td></tr>)}</tbody></table></div> : empty}
+            {users?.latest?.length ? <div className="admin-table-wrap"><table><thead><tr><th>Cuenta</th><th>Plan</th><th>Registro</th><th>Última actividad</th><th></th></tr></thead><tbody>{users.latest.map(user => <tr key={user.id}><td><strong>{user.name}</strong><small>#{user.id} · {user.email}{user.role === 'admin' ? ' · Admin' : ''}</small></td><td>{user.role === 'admin' ? 'Staff' : user.plan === 'basico' ? 'Básico' : user.plan === 'nutripro' ? 'NutriPro' : 'NutriMax'}</td><td>{date(user.createdAt)}</td><td>{date(user.lastActiveAt)}</td><td><button className="admin-text-link" onClick={() => showAccount(user.id)}>Detalles</button></td></tr>)}</tbody></table></div> : empty}
           </section></>}
           {accountResult && (accountResult.account ? <section className="admin-panel admin-account"><div className="admin-panel-heading"><div><h3>{accountResult.account.name}</h3><p>{accountResult.account.email} · Cuenta #{accountResult.account.id}</p></div><button className="btn secondary" disabled={busy} onClick={sendPasswordReset}>Enviar enlace para cambiar contraseña</button></div>
             {resetNotice && <p role="status">{resetNotice}</p>}

@@ -261,12 +261,12 @@
 .plan-badge-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .plan-badge-pro { color: #006b51; background: #e5fbf3; border-color: #aae9d5; }
 .plan-badge-plus { color: #215ca2; background: #eaf3ff; border-color: #bed8f7; }
-.plan-badge-goat { color: #6B21A8; background: #F3E8FF; border-color: #D8B4FE; }
+.plan-badge-staff { color: #6B21A8; background: #F3E8FF; border-color: #D8B4FE; }
 .plan-badge-unknown { color: #53635c; background: #eef2ef; border-color: #d5ded8; }
 .culinary-user > span:last-child { max-width: 145px; }
 .account-identity .plan-badge { margin-top: 9px; }
-.account-identity .plan-badge-goat { color: #FAF5FF; background: #581C87; border-color: #581C87; }
-.account-identity .plan-badge-goat .plan-badge-dot { background: #C084FC; }
+.account-identity .plan-badge-staff { color: #FAF5FF; background: #581C87; border-color: #581C87; }
+.account-identity .plan-badge-staff .plan-badge-dot { background: #C084FC; }
 @media (max-width: 760px) {
   .culinary-user > span:last-child { display: grid; max-width: 122px; }
   .culinary-user small { display: none; }

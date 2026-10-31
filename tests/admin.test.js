@@ -27,7 +27,7 @@ test('admin endpoints require an account with the database admin role', async t 
     adminUsersSummary: async () => ({ total: 1 }),
     adminApiSummary: async () => ({ calls: [] }),
     findAdminAccount: async query => ({ account: { id: 7, email: query }, recent: [] }),
-    adminAccountDetail: async () => ({ effectivePlan: 'GOAT Mode' }),
+    adminAccountDetail: async () => ({ effectivePlan: 'Staff' }),
   };
   const base = await start(t, { store });
   const headers = { Cookie: `nutribot_session=${'a'.repeat(64)}` };

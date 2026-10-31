@@ -97,7 +97,7 @@ Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para trabajar en ramas y enviar camb
 ## Alcance actual
 
 - Varias cuentas independientes con correo y contraseña, accesibles desde PC y teléfono en la red local. Los datos permanecen en la PC que ejecuta el servidor. Recarga para ver cambios hechos desde otro dispositivo.
-- Contraseñas guardadas mediante hash scrypt con sal, sesiones revocables y fecha de nacimiento editable. La edad se calcula automáticamente. El cambio de contraseña está visible pero aún deshabilitado.
+- Contraseñas guardadas mediante hash scrypt con sal, sesiones revocables y fecha de nacimiento editable. La edad se calcula automáticamente. Las personas pueden cambiar su contraseña desde la cuenta o solicitar un enlace de restablecimiento por correo.
 - La IA recibe el mensaje culinario, ingredientes y filtros. Correo, contraseña, nombre, fecha de nacimiento, peso, estatura y notas médicas del perfil no se envían a Google. Evita escribir datos personales en el chat.
 - Con Edamam configurado, Gemini interpreta la conversación y Nutribot busca recetas de Edamam. Muestra ingredientes, nutrientes, índice glucémico si está disponible, lista de compras y enlace a la preparación de origen. Las favoritas guardan solo URI y nombre; consulta [integración de Edamam](docs/EDAMAM.md).
 - El [portal administrativo](docs/ADMIN.md) muestra resultados y causas de errores de los últimos 30 días para la cuenta autorizada. Las consultas de recetas en producción requieren Edamam; la generación anterior con Gemini queda fuera del flujo de usuarios.

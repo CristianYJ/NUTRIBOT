@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { planCatalog } from '../src/plan-catalog.js';
+import { planCatalog, staffPlan } from '../src/plan-catalog.js';
 import { AppError } from './recipes.js';
 
 export const usageTimezone = 'America/El_Salvador';
@@ -18,7 +18,7 @@ export function createPlanUsage({ transaction, profileId }) {
   async function account(c, lock = false) {
     const { rows } = await c.query(`SELECT plan_code,role_code FROM profiles WHERE id=$1${lock ? ' FOR UPDATE' : ''}`, [profileId()]);
     const isAdmin = rows[0]?.role_code === 'admin';
-    const plan = isAdmin ? { ...planCatalog.nutripro_plus, code: 'goat', name: 'GOAT Mode' } : planCatalog[rows[0]?.plan_code];
+    const plan = isAdmin ? staffPlan : planCatalog[rows[0]?.plan_code];
     if (!plan) throw new AppError('PLAN_UNAVAILABLE', 'No se pudo comprobar el plan de tu cuenta.', 503);
     const now = (await c.query('SELECT clock_timestamp() AS now')).rows[0].now;
     return { plan, now };

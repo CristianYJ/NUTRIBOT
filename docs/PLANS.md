@@ -13,6 +13,8 @@ Las cuotas están definidas en `src/plan-catalog.js` y se comprueban en el servi
 
 Las cuentas con rol Admin tienen el plan efectivo **Staff**, con los mismos cupos que NutriMax. Staff no es una membresía gratis ni de pago; el plan asignado en la base de datos permanece intacto.
 
+Las cuentas con rol GOAT tienen el plan efectivo **GOAT Mode**. Las generaciones de recetas y los análisis de Nutri-Vision no tienen límite de aplicación y continúan registrándose. GOAT tampoco se cuenta como membresía gratis o de pago. Desde el portal, GOAT puede administrar Staff y cambiar el plan asignado de las demás cuentas; Staff conserva sus límites hasta que se le quite ese rol.
+
 ## Cómo se cuenta
 
 - Una generación es una solicitud que termina con recetas válidas y guardadas. Si devuelve dos alternativas, cuenta como una generación. Pedir más alternativas cuenta como otra solicitud.

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { openDatabase } from "../server/database.js";
+import { config } from "../server/config.js";
 import {
   databaseErrorMessage,
   postgresOptions,
@@ -30,7 +31,7 @@ try {
       `Copia privada de PostgreSQL creada y archivo comprobado: ${destination}`,
     );
   } else {
-    store = await openDatabase();
+    store = await openDatabase({ adminEmail: config.adminEmail });
     if (action === "init")
       console.log(JSON.stringify(await store.summary(), null, 2));
     else if (action === "import-sqlite") {

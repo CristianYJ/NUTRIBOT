@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    17,
+    18,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -217,6 +217,44 @@ test('database administrator receives Staff quotas and is excluded from membersh
     [{ from_role: 'user', to_role: 'admin' }, { from_role: 'admin', to_role: 'user' }]);
 });
 
+test('GOAT has unlimited measured usage and alone can assign Staff and plans with an audit trail', async t => {
+  const f = await fixture(t);
+  const credentials = email => ({ name: email, email, password: 'A long test password 2026', birthDate: '1990-01-01' });
+  const goatId = await f.store.auth.register(credentials('goat@example.test'), false);
+  const staffId = await f.store.auth.register(credentials('staff@example.test'), false);
+  const userId = await f.store.auth.register(credentials('member@example.test'), false);
+  await f.sql.query("UPDATE profiles SET role_code='goat' WHERE id=$1", [goatId]);
+  await f.sql.query("UPDATE profiles SET role_code='admin' WHERE id=$1", [staffId]);
+  const goat = f.store.forProfile(goatId);
+  assert.equal(await f.store.isAdmin(goatId), true);
+  assert.equal(await f.store.adminRole(goatId), 'goat');
+  assert.equal((await goat.getState()).profile.plan.code, 'goat');
+  assert.equal((await goat.getUsage()).recipes.limit, null);
+  assert.equal((await goat.getUsage()).vision.remaining, null);
+  for (let i = 0; i < 23; i++) await goat.finishUsage(await goat.reserveUsage('recipes'), true);
+  for (let i = 0; i < 7; i++) await goat.finishUsage(await goat.reserveUsage('vision'), true);
+  assert.equal((await goat.getUsage()).recipes.used, 23);
+  assert.equal((await goat.getUsage()).vision.used, 7);
+  await assert.rejects(f.store.manageAdminAccount({ actorId: staffId, accountId: userId, role: 'admin' }), { code: 'FORBIDDEN' });
+  await assert.rejects(f.store.manageAdminAccount({ actorId: goatId, accountId: goatId, role: 'user' }), { code: 'FORBIDDEN' });
+  await assert.rejects(f.store.manageAdminAccount({ actorId: goatId, accountId: userId, plan: 'staff' }), { code: 'INVALID_PLAN' });
+  assert.equal((await f.store.manageAdminAccount({ actorId: goatId, accountId: userId, role: 'admin' })).changed, true);
+  assert.equal((await f.store.forProfile(userId).getUsage()).plan.code, 'staff');
+  assert.equal((await f.store.manageAdminAccount({ actorId: goatId, accountId: userId, plan: 'nutripro' })).changed, true);
+  assert.equal((await f.store.forProfile(userId).getUsage()).plan.code, 'staff');
+  await f.store.manageAdminAccount({ actorId: goatId, accountId: userId, role: 'user' });
+  assert.equal((await f.store.forProfile(userId).getUsage()).plan.code, 'nutripro');
+  const roles = (await f.sql.query('SELECT from_role,to_role,changed_by FROM profile_role_history WHERE profile_id=$1 ORDER BY id', [userId])).rows;
+  assert.deepEqual(roles, [{ from_role: 'user', to_role: 'admin', changed_by: String(goatId) },
+    { from_role: 'admin', to_role: 'user', changed_by: String(goatId) }]);
+  const plan = (await f.sql.query('SELECT to_plan,changed_by FROM profile_plan_history WHERE profile_id=$1 ORDER BY id DESC LIMIT 1', [userId])).rows[0];
+  assert.deepEqual(plan, { to_plan: 'nutripro', changed_by: String(goatId) });
+  const summary = await f.store.adminUsersSummary();
+  assert.equal(summary.goat, 1);
+  assert.equal(summary.staff, 1);
+  assert.equal(summary.paid, 1);
+});
+
 test('role migration grants the configured existing account once and does not regrant after revocation', async t => {
   const f = await fixture(t);
   const id = await f.store.auth.register({ name: 'Original admin', email: 'admin@example.test',
@@ -226,10 +264,12 @@ test('role migration grants the configured existing account once and does not re
   await f.sql.query('DROP FUNCTION record_profile_role()');
   await f.sql.query('DROP TABLE profile_role_history');
   await f.sql.query('ALTER TABLE profiles DROP COLUMN role_code');
-  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (16,17)');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (16,17,18)');
   const migrated = await openDatabase({ ...f.options, adminEmail: 'ADMIN@example.test' });
   t.after(() => migrated.close());
   assert.equal(await migrated.isAdmin(id), true);
+  assert.equal(await migrated.adminRole(id), 'goat');
+  assert.equal((await migrated.forProfile(id).getUsage()).recipes.limit, null);
   await f.sql.query("UPDATE profiles SET role_code='user' WHERE id=$1", [id]);
   const restarted = await openDatabase({ ...f.options, adminEmail: 'admin@example.test' });
   t.after(() => restarted.close());
@@ -327,7 +367,7 @@ test('daily aggregate migration backfills available detailed metrics without acc
   await f.sql.query('DROP FUNCTION record_profile_role()');
   await f.sql.query('DROP TABLE profile_role_history');
   await f.sql.query('ALTER TABLE profiles DROP COLUMN role_code');
-  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14,15,16,17)');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14,15,16,17,18)');
   const reopened = await f.reopen();
   const rows = (await f.sql.query("SELECT source,category,outcome,total FROM admin_daily_metrics WHERE source='api'")).rows;
   assert.deepEqual(rows, [{ source: 'api', category: 'edamam', outcome: 'success', total: 1 }]);

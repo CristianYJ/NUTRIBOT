@@ -114,7 +114,7 @@ export default function PantryImport({ ref, catalog, onSave, usage, onUsageChang
           </div>
         </>}
         {mode === 'image' && <>
-          {usage && <p className="microcopy" role="status">Nutri-Vision: {usage.vision.used} de {usage.vision.limit} análisis usados este mes.{usage.vision.pending > 0 ? ` ${usage.vision.pending} en curso.` : ''}</p>}
+          {usage && <p className="microcopy" role="status">Nutri-Vision: {usage.vision.limit === null ? `${usage.vision.used} análisis usados este mes · ilimitados` : `${usage.vision.used} de ${usage.vision.limit} análisis usados este mes`}.{usage.vision.pending > 0 ? ` ${usage.vision.pending} en curso.` : ''}</p>}
           <button className="btn primary nutri-vision-identify" type="button" onClick={analyze} disabled={!photo || usage?.vision.remaining === 0}>Identificar ingredientes</button>
           {usage?.vision.remaining === 0 && <p className="microcopy">Tu cupo se renueva el {new Date(usage.vision.resetsAt).toLocaleDateString('es-SV', { timeZone: usage.timezone })}. Puedes agregar los alimentos manualmente.</p>}
         </>}

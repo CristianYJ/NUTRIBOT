@@ -28,6 +28,7 @@ import { mealStore } from './meals.js';
 import { createPlanUsage } from './plan-usage.js';
 import { createAdminDiagnostics } from './admin-diagnostics.js';
 import { createAdminAnalytics } from './admin-analytics.js';
+import { createAdminAccountManagement } from './admin-account-management.js';
 
 export async function openDatabase(options = {}) {
   const { schema = "nutribot", adminEmail = '', ...connection } = options;
@@ -246,7 +247,8 @@ export async function openDatabase(options = {}) {
         birthDate: p.birth_date || "",
         age: ageFromBirthDate(p.birth_date),
         name: p.name,
-        plan: p.role_code === 'admin' ? { code: 'staff', name: 'Staff' } : { code: p.plan_code, name: p.plan_name },
+        plan: p.role_code === 'goat' ? { code: 'goat', name: 'GOAT Mode' }
+          : p.role_code === 'admin' ? { code: 'staff', name: 'Staff' } : { code: p.plan_code, name: p.plan_name },
         calorieSex:p.calorie_sex,calorieActivity:p.calorie_activity,calorieEstimateEligible:p.calorie_estimate_eligible,
         weight: p.weight_kg === null ? "" : String(Number(p.weight_kg)),
         height: p.height_cm === null ? "" : String(Number(p.height_cm)),
@@ -334,7 +336,7 @@ export async function openDatabase(options = {}) {
           "SELECT COALESCE(MAX(version),0) AS n FROM schema_migrations",
         )
       ).rows[0].n;
-      if (version > 17) throw new Error("Esquema de una versión posterior");
+      if (version > 18) throw new Error("Esquema de una versión posterior");
       if (version === 0) {
         await c.query(
           readFileSync(
@@ -453,6 +455,11 @@ export async function openDatabase(options = {}) {
         await c.query(readFileSync(new URL('./postgres/017_password_reset.sql', import.meta.url), 'utf8'));
         await c.query('INSERT INTO schema_migrations(version) VALUES(17)');
       }
+      if (version < 18) {
+        await c.query(readFileSync(new URL('./postgres/018_goat_role.sql', import.meta.url), 'utf8'));
+        if (adminEmail) await c.query("UPDATE profiles SET role_code='goat' WHERE email=$1 AND role_code='admin'", [adminEmail.trim().toLowerCase()]);
+        await c.query('INSERT INTO schema_migrations(version) VALUES(18)');
+      }
     });
   } catch (error) {
     await pool.end();
@@ -488,6 +495,7 @@ export async function openDatabase(options = {}) {
   const store = {
     ...createAdminDiagnostics({ transaction, profileId, pool }),
     ...createAdminAnalytics({ transaction }),
+    ...createAdminAccountManagement({ transaction, pool }),
     ...mealStore({transaction,profileId,readRecipeNutrition}),
     getUsage: usage.getUsage,
     reserveUsage: usage.reserveUsage,
@@ -806,7 +814,7 @@ export async function openDatabase(options = {}) {
       transaction(
         async (c) => ({
           provider: "postgresql",
-          schemaVersion: 11,
+          schemaVersion: Number((await c.query('SELECT max(version) AS version FROM schema_migrations')).rows[0].version),
           ingredients: Number(
             (await c.query("SELECT count(*) AS n FROM ingredients")).rows[0].n,
           ),

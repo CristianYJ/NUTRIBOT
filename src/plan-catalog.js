@@ -7,3 +7,5 @@ export const planCatalog = Object.freeze({
 
 export const staffPlan = Object.freeze({ code: 'staff', name: 'Staff',
   recipes: planCatalog.nutripro_plus.recipes, vision: planCatalog.nutripro_plus.vision });
+
+export const goatPlan = Object.freeze({ code: 'goat', name: 'GOAT Mode', recipes: null, vision: null });

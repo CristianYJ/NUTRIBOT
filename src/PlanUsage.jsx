@@ -26,14 +26,14 @@ export function usePlanUsage() {
 }
 
 export default function PlanUsage({ usage, error, onRefresh, compact = false }) {
-  if (compact) return usage ? <p className="plan-usage-inline" role="status">{usage.plan.name}: {usage.recipes.used}/{usage.recipes.limit} generaciones esta semana{usage.recipes.pending ? ` · ${usage.recipes.pending} en curso` : ''}</p> : null;
+  if (compact) return usage ? <p className="plan-usage-inline" role="status">{usage.plan.name}: {usage.recipes.limit === null ? `${usage.recipes.used} generaciones esta semana · ilimitadas` : `${usage.recipes.used}/${usage.recipes.limit} generaciones esta semana`}{usage.recipes.pending ? ` · ${usage.recipes.pending} en curso` : ''}</p> : null;
   return <section className="plan-usage-panel" aria-label="Mi plan y consumo">
     <div className="plan-usage-heading"><h2>Mi plan{usage ? ` · ${usage.plan.name}` : ''}</h2><button type="button" className="text-btn" onClick={onRefresh}>Actualizar cupo</button></div>
     {error ? <p role="alert">{error}</p> : !usage ? <p role="status">Consultando tu plan…</p> : <>
       <div className="plan-usage-counters">{[['recipes', 'Generaciones de recetas', 'esta semana'], ['vision', 'Fotos con Nutri-Vision', 'este mes']].map(([key, label, period]) => <div key={key}>
-        <strong>{label}</strong><p>{usage[key].used} de {usage[key].limit} usadas {period}</p>
-        <progress aria-label={label} max={usage[key].limit} value={Math.min(usage[key].limit, usage[key].used + usage[key].pending)} />
-        <small>{usage[key].pending ? `${usage[key].pending} en curso. ` : ''}Se renueva el {new Date(usage[key].resetsAt).toLocaleDateString('es-SV', { timeZone: usage.timezone })}.</small>
+        <strong>{label}</strong><p>{usage[key].limit === null ? `${usage[key].used} usadas ${period} · sin límite` : `${usage[key].used} de ${usage[key].limit} usadas ${period}`}</p>
+        {usage[key].limit !== null && <progress aria-label={label} max={usage[key].limit} value={Math.min(usage[key].limit, usage[key].used + usage[key].pending)} />}
+        <small>{usage[key].pending ? `${usage[key].pending} en curso. ` : ''}{usage[key].limit !== null && `Se renueva el ${new Date(usage[key].resetsAt).toLocaleDateString('es-SV', { timeZone: usage.timezone })}.`}</small>
       </div>)}</div>
     </>}
   </section>;

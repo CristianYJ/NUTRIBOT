@@ -158,6 +158,12 @@ export function createAppServer({
       if (url.pathname.startsWith('/api/admin/')) {
         if (!session || !await rootStore?.isAdmin?.(session.profileId))
           throw new AppError('FORBIDDEN', 'Acceso administrativo no autorizado.', 403);
+        if (url.pathname === '/api/admin/account/manage' && req.method === 'POST') {
+          const body = await readJson(req, 1000);
+          return json(res, 200, await rootStore.manageAdminAccount({ actorId: session.profileId,
+            accountId: body?.accountId, ...(Object.hasOwn(body || {}, 'role') ? { role: body.role } : {}),
+            ...(Object.hasOwn(body || {}, 'plan') ? { plan: body.plan } : {}) }));
+        }
         if (url.pathname === '/api/admin/password-reset' && req.method === 'POST') {
           const body = await readJson(req, 1000);
           const id = body?.accountId;
@@ -172,7 +178,8 @@ export function createAppServer({
         if (!Object.hasOwn(adminPeriods, period)) throw new AppError('INVALID_FILTER', 'Período inválido.');
         const year = period === 'year' ? Number(url.searchParams.get('year') || adminPeriodYears()[0]) : null;
         if (period === 'year' && !adminPeriodYears().includes(year)) throw new AppError('INVALID_FILTER', 'Año inválido.');
-        if (url.pathname === '/api/admin/access') return json(res, 200, { allowed: true });
+        if (url.pathname === '/api/admin/access') return json(res, 200, { allowed: true,
+          role: await rootStore.adminRole?.(session.profileId) || 'admin' });
         if (url.pathname === '/api/admin/summary') return json(res, 200, {
           ...await rootStore.adminSummary(period, year),
           users: await rootStore.adminUsersSummary(period, year),

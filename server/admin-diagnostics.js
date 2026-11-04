@@ -12,7 +12,7 @@ export function createAdminDiagnostics({ transaction, profileId, pool }) {
   return {
     async isAdmin(id) {
       if (!Number.isSafeInteger(id)) return false;
-      const result = await pool.query("SELECT 1 FROM profiles WHERE id=$1 AND email IS NOT NULL AND role_code='admin'", [id]);
+      const result = await pool.query("SELECT 1 FROM profiles WHERE id=$1 AND email IS NOT NULL AND role_code IN ('admin','goat')", [id]);
       return result.rowCount === 1;
     },
     recordAdminEvent(event) {

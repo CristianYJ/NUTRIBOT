@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { planCatalog, staffPlan } from '../src/plan-catalog.js';
+import { planCatalog, staffPlan, goatPlan } from '../src/plan-catalog.js';
 import { AppError } from './recipes.js';
 
 export const usageTimezone = 'America/El_Salvador';
@@ -17,8 +17,8 @@ export function usageWindow(feature, now = new Date()) {
 export function createPlanUsage({ transaction, profileId }) {
   async function account(c, lock = false) {
     const { rows } = await c.query(`SELECT plan_code,role_code FROM profiles WHERE id=$1${lock ? ' FOR UPDATE' : ''}`, [profileId()]);
-    const isAdmin = rows[0]?.role_code === 'admin';
-    const plan = isAdmin ? staffPlan : planCatalog[rows[0]?.plan_code];
+    const role = rows[0]?.role_code;
+    const plan = role === 'goat' ? goatPlan : role === 'admin' ? staffPlan : planCatalog[rows[0]?.plan_code];
     if (!plan) throw new AppError('PLAN_UNAVAILABLE', 'No se pudo comprobar el plan de tu cuenta.', 503);
     const now = (await c.query('SELECT clock_timestamp() AS now')).rows[0].now;
     return { plan, now };
@@ -30,7 +30,8 @@ export function createPlanUsage({ transaction, profileId }) {
       FROM plan_usage WHERE profile_id=$1 AND feature=$2 AND period_start=$3::date`,
     [profileId(), feature, window.periodStart, now]);
     const { used, pending } = rows[0];
-    return { ...window, limit: plan[feature], used, pending, remaining: Math.max(0, plan[feature] - used - pending) };
+    return { ...window, limit: plan[feature], used, pending,
+      remaining: plan[feature] === null ? null : Math.max(0, plan[feature] - used - pending) };
   }
   async function complete(c, token, success) {
     if (!token) return;

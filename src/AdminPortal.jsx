@@ -77,6 +77,7 @@ function EventList({ items, onSelect, compact = false }) {
 }
 
 export default function AdminPortal() {
+  const [adminRole, setAdminRole] = useState(null);
   const [view, setView] = useState('overview');
   const [period, setPeriod] = useState('week');
   const [year, setYear] = useState(() => adminPeriodYears()[0] || 2026);
@@ -95,12 +96,19 @@ export default function AdminPortal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [resetNotice, setResetNotice] = useState('');
+  const [actionNotice, setActionNotice] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const q = summary?.quality || {};
   const successes = (q.twoOptions || 0) + (q.oneOption || 0);
   const filterQuery = (offset = 0) => new URLSearchParams({ days: filters.days, outcome: filters.outcome,
     provider: filters.provider, search: filters.search.trim().replace(/^#/, ''), accountId: filters.accountId, offset }).toString();
 
+  useEffect(() => {
+    let active = true;
+    readAdmin('access').then(data => { if (active) setAdminRole(data.role); })
+      .catch(problem => { if (active) setError(problem.message); });
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     let active = true;
     Promise.all([readAdmin(`summary?period=${period}&year=${year}`), readAdmin('events?outcome=error&days=7&offset=0')])
@@ -160,6 +168,22 @@ export default function AdminPortal() {
     } catch (problem) { setError(problem.message); }
     finally { setBusy(false); }
   }
+  async function updateAccount(change) {
+    const id = accountResult?.account?.id;
+    if (!id || adminRole !== 'goat') return;
+    setBusy(true); setError(''); setActionNotice('');
+    try {
+      const response = await authenticatedFetch('/api/admin/account/manage', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: id, ...change }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.text || 'No se pudo actualizar la cuenta.');
+      const result = await readAdmin(`account?q=${id}`);
+      setAccountResult(result);
+      setActionNotice(data.changed ? 'Cuenta actualizada.' : 'La cuenta ya tenía esa configuración.');
+      setRefreshKey(value => value + 1);
+    } catch (problem) { setError(problem.message); }
+    finally { setBusy(false); }
+  }
   function openAccountIncidents(id) { setFilters(previous => ({ ...previous, accountId: String(id), outcome: 'all' })); setView('incidents'); }
   async function showAccount(query) {
     const request = ++accountRequest.current;
@@ -168,7 +192,7 @@ export default function AdminPortal() {
       const result = await readAdmin(`account?q=${encodeURIComponent(query)}`);
       if (request !== accountRequest.current) return;
       openAdminAccount(window, query);
-      setAccountResult(result); setAccountQuery(String(query));
+      setAccountResult(result); setAccountQuery(String(query)); setActionNotice(''); setResetNotice('');
     }
     catch (problem) { if (request === accountRequest.current) setError(problem.message); }
     finally { if (request === accountRequest.current) setBusy(false); }
@@ -234,17 +258,19 @@ export default function AdminPortal() {
         </>}
         {view === 'users' && <><div className="admin-section-heading"><h2>Usuarios y soporte</h2><p>Actividad en los últimos 30 días</p></div>
           <form className="admin-account-search" onSubmit={findAccount}><label htmlFor="admin-account-query">Buscar por correo completo o ID de cuenta</label><div><input id="admin-account-query" value={accountQuery} onChange={e => setAccountQuery(e.target.value)} placeholder="usuario@ejemplo.com" required /><button className="btn primary" disabled={busy}>Buscar</button></div></form>
-          {accountResult ? <button className="admin-back-button" type="button" onClick={backToUsers}>← Volver a usuarios</button> : <><div className="admin-stats"><Stat label="Cuentas Registradas" value={users?.total} /><Stat label="Cuentas Activas" value={users?.active} hint="Actividad en 30 días" /><Stat label="Inactivas" value={users?.inactive} hint="Sin actividad en 30 días" /><Stat label="Gratis / de pago / Staff" value={users ? `${users.free} / ${users.paid} / ${users.staff}` : null}/></div>
+          {accountResult ? <button className="admin-back-button" type="button" onClick={backToUsers}>← Volver a usuarios</button> : <><div className="admin-stats"><Stat label="Cuentas Registradas" value={users?.total} /><Stat label="Cuentas Activas" value={users?.active} hint="Actividad en 30 días" /><Stat label="Inactivas" value={users?.inactive} hint="Sin actividad en 30 días" /><Stat label="Gratis | de pago" value={users ? `${users.free} |  ${users.paid}` : null}/></div>
           <section className="admin-panel admin-users-list"><div className="admin-panel-heading"><div><h2>Últimas 10 cuentas</h2><p>Ordenadas de registro más reciente a más antiguo</p></div></div>
-            {users?.latest?.length ? <div className="admin-table-wrap"><table><thead><tr><th>Cuenta</th><th>Plan</th><th>Registro</th><th>Última actividad</th><th></th></tr></thead><tbody>{users.latest.map(user => <tr key={user.id}><td><strong>{user.name}</strong><small>#{user.id} · {user.email}{user.role === 'admin' ? ' · Admin' : ''}</small></td><td>{user.role === 'admin' ? 'Staff' : user.plan === 'basico' ? 'Básico' : user.plan === 'nutripro' ? 'NutriPro' : 'NutriMax'}</td><td>{date(user.createdAt)}</td><td>{date(user.lastActiveAt)}</td><td><button className="admin-text-link" onClick={() => showAccount(user.id)}>Detalles</button></td></tr>)}</tbody></table></div> : empty}
+            {users?.latest?.length ? <div className="admin-table-wrap"><table><thead><tr><th>Cuenta</th><th>Plan</th><th>Registro</th><th>Última actividad</th><th></th></tr></thead><tbody>{users.latest.map(user => <tr key={user.id}><td><strong>{user.name}</strong><small>#{user.id} · {user.email}{user.role === 'admin' ? ' · Staff' : user.role === 'goat' ? ' · GOAT Mode' : ''}</small></td><td>{user.role === 'goat' ? 'GOAT Mode' : user.role === 'admin' ? 'Staff' : user.plan === 'basico' ? 'Básico' : user.plan === 'nutripro' ? 'NutriPro' : 'NutriMax'}</td><td>{date(user.createdAt)}</td><td>{date(user.lastActiveAt)}</td><td><button className="admin-text-link" onClick={() => showAccount(user.id)}>Detalles</button></td></tr>)}</tbody></table></div> : empty}
           </section></>}
-          {accountResult && (accountResult.account ? <section className="admin-panel admin-account"><div className="admin-panel-heading"><div><h3>{accountResult.account.name}</h3><p>{accountResult.account.email} · Cuenta #{accountResult.account.id}</p></div><button className="btn secondary" disabled={busy} onClick={sendPasswordReset}>Enviar enlace para cambiar contraseña</button></div>
+          {accountResult && (accountResult.account ? <section className="admin-panel admin-account"><div className="admin-panel-heading"><div><h3>{accountResult.account.name}</h3><p>{accountResult.account.email}</p></div><div className="admin-account-heading-actions"><button className="btn secondary" disabled={busy} onClick={sendPasswordReset}>Enviar enlace para cambiar contraseña</button>{adminRole === 'goat' && accountResult.account.role !== 'goat' && <button className="btn secondary" disabled={busy} onClick={() => updateAccount({ role: accountResult.account.role === 'admin' ? 'user' : 'admin' })}>{accountResult.account.role === 'admin' ? 'Quitar Staff' : 'Hacer Staff'}</button>}</div></div>
             {resetNotice && <p role="status">{resetNotice}</p>}
-            <dl><div><dt>ID</dt><dd>#{accountResult.account.id}</dd></div><div><dt>Nombre</dt><dd>{accountResult.account.name}</dd></div><div><dt>Rol</dt><dd>{accountResult.account.role === 'admin' ? 'Admin' : 'Usuario'}</dd></div><div><dt>Plan asignado</dt><dd>{accountResult.detail?.effectivePlan || accountResult.account.plan}</dd></div><div><dt>Registro</dt><dd>{date(accountResult.account.createdAt)}</dd></div>
+            {actionNotice && <p className="admin-success" role="status">{actionNotice}</p>}
+            <dl><div><dt>ID</dt><dd>#{accountResult.account.id}</dd></div><div><dt>Nombre</dt><dd>{accountResult.account.name}</dd></div><div><dt>Rol</dt><dd>{accountResult.account.role === 'goat' ? 'GOAT Mode' : accountResult.account.role === 'admin' ? 'Staff' : 'Usuario'}</dd></div><div><dt>Plan efectivo</dt><dd>{accountResult.detail?.effectivePlan || accountResult.account.plan}</dd></div><div><dt>Registro</dt><dd>{date(accountResult.account.createdAt)}</dd></div>
               <div><dt>Último cambio de perfil</dt><dd>{date(accountResult.detail?.updatedAt || accountResult.account.createdAt)}</dd></div><div><dt>Última actividad</dt><dd>{date(accountResult.detail?.lastActiveAt || accountResult.account.createdAt)}</dd></div>
               <div><dt>Tiempo de pago continuo</dt><dd>{accountResult.detail?.paidSince ? `${since(accountResult.detail.paidSince)} · desde ${date(accountResult.detail.paidSince)}` : 'No está en un plan de pago'}</dd></div>
               <div><dt>Tiempo sin pago tras un plan de pago</dt><dd>{accountResult.detail?.freeSinceAfterPaid ? `${since(accountResult.detail.freeSinceAfterPaid)} · desde ${date(accountResult.detail.freeSinceAfterPaid)}` : 'No aplica'}</dd></div></dl>
-            <h4>Uso del período actual</h4><div className="admin-account-usage"><span>Generaciones <strong>{accountResult.detail?.usage?.recipes?.used ?? '—'} / {accountResult.detail?.usage?.recipes?.limit ?? '—'}</strong><small>Esta semana</small></span><span>Fotos reconocidas <strong>{accountResult.detail?.usage?.vision?.used ?? '—'} / {accountResult.detail?.usage?.vision?.limit ?? '—'}</strong><small>Este mes</small></span></div>
+            {adminRole === 'goat' && accountResult.account.role !== 'goat' && <div className="admin-plan-control"><h4>Plan</h4><div className="admin-plan-slicer" role="group" aria-label="Cambiar plan asignado">{[['basico','Básico'],['nutripro','NutriPro'],['nutripro_plus','NutriMax']].map(([code,label]) => <button key={code} type="button" disabled={busy} aria-pressed={accountResult.account.plan === code} className={`admin-plan-option admin-plan-${code}${accountResult.account.plan === code ? ' active' : ''}`} onClick={() => updateAccount({ plan: code })}>{label}</button>)}</div>{accountResult.account.role === 'admin' && <p>Staff conserva los límites de NutriMax; este plan se aplicará al quitar Staff.</p>}</div>}
+            <h4>Uso</h4><div className="admin-account-usage"><span>Generaciones <strong>{accountResult.detail?.usage?.recipes?.used ?? '—'} / {accountResult.detail?.usage?.recipes?.limit === null ? '∞' : accountResult.detail?.usage?.recipes?.limit ?? '—'}</strong><small>Esta semana</small></span><span>Fotos reconocidas <strong>{accountResult.detail?.usage?.vision?.used ?? '—'} / {accountResult.detail?.usage?.vision?.limit === null ? '∞' : accountResult.detail?.usage?.vision?.limit ?? '—'}</strong><small>Este mes</small></span></div>
             <div className="admin-account-actions"><button className="btn secondary" onClick={() => openAccountIncidents(accountResult.account.id)}>Ver diagnósticos de esta cuenta</button></div><h4>Logs de recetas</h4>
             {accountResult.recent.length ? <ul>{accountResult.recent.map(item => <li key={item.requestId}><code>#{item.requestId.slice(0, 8)}</code> · {outcomes[item.outcome] || item.outcome} · {date(item.createdAt)}</li>)}</ul> : <p>Sin eventos recientes.</p>}
             <h4>Llamadas externas recientes</h4>{accountResult.detail?.calls?.length ? <ul>{accountResult.detail.calls.map((call, index) => <li key={`${call.createdAt}-${index}`}>{date(call.createdAt)} · {call.provider} / {call.operation} · {call.outcome === 'success' ? 'OK' : call.statusCode || 'Red'} · {duration(call.durationMs)}</li>)}</ul> : <p>Sin llamadas medidas.</p>}

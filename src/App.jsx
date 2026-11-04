@@ -195,10 +195,13 @@ export default function App() {
 }
 
 function Workspace({ initial, onSignedOut }) {
-  const [adminAccess, setAdminAccess] = useState(false);
+  const [adminRole, setAdminRole] = useState(null);
+  const adminAccess = Boolean(adminRole);
   useEffect(() => {
     let active = true;
-    authenticatedFetch('/api/admin/access').then(response => { if (active && response.ok) setAdminAccess(true); }).catch(() => {});
+    authenticatedFetch('/api/admin/access').then(async response => {
+      if (active && response.ok) setAdminRole((await response.json()).role);
+    }).catch(() => {});
     return () => { active = false; };
   }, []);
   const { usage, usageError, refreshUsage } = usePlanUsage();
@@ -638,7 +641,8 @@ function Workspace({ initial, onSignedOut }) {
         <CulinaryHeader
           brand={<Brand />}
           page={page}
-          profile={adminAccess ? { ...profile, plan: { code: 'staff', name: 'Staff' } } : profile}
+          profile={adminRole ? { ...profile, plan: adminRole === 'goat'
+            ? { code: 'goat', name: 'GOAT Mode' } : { code: 'staff', name: 'Staff' } } : profile}
           ingredients={ingredients}
           recipes={allRecipes.filter((recipe) =>
             matchesProfile(recipe, profile, ingredients),

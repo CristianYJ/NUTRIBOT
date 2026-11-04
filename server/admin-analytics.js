@@ -1,4 +1,4 @@
-import { planCatalog, staffPlan } from '../src/plan-catalog.js';
+import { planCatalog, staffPlan, goatPlan } from '../src/plan-catalog.js';
 import { usageWindow } from './plan-usage.js';
 import { AppError } from './recipes.js';
 import { adminPeriodBuckets, bucketMetrics, planMixTrend } from '../src/admin-periods.js';
@@ -102,9 +102,10 @@ export function createAdminAnalytics({ transaction }) {
           SELECT count(*)::integer AS total,
             count(*) FILTER (WHERE greatest(p.created_at,coalesce(latest.at,p.created_at)) >= now() - interval '30 days')::integer AS active,
             count(*) FILTER (WHERE p.role_code='admin')::integer AS staff,
-            count(*) FILTER (WHERE p.role_code<>'admin' AND p.plan_code='basico')::integer AS free,
-            count(*) FILTER (WHERE p.role_code<>'admin' AND p.plan_code='nutripro')::integer AS nutripro,
-            count(*) FILTER (WHERE p.role_code<>'admin' AND p.plan_code='nutripro_plus')::integer AS nutrimax
+            count(*) FILTER (WHERE p.role_code='goat')::integer AS goat,
+            count(*) FILTER (WHERE p.role_code='user' AND p.plan_code='basico')::integer AS free,
+            count(*) FILTER (WHERE p.role_code='user' AND p.plan_code='nutripro')::integer AS nutripro,
+            count(*) FILTER (WHERE p.role_code='user' AND p.plan_code='nutripro_plus')::integer AS nutrimax
           FROM profiles p LEFT JOIN latest ON latest.profile_id=p.id WHERE p.email IS NOT NULL`)).rows[0];
         const latest = (await c.query(`SELECT p.id,p.name,p.email,p.plan_code,p.role_code,p.created_at,p.updated_at,
           greatest(p.created_at,coalesce((SELECT max(s.created_at) FROM auth_sessions s WHERE s.profile_id=p.id),p.created_at),
@@ -128,7 +129,7 @@ export function createAdminAnalytics({ transaction }) {
             firstFeatureDay && bucket.endDay < day(firstFeatureDay) ? null
               : featureRaw.filter(row => row.feature === feature && row.day >= bucket.startDay && row.day <= bucket.endDay)
                 .reduce((sum, row) => sum + row.total, 0)])) }));
-        const trendAccounts = (await c.query("SELECT id,created_at FROM profiles WHERE email IS NOT NULL AND role_code<>'admin'")).rows;
+        const trendAccounts = (await c.query("SELECT id,created_at FROM profiles WHERE email IS NOT NULL AND role_code='user'")).rows;
         const trendHistory = (await c.query(`SELECT h.profile_id,h.to_plan,h.changed_at FROM profile_plan_history h
           JOIN profiles p ON p.id=h.profile_id WHERE p.email IS NOT NULL
           ORDER BY h.profile_id,h.changed_at,h.id`)).rows;
@@ -142,7 +143,7 @@ export function createAdminAnalytics({ transaction }) {
         const within = source => { const row = ratios.find(item => item.source === source);
           return row?.total ? Math.round(row.under_2s / row.total * 100) : null; };
         return { total: stats.total, active: stats.active, inactive: stats.total - stats.active,
-          free: stats.free, paid: stats.nutripro + stats.nutrimax, staff: stats.staff, nutripro: stats.nutripro,
+          free: stats.free, paid: stats.nutripro + stats.nutrimax, staff: stats.staff, goat: stats.goat, nutripro: stats.nutripro,
           nutrimax: stats.nutrimax, estimatedMonthlyCents: stats.nutripro * 299 + stats.nutrimax * 999,
           latest, features, planTrend, performance: { serverP95Ms: performance.server_p95,
             serverUnder2s: within('http'), apiP95Ms: performance.api_p95,
@@ -164,7 +165,7 @@ export function createAdminAnalytics({ transaction }) {
           if (!paid && wasPaid) { paidSince = null; freeSinceAfterPaid = iso(change.changed_at); }
           wasPaid = paid;
         }
-        const effective = profile.role_code === 'admin' ? staffPlan : planCatalog[profile.plan_code];
+        const effective = profile.role_code === 'goat' ? goatPlan : profile.role_code === 'admin' ? staffPlan : planCatalog[profile.plan_code];
         const windows = { recipes: usageWindow('recipes'), vision: usageWindow('vision') };
         const usageRows = (await c.query(`SELECT feature,period_start,count(*) FILTER (WHERE succeeded)::integer AS used,
           count(*) FILTER (WHERE NOT succeeded AND expires_at>now())::integer AS pending
@@ -189,8 +190,8 @@ export function createAdminAnalytics({ transaction }) {
           UNION ALL SELECT created_at FROM admin_http_requests WHERE profile_id=$1
         ) activity`, [id])).rows[0].at || profile.created_at;
         return { updatedAt: iso(profile.updated_at), lastActiveAt: iso(lastActive), effectivePlan: effective.name,
-          paidSince: profile.role_code === 'admin' ? null : paidSince,
-          freeSinceAfterPaid: profile.role_code === 'admin' ? null : freeSinceAfterPaid, usage, calls };
+          paidSince: profile.role_code === 'user' ? paidSince : null,
+          freeSinceAfterPaid: profile.role_code === 'user' ? freeSinceAfterPaid : null, usage, calls };
       }, true);
     },
   };

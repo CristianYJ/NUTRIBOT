@@ -39,6 +39,18 @@
 .admin-plan-trend .admin-panel-heading>span{white-space:normal;text-align:right;}
 @media(max-width:760px){.admin-plan-trend .admin-panel-heading>span{text-align:left;}}
 .admin-plan-trend .admin-line-chart.compact{max-width:760px;margin:0 auto;}
+.admin-account-heading-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;}
+.admin-account-heading-actions .btn{font-size:12px;white-space:normal;}
+.admin-success{padding:10px 13px;border-radius:10px;background:#e8f4ed;color:#146044;font-size:12px;}
+.admin-plan-control{margin:22px 0;padding:16px;border:1px solid #e1eae3;border-radius:14px;background:#fbfdfb;}
+.admin-plan-control h4{margin:0 0 12px;}.admin-plan-control p{margin:10px 0 0;color:#64786d;font-size:11px;}
+.admin-plan-slicer{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:5px;border-radius:12px;background:#edf3ef;}
+.admin-plan-option{min-height:42px;border:1px solid transparent;border-radius:9px;color:#516c5b;font-size:12px;font-weight:750;transition:background .15s,color .15s;}
+.admin-plan-option:hover{background:#fff;}.admin-plan-option:disabled{opacity:.55;cursor:wait;}
+.admin-plan-basico.active{background:#e7f3e8;border-color:#a8d7b2;color:#17633a;}
+.admin-plan-nutripro.active{background:#e5fbf3;border-color:#8dd8be;color:#006b51;}
+.admin-plan-nutripro_plus.active{background:#eaf3ff;border-color:#9fc7f2;color:#215ca2;}
+@media(max-width:760px){.admin-account-heading-actions{justify-content:flex-start;width:100%;}.admin-plan-option{font-size:11px;}}
 .admin-plan-trend .admin-line-chart.compact svg{height:auto;aspect-ratio:640/190;}
 .admin-plan-trend .admin-line-chart.compact .admin-legend{margin-top:10px;}
 .admin-line-chart.compact svg{height:auto;aspect-ratio:640/190;}

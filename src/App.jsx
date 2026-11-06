@@ -17,6 +17,8 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
 import PantryImport from "./PantryImport.jsx";
 import PlanUsage, { usePlanUsage } from './PlanUsage.jsx';
+import BillingPanel from './BillingPanel.jsx';
+import PlanLimitOffer from './PlanLimitOffer.jsx';
 import RecipeCardCalories from "./RecipeCardCalories.jsx";
 import CulinaryHeader from "./CulinaryHeader.jsx";
 import {useMeals, MealFeedback, CalorieGoal} from './MealTracking.jsx';
@@ -27,7 +29,8 @@ import AdminPortal from './AdminPortal.jsx';
 import NutritionPanel from "./NutritionPanel.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
-import { readNavigation, navigationUrl, openRecipeInHistory, closeRecipeInHistory } from "./navigation.js";
+import { readNavigation, navigationUrl, openRecipeInHistory, closeRecipeInHistory,
+  openPlanOfferInHistory, closePlanOfferInHistory, consumePlanOfferInHistory } from "./navigation.js";
 import { readChat } from "./chat-session.js";
 import { profileRestrictions } from "./profile-rules.js";
 import { allergyOptions } from "./data.js";
@@ -208,6 +211,8 @@ function Workspace({ initial, onSignedOut }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
+  const [planOfferOpen, setPlanOfferOpen] = useState(() => Boolean(history.state?.planOffer));
+  const [preferredPlan, setPreferredPlan] = useState(null);
   const [ingredients, setIngredients] = useState(initial.ingredients);
   const ingredientById = Object.fromEntries(ingredients.map((i) => [i.id, i]));
   const recipes = initial.recipes;
@@ -225,7 +230,10 @@ function Workspace({ initial, onSignedOut }) {
     setFocusPrivacy(false);
   }, [page, focusPrivacy]);
   useEffect(() => {
-    const restore = () => setNavigation(readNavigation(new URL(location.href)));
+    const restore = () => {
+      setNavigation(readNavigation(new URL(location.href)));
+      setPlanOfferOpen(Boolean(history.state?.planOffer));
+    };
     window.addEventListener("popstate", restore);
     window.addEventListener("hashchange", restore);
     return () => {
@@ -463,6 +471,16 @@ function Workspace({ initial, onSignedOut }) {
     setSearch("");
     window.scrollTo({ top: 0, behavior: "instant" });
   }
+  function closePlanOffer() {
+    if (!closePlanOfferInHistory(window)) setPlanOfferOpen(false);
+  }
+  function choosePlan(code) {
+    consumePlanOfferInHistory(window);
+    setPlanOfferOpen(false);
+    setPreferredPlan(code);
+    go('profile');
+    requestAnimationFrame(() => document.getElementById('profile-billing')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
   function openRecipe(r, portions = 1) {
     // One history entry per open dialog. Back restores the page beneath it.
     setNavigation(openRecipeInHistory(window, r.id, portions));
@@ -567,6 +585,10 @@ function Workspace({ initial, onSignedOut }) {
       ]);
     } catch (error) {
       if (controller.signal.aborted || request.current !== controller) return;
+      if (error.code === 'PLAN_LIMIT') {
+        openPlanOfferInHistory(window);
+        setPlanOfferOpen(true);
+      }
       setMessages((m) => [
         ...m,
         {
@@ -814,7 +836,8 @@ function Workspace({ initial, onSignedOut }) {
                 <div className="page-title">
                   <h1>Mi Perfil</h1>
                 </div>
-                <PlanUsage usage={usage} error={usageError} onRefresh={refreshUsage} />
+                <PlanUsage usage={usage} error={usageError} onUpgrade={() => document.getElementById('profile-billing')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+                <BillingPanel plan={usage?.plan} preferredPlan={preferredPlan} />
                 <ProfileForm
                   tracker={meals}
                   catalog={ingredients}
@@ -906,6 +929,7 @@ function Workspace({ initial, onSignedOut }) {
         </nav>
       </div>
       <PhoneConnection open={phoneOpen} onClose={() => setPhoneOpen(false)} />
+      <PlanLimitOffer open={planOfferOpen} currentPlan={usage?.plan?.code} onClose={closePlanOffer} onChoose={choosePlan} />
       <PantryImport
         usage={usage}
         onUsageChange={refreshUsage}

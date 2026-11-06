@@ -45,3 +45,21 @@ export function closeRecipeInHistory(browser) {
   browser.history.replaceState(null, "", next);
   return readNavigation(next);
 }
+
+export function openPlanOfferInHistory(browser) {
+  if (browser.history.state?.planOffer) return;
+  browser.history.pushState({ ...(browser.history.state || {}), planOffer: true }, '', browser.location.href);
+}
+
+export function closePlanOfferInHistory(browser) {
+  if (!browser.history.state?.planOffer) return false;
+  browser.history.back();
+  return true;
+}
+
+export function consumePlanOfferInHistory(browser) {
+  if (!browser.history.state?.planOffer) return;
+  const state = { ...browser.history.state };
+  delete state.planOffer;
+  browser.history.replaceState(Object.keys(state).length ? state : null, '', browser.location.href);
+}

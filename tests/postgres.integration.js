@@ -106,7 +106,7 @@ test("PostgreSQL seeds normalized tables once and preserves data after another c
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM schema_migrations"))
       .rows[0].n,
-    18,
+    22,
   );
   assert.equal(
     (await f.sql.query("SELECT count(*)::integer AS n FROM recipes")).rows[0].n,
@@ -141,12 +141,12 @@ test('Spanish Edamam presentations persist once and are shared without storing o
   const uri = 'http://www.edamam.com/ontologies/edamam.owl#recipe_shared123';
   const hash = 'a'.repeat(64);
   await f.store.saveEdamamPresentation({ uri, title: 'Chicken rolls', kind: 'detail', hash,
-    titleEs: 'Rollitos de pollo', ingredientLinesEs: ['3 tortillas de harina'], difficulty: 'Fácil', meal: 'Almuerzo' });
+    titleEs: 'Rollitos de pollo', ingredientLinesEs: ['3 tortillas de harina'], difficulty: 'Fácil', meal: 'Almuerzo', estimatedMinutes: 25 });
   const otherId = await f.store.auth.register({ name: 'Another cook', email: 'translation-cache@example.test',
     password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
   const cached = await (await f.reopen()).forProfile(otherId).getEdamamPresentation(uri, 'detail', hash);
   assert.deepEqual(cached, { titleEs: 'Rollitos de pollo', ingredientLinesEs: ['3 tortillas de harina'],
-    difficulty: 'Fácil', meal: 'Almuerzo' });
+    difficulty: 'Fácil', meal: 'Almuerzo', estimatedMinutes: 25 });
   const row = (await f.sql.query('SELECT recipe_title,ingredient_lines_es,input_hash FROM edamam_presentation_cache WHERE recipe_uri=$1', [uri])).rows[0];
   assert.equal(row.recipe_title, 'Chicken rolls');
   assert.deepEqual(row.ingredient_lines_es, ['3 tortillas de harina']);
@@ -255,16 +255,38 @@ test('GOAT has unlimited measured usage and alone can assign Staff and plans wit
   assert.equal(summary.paid, 1);
 });
 
+test('system activity combines audited changes and operational failures with filters', async t => {
+  const f = await fixture(t);
+  const id = await f.store.auth.register({ name: 'Activity user', email: 'activity@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  await f.store.recordSystemEvent('server_started');
+  await f.store.recordSystemEvent('request_error', 'error', 'DATABASE_UNAVAILABLE');
+  await f.sql.query("UPDATE profiles SET role_code='admin',plan_code='nutripro' WHERE id=$1", [id]);
+  await f.store.recordHttpRequest({ profileId: id, feature: 'recipes', statusCode: 503, durationMs: 100 });
+  await f.store.recordApiCall({ profileId: id, provider: 'edamam', operation: 'recipe_search',
+    outcome: 'http_error', statusCode: 429, durationMs: 200 });
+  const all = await f.store.listSystemLogs();
+  for (const category of ['server', 'roles', 'plans', 'http', 'api'])
+    assert(all.items.some(item => item.category === category), `Missing ${category}`);
+  assert.equal(all.items.find(item => item.category === 'roles').accountId, id);
+  assert.equal((await f.store.listSystemLogs({ category: 'roles' })).items.length, 1);
+  assert.equal((await f.store.listSystemLogs({ category: 'server', limit: 1 })).nextOffset, 1);
+  assert.throws(() => f.store.listSystemLogs({ days: 365 }), { code: 'INVALID_FILTER' });
+});
+
 test('role migration grants the configured existing account once and does not regrant after revocation', async t => {
   const f = await fixture(t);
   const id = await f.store.auth.register({ name: 'Original admin', email: 'admin@example.test',
     password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  await f.sql.query('DROP TABLE wompi_upgrades, wompi_payments, wompi_subscriptions');
   await f.sql.query('DROP TRIGGER profile_role_audit ON profiles');
   await f.sql.query('DROP TABLE password_reset_tokens');
   await f.sql.query('DROP FUNCTION record_profile_role()');
   await f.sql.query('DROP TABLE profile_role_history');
+  await f.sql.query('DROP TABLE admin_system_events');
+  await f.sql.query('ALTER TABLE edamam_presentation_cache DROP COLUMN estimated_minutes');
   await f.sql.query('ALTER TABLE profiles DROP COLUMN role_code');
-  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (16,17,18)');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (16,17,18,19,20,21,22)');
   const migrated = await openDatabase({ ...f.options, adminEmail: 'ADMIN@example.test' });
   t.after(() => migrated.close());
   assert.equal(await migrated.isAdmin(id), true);
@@ -360,6 +382,7 @@ test('daily aggregate migration backfills available detailed metrics without acc
   const f = await fixture(t);
   await f.store.recordApiCall({ provider: 'edamam', operation: 'recipe_search',
     outcome: 'success', statusCode: 200, durationMs: 300 });
+  await f.sql.query('DROP TABLE wompi_upgrades, wompi_payments, wompi_subscriptions');
   await f.sql.query('DROP TABLE admin_daily_metrics');
   await f.sql.query('DROP TABLE edamam_presentation_cache');
   await f.sql.query('DROP TABLE password_reset_tokens');
@@ -367,11 +390,105 @@ test('daily aggregate migration backfills available detailed metrics without acc
   await f.sql.query('DROP FUNCTION record_profile_role()');
   await f.sql.query('DROP TABLE profile_role_history');
   await f.sql.query('ALTER TABLE profiles DROP COLUMN role_code');
-  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14,15,16,17,18)');
+  await f.sql.query('DROP TABLE admin_system_events');
+  await f.sql.query('DELETE FROM schema_migrations WHERE version IN (13,14,15,16,17,18,19,20,21,22)');
   const reopened = await f.reopen();
   const rows = (await f.sql.query("SELECT source,category,outcome,total FROM admin_daily_metrics WHERE source='api'")).rows;
   assert.deepEqual(rows, [{ source: 'api', category: 'edamam', outcome: 'success', total: 1 }]);
   assert.equal((await reopened.adminApiSummary('year', 2026)).providers.find(item => item.provider === 'edamam').total, 1);
+});
+
+test('Wompi recurrent payment grants a plan once, checks amount and expires entitlement', async t => {
+  const f = await fixture(t);
+  const id = await f.store.auth.register({ name: 'Billing user', email: 'billing@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  const account = f.store.forProfile(id);
+  const link = await account.createBillingLink('nutripro', {
+    createRecurringLink: async () => ({ id: 'wompi-link-test', url: 'https://lk.wompi.sv/test', productive: false }),
+  });
+  assert.equal(link.state, 'pending');
+  assert.equal((await account.billingStatus()).plan, 'nutripro');
+  assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'basico');
+  const transactionId = '12345678-1234-1234-1234-123456789abc';
+  const event = { IdTransaccion: transactionId, EnlacePagoRecurrente: { Id: 'wompi-link-test' },
+    ResultadoTransaccion: 'ExitosaAprobada', EsProductiva: false, Monto: 2.99,
+    FechaTransaccion: new Date().toISOString() };
+  const details = { idTransaccion: transactionId, esAprobada: true, esReal: false, monto: 2.99 };
+  await assert.rejects(f.store.recordWompiPayment({ ...event, EsProductiva: true }, details), { code: 'INVALID_PAYMENT' });
+  await assert.rejects(f.store.recordWompiPayment({ ...event, Monto: 1 }, details), { code: 'INVALID_PAYMENT' });
+  assert.equal((await f.sql.query('SELECT count(*)::integer AS n FROM wompi_payments')).rows[0].n, 0);
+  assert.deepEqual(await f.store.recordWompiPayment(event, details), { applied: true });
+  assert.deepEqual(await f.store.recordWompiPayment(event, details), { duplicate: true });
+  const otherId = await f.store.auth.register({ name: 'Other billing user', email: 'other-billing@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  const history = await account.listBillingTransactions();
+  assert.equal(history.length, 1);
+  assert.deepEqual({ id: history[0].transactionId, amount: history[0].amountCents,
+    plan: history[0].plan, productive: history[0].productive },
+  { id: transactionId, amount: 299, plan: 'nutripro', productive: false });
+  assert.deepEqual(await f.store.forProfile(otherId).listBillingTransactions(), []);
+  assert.equal((await f.store.adminBillingTransactions(id))[0].transactionId, transactionId);
+  assert.deepEqual(await f.store.adminBillingTransactions(otherId), []);
+  assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'nutripro');
+  await f.sql.query("UPDATE wompi_subscriptions SET paid_until=now()-interval '1 day' WHERE profile_id=$1", [id]);
+  assert.equal(await f.store.expireBilling(), 1);
+  assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'basico');
+});
+
+test('confirmed prorated upgrade disables only the old link and records one adjustment', async t => {
+  const f = await fixture(t);
+  const id = await f.store.auth.register({ name: 'Upgrade user', email: 'upgrade@example.test',
+    password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
+  const account = f.store.forProfile(id);
+  await account.createBillingLink('nutripro', {
+    createRecurringLink: async () => ({ id: 'pro-link', url: 'https://lk.wompi.sv/pro', productive: false }),
+  });
+  const firstId = '12345678-1234-1234-1234-123456789abc';
+  await f.store.recordWompiPayment({ IdTransaccion: firstId, EnlacePagoRecurrente: { Id: 'pro-link' },
+    ResultadoTransaccion: 'ExitosaAprobada', EsProductiva: false, Monto: 2.99,
+    FechaTransaccion: new Date().toISOString() },
+  { idTransaccion: firstId, esAprobada: true, esReal: false, monto: 2.99 });
+  const quote = await account.upgradeQuote();
+  assert(quote.amountCents > 0 && quote.amountCents <= 700);
+  const generated = [];
+  let disabled = 0;
+  const wompi = {
+    createOneTimeLink: async args => { generated.push(args); return { id: 'adjust-link', url: 'https://lk.wompi.sv/adjust' }; },
+    disableRecurringLink: async linkId => { assert.equal(linkId, 'pro-link'); disabled++; },
+    createRecurringLink: async ({ plan }) => {
+      assert.equal(plan, 'nutripro_plus');
+      return { id: 'max-link', url: 'https://lk.wompi.sv/max', productive: false };
+    },
+  };
+  const link = await account.startBillingUpgrade(wompi, 'https://nutribot.online/api/billing/wompi/webhook');
+  assert.equal(link.url, 'https://lk.wompi.sv/adjust');
+  assert.equal((await account.startBillingUpgrade(wompi, 'https://nutribot.online/api/billing/wompi/webhook')).url, link.url);
+  assert.equal(generated.length, 1);
+  assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'nutripro');
+  const transactionId = '23456789-1234-1234-1234-123456789abc';
+  const paidAt = new Date().toISOString();
+  const event = { IdTransaccion: transactionId, EnlacePago: { Id: 'adjust-link',
+    IdentificadorEnlaceComercio: generated[0].reference }, ResultadoTransaccion: 'ExitosaAprobada',
+    EsProductiva: false, Monto: link.amountCents / 100, FechaTransaccion: paidAt };
+  const details = { idTransaccion: transactionId, esAprobada: true, esReal: false, monto: link.amountCents / 100 };
+  await assert.rejects(f.store.recordWompiUpgradePayment({ ...event, Monto: 1 }, details, wompi), { code: 'INVALID_PAYMENT' });
+  await assert.rejects(f.store.recordWompiUpgradePayment(event, details, {
+    disableRecurringLink: async () => { throw new Error('Wompi unavailable'); },
+  }), /Wompi unavailable/);
+  assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'nutripro');
+  assert.deepEqual(await f.store.recordWompiUpgradePayment(event, details, wompi), { applied: true });
+  assert.deepEqual(await f.store.recordWompiUpgradePayment(event, details, wompi), { duplicate: true });
+  assert.equal(disabled, 1);
+  assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'nutripro_plus');
+  assert.equal((await f.sql.query('SELECT state FROM wompi_subscriptions WHERE link_id=$1', ['pro-link'])).rows[0].state, 'ended');
+  assert.equal((await account.listBillingTransactions()).filter(item => item.kind === 'upgrade').length, 1);
+  await assert.rejects(f.store.recordWompiPayment({ IdTransaccion: '34567890-1234-1234-1234-123456789abc',
+    EnlacePagoRecurrente: { Id: 'pro-link' }, ResultadoTransaccion: 'ExitosaAprobada',
+    EsProductiva: false, Monto: 2.99, FechaTransaccion: new Date().toISOString() },
+  { idTransaccion: '34567890-1234-1234-1234-123456789abc', esAprobada: true, esReal: false, monto: 2.99 }), { code: 'INVALID_PAYMENT' });
+  await assert.rejects(account.createBillingLink('nutripro_plus', wompi), { code: 'UPGRADE_UNAVAILABLE' });
+  await f.sql.query("UPDATE wompi_upgrades SET paid_until=now()+interval '2 days' WHERE profile_id=$1", [id]);
+  assert.equal((await account.createBillingLink('nutripro_plus', wompi)).state, 'pending');
 });
 
 test('USDA links and grams persist per recipe and enforce structured limits', async (t) => {

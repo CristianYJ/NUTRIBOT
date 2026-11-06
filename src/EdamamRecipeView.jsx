@@ -47,6 +47,7 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
   const title = presentation?.titleEs || recipe?.titleEs || reference?.title || recipe?.title || 'Receta';
   const meal = recipe?.meal || reference?.meal || presentation?.meal || ({ Breakfast: 'Desayuno', Lunch: 'Almuerzo', Dinner: 'Cena' })[recipe?.mealTypes?.[0]] || null;
   const recipeServings = Number.isInteger(recipe?.servings) && recipe.servings > 0 ? recipe.servings : null;
+  const estimatedTime = !recipe?.time && presentation?.estimatedMinutes;
   const translating = !presentation && !presentationError;
   useEffect(() => { setRecipe(initial || null); setShopping(null); setShoppingTranslations(null); setPresentation(null); setPresentationError(''); }, [initial, uri]);
   useEffect(() => { setSaved(isFavorite); }, [isFavorite]);
@@ -98,7 +99,7 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
       </button>
       <button className={`save-btn${saved ? ' saved' : ''}`} onClick={favorite} disabled={working} title={saved ? 'Quitar de Mis Recetas' : 'Guardar receta'} aria-label={`${saved ? 'Quitar receta guardada' : 'Guardar receta'}: ${title}`} aria-pressed={saved}><Icon name="heart" size={19} /></button>
       <div className="recipe-copy">
-        <div className="recipe-meta"><span><Icon name="clock" size={14} />{recipe?.time ? `${recipe.time} min` : 'Tiempo no indicado'}</span>{meal && <span>{meal}</span>}</div>
+        <div className="recipe-meta"><span><Icon name="clock" size={14} />{recipe?.time ? `${recipe.time} min` : estimatedTime ? `≈ ${estimatedTime} min` : 'Tiempo por estimar'}</span>{meal && <span>{meal}</span>}</div>
         <button className="title-link" onClick={open} disabled={working}><h3>{title}</h3></button>
         <p>{recipe?.caloriesPerServing != null ? `${number(recipe.caloriesPerServing)} kcal por porción` : 'Consulta los datos actualizados'}</p>
         <button className="availability recipe-view-button" type="button" onClick={open} disabled={working}><Icon name="arrow" size={15} />Ver receta</button>
@@ -116,7 +117,7 @@ export function EdamamRecipeCard({ initial, reference, pantry = [], ingredients 
           <div className="detail-title"><h2>{presentation?.titleEs || (translating ? 'Preparando receta…' : title)}</h2><button className={`icon-button${saved ? ' saved' : ''}`} onClick={favorite} disabled={working} title={saved ? 'Quitar de Mis Recetas' : 'Guardar receta'} aria-label={saved ? 'Quitar receta guardada' : 'Guardar receta'} aria-pressed={saved}><Icon name="heart" /></button></div>
           <GlycemicBar value={recipe.glycemicIndex} />
           <div className="detail-meta recipe-summary">
-            <span><small>Tiempo</small><strong>{recipe.time ? `${recipe.time} min` : 'Sin dato'}</strong></span>
+            <span><small>{estimatedTime ? 'Tiempo estimado' : 'Tiempo'}</small><strong>{recipe.time ? `${recipe.time} min` : estimatedTime ? `≈ ${estimatedTime} min` : presentationError ? 'Sin estimar' : 'Estimando…'}</strong></span>
             <span><small>Dificultad</small><strong>{presentation?.difficulty || (presentationError ? 'Sin estimar' : 'Preparando…')}</strong></span>
             <span><small>Porciones</small><strong>{recipeServings ?? 'Sin dato'}</strong></span>
             <span><small>Calorías por persona</small><strong>{recipe.caloriesPerServing == null ? 'Sin dato' : `${number(recipe.caloriesPerServing)} kcal`}</strong></span>

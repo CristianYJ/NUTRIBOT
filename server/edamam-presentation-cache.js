@@ -4,7 +4,8 @@ import { mealLabel, validatePresentationInput } from './edamam-presentation.js';
 
 const version = 1;
 const fingerprint = value => createHash('sha256').update(JSON.stringify([version, value])).digest('hex');
-const detailHash = recipe => fingerprint([recipe.title, recipe.ingredientLines, recipe.time, recipe.meal, recipe.mealTypes]);
+const detailHash = (recipe, kind = 'detail') => fingerprint([recipe.title, recipe.ingredientLines,
+  recipe.time, recipe.meal, recipe.mealTypes, ...(kind === 'detail' && recipe.time == null ? ['estimated-time-v1'] : [])]);
 
 export async function getCachedRecipePresentation(input, store) {
   if (!input?.uri || !store?.getEdamamPresentation) return null;
@@ -19,7 +20,7 @@ export async function cachedRecipePresentation(input, options, store, present) {
     return present(recipe, options);
   const uri = validateEdamamUri(input.uri);
   const kind = input.kind === 'shopping' ? 'shopping' : 'detail';
-  const hash = detailHash(recipe);
+  const hash = detailHash(recipe, kind);
   const cached = await store.getEdamamPresentation(uri, kind, hash);
   if (cached) return cached;
   const result = await present(recipe, options);

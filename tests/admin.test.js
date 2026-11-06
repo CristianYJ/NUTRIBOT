@@ -26,8 +26,11 @@ test('admin endpoints require an account with the database admin role', async t 
     adminSummary: async () => ({ total24h: 0 }),
     adminUsersSummary: async () => ({ total: 1 }),
     adminApiSummary: async () => ({ calls: [] }),
+    listSystemLogs: async () => ({ items: [{ reference: '1', category: 'server', action: 'server_started',
+      severity: 'info', accountId: null, detail: null, createdAt: '2026-11-04T12:00:00Z' }], nextOffset: null }),
     findAdminAccount: async query => ({ account: { id: 7, email: query }, recent: [] }),
     adminAccountDetail: async () => ({ effectivePlan: 'Staff' }),
+    adminBillingTransactions: async id => { assert.equal(id, 7); return []; },
   };
   const base = await start(t, { store });
   const headers = { Cookie: `nutribot_session=${'a'.repeat(64)}` };
@@ -41,6 +44,12 @@ test('admin endpoints require an account with the database admin role', async t 
   assert.deepEqual((await (await fetch(base + '/api/admin/account?q=admin@example.test', { headers })).json()).account,
     { id: 7, email: 'admin@example.test' });
   assert.equal((await fetch(base + '/api/admin/apis', { headers })).status, 200);
+  assert.equal((await fetch(base + '/api/admin/system-logs.pdf')).status, 401);
+  assert.equal((await fetch(base + '/api/admin/system-logs', { headers })).status, 200);
+  const pdf = await fetch(base + '/api/admin/system-logs.pdf', { headers });
+  assert.equal(pdf.status, 200);
+  assert.equal(pdf.headers.get('content-type'), 'application/pdf');
+  assert.match(Buffer.from(await pdf.arrayBuffer()).toString('latin1', 0, 8), /^%PDF-1\.4/);
   assert.equal((await fetch(base + '/api/admin/summary?period=decade', { headers })).status, 400);
   assert.equal((await fetch(base + '/api/admin/summary?period=year&year=2025', { headers })).status, 400);
 });

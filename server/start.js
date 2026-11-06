@@ -6,8 +6,9 @@ import { connectionInfo, printConnection, publicDeployment } from "./network.js"
 import { createPasswordMailer } from './password-mail.js';
 
 export async function startNutribot(development = false) {
-  let store, api, vite;
+  let store, api, vite, billingTimer;
   async function stop() {
+    if (billingTimer) clearInterval(billingTimer);
     if (vite) await vite.close();
     if (api)
       await new Promise((resolve) => {
@@ -26,6 +27,9 @@ export async function startNutribot(development = false) {
       ? randomBytes(32).toString("hex")
       : deployment?.proxySecret;
     store = await openDatabase({ adminEmail: config.adminEmail });
+    await store.expireBilling();
+    billingTimer = setInterval(() => { void store.expireBilling().catch(() => {}); }, 60_000);
+    billingTimer.unref();
     api = createAppServer({
       ...config,
       store,
@@ -37,6 +41,7 @@ export async function startNutribot(development = false) {
       api.once("error", reject);
       api.listen(8787, development || deployment ? "127.0.0.1" : "0.0.0.0", resolve);
     });
+    await store.recordSystemEvent?.('server_started').catch(() => {});
     if (development) {
       const { createServer } = await import("vite");
       vite = await createServer({
@@ -82,6 +87,7 @@ export async function startNutribot(development = false) {
   }
   for (const signal of ["SIGINT", "SIGTERM"])
     process.on(signal, async () => {
+      await store?.recordSystemEvent?.('server_stopped').catch(() => {});
       await stop();
       process.exit(0);
     });

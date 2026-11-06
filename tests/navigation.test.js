@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readNavigation, navigationUrl, openRecipeInHistory, closeRecipeInHistory } from "../src/navigation.js";
+import { readNavigation, navigationUrl, openRecipeInHistory, closeRecipeInHistory,
+  openPlanOfferInHistory, closePlanOfferInHistory, consumePlanOfferInHistory } from "../src/navigation.js";
 import { readChat, writeChat } from "../src/chat-session.js";
 import { validateChat } from "../server/chat.js";
 
@@ -90,6 +91,22 @@ test('a directly opened recipe closes inside the app; changing its recipe does n
   assert.deepEqual(readNavigation(new URL('https://nutribot.test/?recipe=ai-1&servings=999#assistant')),
     {page:'assistant',recipeId:'ai-1',servings:1});
   assert.deepEqual(readNavigation(new URL('https://nutribot.test/?recipe=%3Cscript%3E#assistant')),{page:'assistant'});
+});
+
+test('plan offer uses one history entry so mobile Back closes it without leaving chat', () => {
+  const browser = fakeBrowser('https://nutribot.test/#assistant');
+  openPlanOfferInHistory(browser);
+  openPlanOfferInHistory(browser);
+  assert.equal(browser.history.length, 2);
+  assert.equal(browser.history.state.planOffer, true);
+  assert.equal(closePlanOfferInHistory(browser), true);
+  assert.equal(browser.history.state, null);
+  assert.deepEqual(readNavigation(new URL(browser.location.href)), { page: 'assistant' });
+  browser.history.forward();
+  assert.equal(browser.history.state.planOffer, true);
+  consumePlanOfferInHistory(browser);
+  assert.equal(browser.history.state, null);
+  assert.equal(closePlanOfferInHistory(browser), false);
 });
 
 test("chat reload resolves recipes from the database and preserves the draft; removed recipes stay removed", () => {

@@ -18,6 +18,8 @@ import { presentEdamamRecipe, presentEdamamChoices, mealLabel } from './edamam-p
 import { cachedRecipePresentation, cachedChoicePresentations, getCachedRecipePresentation } from './edamam-presentation-cache.js';
 import { hydrateEdamamMeals } from './meals.js';
 import { adminPeriods, adminPeriodYears } from '../src/admin-periods.js';
+import { systemLogsPdf } from './admin-system-pdf.js';
+import { createWompi, verifyWompiWebhook } from './wompi.js';
 
 const dist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -48,6 +50,11 @@ export function createAppServer({
   usdaApiKey,
   edamamAppId,
   edamamAppKey,
+  wompiAppId,
+  wompiApiSecret,
+  wompiRecurringEnabled = false,
+  wompiWebhookUrl,
+  wompiFetch = fetch,
   edamamFetch = fetch,
   edamamPlan = planEdamam,
   edamamPresent = presentEdamamRecipe,
@@ -99,6 +106,15 @@ export function createAppServer({
   const trackedUsdaFetch = trackedFetch('usda', usdaFetch);
   const edamam = createEdamam({ appId: edamamAppId, appKey: edamamAppKey,
     fetchImpl: trackedFetch('edamam', edamamFetch) });
+  const wompi = createWompi({ appId: wompiAppId, secret: wompiApiSecret, fetchImpl: wompiFetch });
+  let webhookEndpoint = null;
+  try {
+    const candidate = new URL(wompiWebhookUrl);
+    if (candidate.protocol === 'https:' && !candidate.username && !candidate.password &&
+        !candidate.search && !candidate.hash && candidate.pathname === '/api/billing/wompi/webhook')
+      webhookEndpoint = candidate;
+  } catch { /* A missing or invalid URL leaves local checkout unavailable. */ }
+  const billingReady = wompi.configured && wompiRecurringEnabled && (network.public || Boolean(webhookEndpoint));
   let active = 0;
   const handle = async (req, res) => {
     let store = rootStore;
@@ -113,8 +129,32 @@ export function createAppServer({
       res.setHeader("Strict-Transport-Security", "max-age=31536000");
     }
     try {
-      const context = requestContext(req, network);
+      // Wompi can reach a local development server through a public HTTPS
+      // tunnel. Only its exact signed webhook path may use the tunnel host.
+      const localTunnelWebhook = !network.public && webhookEndpoint &&
+        req.method === 'POST' && req.url === '/api/billing/wompi/webhook' &&
+        req.headers.host === webhookEndpoint.host && !req.headers.origin;
+      const context = localTunnelWebhook ? { origin: 'http://localhost:8787' } : requestContext(req, network);
       const url = new URL(req.url, context.origin);
+      if (url.pathname === '/api/billing/wompi/webhook' && req.method === 'POST') {
+        if (!wompi.configured) throw new AppError('PAYMENTS_UNAVAILABLE', 'Pagos no configurados.', 503);
+        const raw = await readRaw(req, 16000);
+        if (!verifyWompiWebhook(raw, req.headers.wompi_hash, wompiApiSecret))
+          throw new AppError('INVALID_SIGNATURE', 'Firma de pago inválida.', 401);
+        let event;
+        try { event = JSON.parse(raw.toString('utf8')); }
+        catch { throw new AppError('INVALID_PAYMENT', 'Datos de pago inválidos.', 400); }
+        if (event?.Aplicativo?.Id !== wompiAppId || event?.Cantidad !== 1)
+          throw new AppError('INVALID_PAYMENT', 'El pago no pertenece a NutriBot.', 400);
+        if (!event?.IdTransaccion || !/^[a-f\d-]{36}$/i.test(event.IdTransaccion))
+          throw new AppError('INVALID_PAYMENT', 'Transacción inválida.', 400);
+        const details = await wompi.getTransaction(event.IdTransaccion);
+        if (typeof event?.EnlacePago?.IdentificadorEnlaceComercio === 'string' &&
+            event.EnlacePago.IdentificadorEnlaceComercio.startsWith('nutribot-upgrade:'))
+          await rootStore.recordWompiUpgradePayment(event, details, wompi);
+        else await rootStore.recordWompiPayment(event, details);
+        return json(res, 200, { received: true });
+      }
       if (auth && (await auth.route(req, res, url, context, readJson, json)))
         return;
       if (
@@ -194,8 +234,23 @@ export function createAppServer({
             accountId: url.searchParams.get('accountId') ? Number(url.searchParams.get('accountId')) : null }));
         if (url.pathname === '/api/admin/account') return json(res, 200,
           await (async () => { const found = await rootStore.findAdminAccount(url.searchParams.get('q'));
-            return found.account ? { ...found, detail: await rootStore.adminAccountDetail(found.account.id) } : found; })());
+            return found.account ? { ...found, detail: { ...await rootStore.adminAccountDetail(found.account.id),
+              transactions: await rootStore.adminBillingTransactions(found.account.id) } } : found; })());
         if (url.pathname === '/api/admin/apis') return json(res, 200, await rootStore.adminApiSummary(period, year));
+        if (url.pathname === '/api/admin/system-logs' || url.pathname === '/api/admin/system-logs.pdf') {
+          const days = Number(url.searchParams.get('days') || 7);
+          const category = url.searchParams.get('category') || 'all';
+          const pdf = url.pathname.endsWith('.pdf');
+          const result = await rootStore.listSystemLogs({ days, category,
+            offset: pdf ? 0 : Number(url.searchParams.get('offset') || 0), limit: pdf ? 500 : 50 });
+          if (!pdf) return json(res, 200, result);
+          const content = systemLogsPdf(result.items, { days, category });
+          res.writeHead(200, { 'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="nutribot-sistema-${new Date().toISOString().slice(0, 10)}.pdf"`,
+            'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+          res.end(content);
+          return;
+        }
         throw new AppError('NOT_FOUND', 'Ruta no encontrada.', 404);
       }
       const reserveUsage = async feature => {
@@ -206,6 +261,21 @@ export function createAppServer({
       if (url.pathname === '/api/plan' && req.method === 'GET') {
         if (!store?.getUsage) throw new AppError('PLAN_UNAVAILABLE', 'No se pudo consultar tu plan.', 503);
         return json(res, 200, await store.getUsage());
+      }
+      if (url.pathname === '/api/billing/status' && req.method === 'GET')
+        return json(res, 200, { configured: billingReady, ...await store.billingStatus() });
+      if (url.pathname === '/api/billing/transactions' && req.method === 'GET')
+        return json(res, 200, { items: await store.listBillingTransactions() });
+      if (url.pathname === '/api/billing/upgrade-quote' && req.method === 'GET')
+        return json(res, 200, await store.upgradeQuote());
+      if (url.pathname === '/api/billing/upgrade' && req.method === 'POST') {
+        if (!billingReady || !webhookEndpoint) throw new AppError('PAYMENTS_UNAVAILABLE', 'El ajuste de plan aún no está configurado.', 503);
+        return json(res, 200, await store.startBillingUpgrade(wompi, wompiWebhookUrl));
+      }
+      if (url.pathname === '/api/billing/subscribe' && req.method === 'POST') {
+        if (!billingReady) throw new AppError('PAYMENTS_UNAVAILABLE', 'Los pagos recurrentes aún no están habilitados.', 503);
+        const body = await readJson(req, 1000);
+        return json(res, 200, await store.createBillingLink(body?.plan, wompi));
       }
       if (url.pathname === '/api/meals/today' && req.method === 'GET') {
         const data = await store.getTodayMeals();
@@ -566,7 +636,7 @@ export function createAppServer({
                 meal: mealLabel(plan.mealType) || choices[index]?.meal || mealLabel(recipe.mealTypes?.[0]),
               }));
               result = { type: found.recipes.length ? 'success' : 'empty', source: 'edamam', recipes: [], externalRecipes, servings: plan.servings,
-                text: found.recipes.length ? `Encontré ${found.recipes.length === 2 ? 'dos opciones distintas' : 'una opción'} para ${plan.servings} ${plan.servings === 1 ? 'persona' : 'personas'} en Edamam. Revisa los ingredientes y el enlace de preparación.` : 'No encontré recetas que cumplan los filtros. Prueba con otros ingredientes o más tiempo.' };
+                text: found.recipes.length ? `Encontré ${found.recipes.length === 2 ? 'dos opciones distintas' : 'una opción'} para ${plan.servings} ${plan.servings === 1 ? 'persona' : 'personas'}. Revisa los ingredientes y los pasos de preparacion.` : 'No encontré recetas que cumplan los filtros. Prueba con otros ingredientes o más tiempo.' };
             } else result = { type: plan.intent === 'needs_review' ? 'review' : 'conversation', source: 'gemini', recipes: [], text: plan.reply || 'Cuéntame qué te gustaría cocinar.' };
           } else { recipeTrace.stage = 'gemini_recipe'; result = await generate(input, { apiKey, model, signal: controller.signal, fetchImpl: trackedGeminiFetch }); }
           if (!res.destroyed) {
@@ -660,6 +730,8 @@ export function createAppServer({
           constraint ? 400 : 503,
         );
       }
+      if (error instanceof AppError && error.status >= 500 && rootStore?.recordSystemEvent)
+        await rootStore.recordSystemEvent('request_error', 'error', error.code).catch(() => {});
       if (!res.destroyed && !res.headersSent)
         json(res, error instanceof AppError ? error.status : 500, {
           error: error instanceof AppError ? error.code : "INTERNAL_ERROR",
@@ -673,6 +745,17 @@ export function createAppServer({
   };
   const handler = (req, res) => requestMetrics.run({ profileId: null }, () => handle(req, res));
   return createServer({ headersTimeout: 15000, requestTimeout: 30000, maxHeaderSize: 16384 }, handler);
+}
+
+async function readRaw(req, limit) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new AppError('BODY_TOO_LARGE', 'La solicitud es demasiado grande.', 413);
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
 
 async function readJson(req, limit = 150000) {

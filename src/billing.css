@@ -1,0 +1,27 @@
+.billing-panel{margin:1.25rem 0;padding:1.5rem;border:1px solid #dce8dc;border-radius:22px;background:#fff;}
+.billing-panel h2{margin:0 0 .75rem;font-size:1.4rem;}
+.billing-panel p{line-height:1.55;}
+.billing-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;margin:1rem 0;}
+.billing-option{padding:1rem;border:1px solid #dce8dc;border-radius:14px;background:#f8fbf8;}
+.billing-option h3{margin:0 0 .5rem;}
+.billing-option p{margin:.5rem 0;}
+.billing-options button{border:0;border-radius:12px;background:#006b51;color:white;padding:.85rem 1.1rem;font:inherit;font-weight:700;cursor:pointer;}
+.billing-options button:disabled{opacity:.55;cursor:wait;}
+.billing-option.preferred{outline:3px solid #9cdbb3;outline-offset:3px;}
+@media(max-width:580px){.billing-options{grid-template-columns:1fr;}}
+.billing-upgrade{margin:1rem 0;padding:1rem;border:1px solid #dce8dc;border-radius:14px;background:#f5faf6;}
+.billing-upgrade button{border:0;border-radius:12px;background:#006b51;color:white;padding:.75rem 1rem;font:inherit;font-weight:700;cursor:pointer;}
+.billing-upgrade button:disabled{opacity:.55;cursor:wait;}
+.billing-note{font-size:.9rem;color:#53675b;}
+.billing-test-label{display:inline-block;margin:.25rem 0 .75rem;padding:.4rem .7rem;border-radius:999px;background:#f3e8ff;color:#6b21a8;font-size:.88rem;font-weight:700;}
+.billing-transactions{margin-top:1.5rem;}
+.billing-transactions h3{margin:0 0 .75rem;font-size:1.15rem;}
+.billing-transactions-heading{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap;}
+.billing-transactions-heading h3{margin:0;}
+.billing-transactions-heading .btn{font-size:.8rem;padding:.5rem .75rem;}
+.billing-export-row{color:#006b51;font:inherit;font-weight:700;cursor:pointer;}
+.billing-transactions-scroll{max-width:100%;overflow-x:auto;}
+.billing-transactions table{width:100%;border-collapse:collapse;text-align:left;font-size:.9rem;}
+.billing-transactions th,.billing-transactions td{padding:.7rem .8rem;border-bottom:1px solid #e5ece5;vertical-align:top;white-space:nowrap;}
+.billing-transactions th{color:#52685c;font-weight:700;}
+.billing-transactions code{font-size:.8rem;user-select:all;}

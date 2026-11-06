@@ -306,7 +306,7 @@ export default function LandingPage({ brand }) {
               <span className="landing-plan-badge">Recomendado</span>
               <h3>{planCatalog.nutripro.name}</h3>
               <div className="landing-price">
-                $2.99<small> / mesl</small>
+                $2.99<small> / mes</small>
               </div>
               <Checks
                 items={[
@@ -318,9 +318,7 @@ export default function LandingPage({ brand }) {
                   "El mismo seguimiento nutricional y de comidas",
                 ]}
               />
-              <button className="landing-cta" disabled>
-                Próximamente
-              </button>
+              <button className="landing-cta" disabled>Próximamente</button>
             </article>
             <article className="landing-card landing-plan-max">
               <h3>{planCatalog.nutripro_plus.name}</h3>
@@ -337,9 +335,7 @@ export default function LandingPage({ brand }) {
                   "Seguimiento nutricional personalizado",
                 ]}
               />
-              <button className="landing-cta secondary" disabled>
-                Próximamente
-              </button>
+              <button className="landing-cta secondary" disabled>Próximamente</button>
             </article>
           </div>
         </section>

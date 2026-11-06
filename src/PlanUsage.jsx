@@ -25,10 +25,11 @@ export function usePlanUsage() {
   return { usage, usageError: error, refreshUsage };
 }
 
-export default function PlanUsage({ usage, error, onRefresh, compact = false }) {
+export default function PlanUsage({ usage, error, onUpgrade, compact = false }) {
   if (compact) return usage ? <p className="plan-usage-inline" role="status">{usage.plan.name}: {usage.recipes.limit === null ? `${usage.recipes.used} generaciones esta semana · ilimitadas` : `${usage.recipes.used}/${usage.recipes.limit} generaciones esta semana`}{usage.recipes.pending ? ` · ${usage.recipes.pending} en curso` : ''}</p> : null;
   return <section className="plan-usage-panel" aria-label="Mi plan y consumo">
-    <div className="plan-usage-heading"><h2>Mi plan{usage ? ` · ${usage.plan.name}` : ''}</h2><button type="button" className="text-btn" onClick={onRefresh}>Actualizar cupo</button></div>
+    <div className="plan-usage-heading"><h2>Mi plan{usage ? ` · ${usage.plan.name}` : ''}</h2>
+      {['basico', 'nutripro'].includes(usage?.plan?.code) && <button type="button" className="plan-upgrade-button" onClick={onUpgrade}>Mejorar plan</button>}</div>
     {error ? <p role="alert">{error}</p> : !usage ? <p role="status">Consultando tu plan…</p> : <>
       <div className="plan-usage-counters">{[['recipes', 'Generaciones de recetas', 'esta semana'], ['vision', 'Fotos con Nutri-Vision', 'este mes']].map(([key, label, period]) => <div key={key}>
         <strong>{label}</strong><p>{usage[key].limit === null ? `${usage[key].used} usadas ${period} · sin límite` : `${usage[key].used} de ${usage[key].limit} usadas ${period}`}</p>

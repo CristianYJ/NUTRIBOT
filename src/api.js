@@ -54,6 +54,7 @@ export async function requestRecipe({ maxTime, message, mode, history, signal, r
   }
   if (!response.ok) {
     const error = new Error(result.text || "No se pudo generar la receta. Inténtalo de nuevo.");
+    error.code = typeof result.error === 'string' ? result.error : null;
     error.requestId = typeof result.requestId === 'string' ? result.requestId : null;
     throw error;
   }

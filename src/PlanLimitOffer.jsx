@@ -54,7 +54,7 @@ export default function PlanLimitOffer({ open, currentPlan, reason = 'upgrade', 
     }
     if (status.state === 'pending') {
       if (status.plan === plan.code && status.linkUrl) { continueInWompi(status.linkUrl, plan.code); return; }
-      setError('Ya tienes una afiliación en proceso para otro plan. Complétala antes de elegir uno nuevo.'); return;
+      setError('Ya tienes una suscripción en proceso para otro plan. Complétala antes de elegir uno nuevo.'); return;
     }
     if (status.upgrade?.state === 'pending') {
       if (status.upgrade.linkUrl) continueInWompi(status.upgrade.linkUrl, 'nutripro_plus');
@@ -87,7 +87,7 @@ export default function PlanLimitOffer({ open, currentPlan, reason = 'upgrade', 
     onClick={event => { if (event.target === dialog.current) onClose(); }}>
     <button type="button" className="plan-limit-close" aria-label="Cerrar planes" onClick={onClose}>×</button>
     <h2 id="plan-limit-title">{reason === 'limit' ? 'Llegaste al límite' : 'Elige tu nuevo plan'}</h2>
-    {status && !status.configured && <p className="plan-limit-error" role="status">Este servidor todavía no tiene habilitado el inicio de pagos. Puedes ver los planes, pero la afiliación estará disponible cuando se complete la configuración.</p>}
+    {status && !status.configured && <p className="plan-limit-error" role="status">Este servidor todavía no tiene habilitado el inicio de pagos. Puedes ver los planes, pero la suscripción estará disponible cuando se complete la configuración.</p>}
     <div className="plan-limit-options">
       {choices.map(plan => <article className={`plan-limit-card ${plan.code === 'nutripro' ? 'featured' : 'max'}`} key={plan.code}>
         {plan.code === 'nutripro' && <span className="plan-limit-badge">Recomendado</span>}

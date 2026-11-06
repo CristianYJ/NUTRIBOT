@@ -20,6 +20,8 @@
 .billing-transactions-heading h3{margin:0;}
 .billing-transactions-heading .btn{font-size:.8rem;padding:.5rem .75rem;}
 .billing-export-row{color:#006b51;font:inherit;font-weight:700;cursor:pointer;}
+.billing-continue{border:1px solid #006b51;border-radius:10px;background:#006b51;color:#fff;padding:.45rem .8rem;font:inherit;font-weight:700;cursor:pointer;}
+.billing-continue:disabled{opacity:.6;cursor:wait;}
 .billing-transactions-scroll{max-width:100%;overflow-x:auto;}
 .billing-transactions table{width:100%;border-collapse:collapse;text-align:left;font-size:.9rem;}
 .billing-transactions th,.billing-transactions td{padding:.7rem .8rem;border-bottom:1px solid #e5ece5;vertical-align:top;white-space:nowrap;}

@@ -349,7 +349,7 @@ export default function AdminPortal() {
               toRow={recipeLogRow} file={`nutribot-cuenta-${accountResult.account.id}-recetas.csv`} emptyText="Sin eventos recientes." />
             <AccountDataTable title="Llamadas externas recientes" items={accountResult.detail?.calls} headers={apiCallHeaders}
               toRow={apiCallRow} file={`nutribot-cuenta-${accountResult.account.id}-apis.csv`} emptyText="Sin llamadas medidas." />
-            <BillingTransactions items={accountResult.detail?.transactions} />
+            <BillingTransactions items={accountResult.detail?.transactions} admin />
           </section> : <p className="admin-empty">No se encontró esa cuenta.</p>)}
         </>}
         {view === 'system' && <><div className="admin-section-heading"><h2>Sistema</h2><p>Configuración observada por este servidor. “Configurado” no prueba disponibilidad externa.</p></div>

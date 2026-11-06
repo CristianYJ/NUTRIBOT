@@ -3,7 +3,7 @@ import { AppError } from './recipes.js';
 import { wompiPrices } from './wompi.js';
 
 const amountCents = value => Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) : null;
-const publicState = row => row && ({ plan: row.plan_code, state: row.state,
+const publicState = row => row && ({ plan: row.plan_code, state: row.state, linkId: row.link_id,
   paidUntil: row.paid_until, lastPaidAt: row.last_paid_at, productive: row.productive,
   linkUrl: row.state === 'pending' ? row.link_url : null });
 const upgradeWindowMs = 3 * 24 * 60 * 60 * 1000;
@@ -15,7 +15,7 @@ const upgradeAmount = (subscription, now = new Date()) => {
     throw new AppError('UPGRADE_UNAVAILABLE', 'El período actual está por vencer. Espera al próximo período para cambiar de plan.', 409);
   return Math.max(1, Math.min(700, Math.round(700 * remaining / (end - start))));
 };
-const upgradeState = row => row && ({ state: row.state, amountCents: row.amount_cents,
+const upgradeState = row => row && ({ state: row.state, linkId: row.link_id, amountCents: row.amount_cents,
   paidUntil: row.paid_until, linkUrl: row.state === 'pending' ? row.link_url : null,
   linkExpiresAt: row.state === 'pending' ? row.link_expires_at : null,
   reminderAt: new Date(new Date(row.paid_until).getTime() - upgradeWindowMs).toISOString() });
@@ -51,7 +51,7 @@ export function createWompiBilling({ transaction, profileId }) {
       return transactionsFor(id);
     },
     billingStatus: () => transaction(async c => {
-      const row = (await c.query(`SELECT plan_code,state,paid_until,last_paid_at,productive,link_url FROM wompi_subscriptions
+      const row = (await c.query(`SELECT plan_code,state,paid_until,last_paid_at,productive,link_id,link_url FROM wompi_subscriptions
         WHERE profile_id=$1 AND state IN ('pending','active','review') ORDER BY created_at DESC LIMIT 1`, [profileId()])).rows[0];
       const upgrade = (await c.query(`SELECT * FROM wompi_upgrades WHERE profile_id=$1 AND state IN ('pending','active','review') ORDER BY created_at DESC LIMIT 1`, [profileId()])).rows[0];
       return { ...(publicState(row) || { state: 'none' }), upgrade: upgradeState(upgrade) || null };
@@ -97,7 +97,7 @@ export function createWompiBilling({ transaction, profileId }) {
       }
       const upgrade = (await c.query(`SELECT * FROM wompi_upgrades WHERE profile_id=$1 AND state='active' FOR UPDATE`, [profileId()])).rows[0];
       if (upgrade && (plan !== 'nutripro_plus' || new Date(upgrade.paid_until).getTime() - Date.now() > upgradeWindowMs))
-        throw new AppError('UPGRADE_UNAVAILABLE', 'La nueva afiliación NutriMax estará disponible tres días antes del vencimiento.', 409);
+        throw new AppError('UPGRADE_UNAVAILABLE', 'La nueva suscripción NutriMax estará disponible tres días antes del vencimiento.', 409);
       const day = Math.min(28, upgrade ? new Date(upgrade.paid_until).getUTCDate() : new Date().getUTCDate());
       const link = await wompi.createRecurringLink({ plan, day });
       await c.query(`INSERT INTO wompi_subscriptions(id,profile_id,plan_code,amount_cents,link_id,link_url,productive)
@@ -122,7 +122,7 @@ export function createWompiBilling({ transaction, profileId }) {
           amountCents(event.Monto) !== subscription.amount_cents ||
           amountCents(transactionDetails.monto) !== subscription.amount_cents)
         throw new AppError('INVALID_PAYMENT', 'El pago no coincide con la suscripción.', 400);
-      if (subscription.state === 'ended') throw new AppError('INVALID_PAYMENT', 'Esta afiliación ya fue cancelada.', 409);
+      if (subscription.state === 'ended') throw new AppError('INVALID_PAYMENT', 'Esta suscripción ya fue cancelada.', 409);
       const paidAt = new Date(event.FechaTransaccion);
       if (!Number.isFinite(paidAt.getTime()) || paidAt.getTime() > Date.now() + 300000)
         throw new AppError('INVALID_PAYMENT', 'La fecha del pago no es válida.', 400);

@@ -5,6 +5,7 @@ import PantryWorkspace from "./PantryWorkspace.jsx";
 import { authenticatedFetch } from "./auth-api.js";
 import AuthPage from "./AuthPage.jsx";
 import ResetPasswordPage from './ResetPasswordPage.jsx';
+import PaymentReturnPage from './PaymentReturnPage.jsx';
 import LandingPage from "./LandingPage.jsx";
 import PrivacyPage from "./PrivacyPage.jsx";
 import { publicPage } from "./public-navigation.js";
@@ -149,6 +150,8 @@ export default function App() {
       /* storage can be disabled */
     }
   }
+  if (location.pathname === '/pago')
+    return <PaymentReturnPage authenticated={auth?.authenticated} loading={!auth} />;
   if (entryPage === "privacy") return <PrivacyPage />;
   if (entryPage === 'reset') return <ResetPasswordPage />;
   if (entryPage === "landing" && !auth?.authenticated)

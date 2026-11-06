@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { openDatabase } from "./database.js";
 import { connectionInfo, printConnection, publicDeployment } from "./network.js";
 import { createPasswordMailer } from './password-mail.js';
+import { createPlanWelcomeMailer } from './plan-mail.js';
 
 export async function startNutribot(development = false) {
   let store, api, vite, billingTimer;
@@ -35,6 +36,7 @@ export async function startNutribot(development = false) {
       store,
       network,
       sendPasswordResetEmail: createPasswordMailer(),
+      sendPlanWelcomeEmail: createPlanWelcomeMailer({ origin: network.origins?.[0] || 'http://localhost:8787' }),
       serveStatic: !development,
     });
     await new Promise((resolve, reject) => {

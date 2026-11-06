@@ -60,6 +60,7 @@ export function createAppServer({
   edamamPresent = presentEdamamRecipe,
   edamamChoices = presentEdamamChoices,
   sendPasswordResetEmail = null,
+  sendPlanWelcomeEmail = null,
   usdaFetch = fetch,
   model = "gemini-3.5-flash-lite",
   generate = generateWithGemini,
@@ -114,12 +115,14 @@ export function createAppServer({
         !candidate.search && !candidate.hash && candidate.pathname === '/api/billing/wompi/webhook')
       webhookEndpoint = candidate;
   } catch { /* A missing or invalid URL leaves local checkout unavailable. */ }
-  const billingReady = wompi.configured && wompiRecurringEnabled && (network.public || Boolean(webhookEndpoint));
+  const billingReady = wompi.configured && wompiRecurringEnabled && Boolean(webhookEndpoint) &&
+    (!network.public || webhookEndpoint.origin === network.origins?.[0]);
   let active = 0;
   const handle = async (req, res) => {
     let store = rootStore;
     let session = null;
     let recipeTrace = null;
+    let webhookAttempt = false;
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
@@ -136,6 +139,7 @@ export function createAppServer({
         req.headers.host === webhookEndpoint.host && !req.headers.origin;
       const context = localTunnelWebhook ? { origin: 'http://localhost:8787' } : requestContext(req, network);
       const url = new URL(req.url, context.origin);
+      webhookAttempt = url.pathname === '/api/billing/wompi/webhook' && req.method === 'POST';
       if (url.pathname === '/api/billing/wompi/webhook' && req.method === 'POST') {
         if (!wompi.configured) throw new AppError('PAYMENTS_UNAVAILABLE', 'Pagos no configurados.', 503);
         const raw = await readRaw(req, 16000);
@@ -149,10 +153,18 @@ export function createAppServer({
         if (!event?.IdTransaccion || !/^[a-f\d-]{36}$/i.test(event.IdTransaccion))
           throw new AppError('INVALID_PAYMENT', 'Transacción inválida.', 400);
         const details = await wompi.getTransaction(event.IdTransaccion);
+        let recorded;
         if (typeof event?.EnlacePago?.IdentificadorEnlaceComercio === 'string' &&
             event.EnlacePago.IdentificadorEnlaceComercio.startsWith('nutribot-upgrade:'))
-          await rootStore.recordWompiUpgradePayment(event, details, wompi);
-        else await rootStore.recordWompiPayment(event, details);
+          recorded = await rootStore.recordWompiUpgradePayment(event, details, wompi);
+        else recorded = await rootStore.recordWompiPayment(event, details);
+        if (recorded?.welcome && sendPlanWelcomeEmail) {
+          try { await sendPlanWelcomeEmail(recorded.welcome); }
+          catch (error) {
+            console.error('Plan welcome email delivery failed:', error?.code || 'MAIL_ERROR');
+            await rootStore.recordSystemEvent?.('welcome_email_failed', 'warning', 'MAIL_ERROR').catch(() => {});
+          }
+        }
         return json(res, 200, { received: true });
       }
       if (auth && (await auth.route(req, res, url, context, readJson, json)))
@@ -678,7 +690,7 @@ export function createAppServer({
           throw new AppError("NOT_FOUND", "No encontrado.", 404);
         const target = path.resolve(
           dist,
-          "." + (pathname === "/" ? "/index.html" : pathname),
+          "." + (["/", "/pago"].includes(pathname) ? "/index.html" : pathname),
         );
         const relative = path.relative(dist, target);
         if (relative.startsWith("..") || path.isAbsolute(relative) || !mime[path.extname(target)])
@@ -730,6 +742,8 @@ export function createAppServer({
           constraint ? 400 : 503,
         );
       }
+      if (webhookAttempt && rootStore?.recordSystemEvent)
+        await rootStore.recordSystemEvent('wompi_webhook_rejected', 'warning', error instanceof AppError ? error.code : 'INTERNAL_ERROR').catch(() => {});
       if (error instanceof AppError && error.status >= 500 && rootStore?.recordSystemEvent)
         await rootStore.recordSystemEvent('request_error', 'error', error.code).catch(() => {});
       if (!res.destroyed && !res.headersSent)

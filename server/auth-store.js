@@ -141,7 +141,7 @@ export function createAuthStore(pool, transaction) {
       const normalized = normalizeEmail(email);
       return transaction(async c => {
         await c.query("DELETE FROM password_reset_tokens WHERE created_at < now() - interval '1 day'");
-        const profile = (await c.query('SELECT id,email FROM profiles WHERE email=$1 FOR UPDATE', [normalized])).rows[0];
+        const profile = (await c.query('SELECT id,email,name FROM profiles WHERE email=$1 FOR UPDATE', [normalized])).rows[0];
         if (!profile) return null;
         const recent = (await c.query("SELECT count(*)::integer AS n FROM password_reset_tokens WHERE profile_id=$1 AND created_at > now() - interval '1 hour'", [profile.id])).rows[0].n;
         if (recent >= 3) return null;
@@ -150,7 +150,7 @@ export function createAuthStore(pool, transaction) {
         await c.query("UPDATE password_reset_tokens SET consumed_at=now() WHERE profile_id=$1 AND consumed_at IS NULL", [profile.id]);
         await c.query("INSERT INTO password_reset_tokens(token_hash,profile_id,requested_by_admin_id,expires_at) VALUES($1,$2,$3,now()+interval '20 minutes')",
           [tokenHash, profile.id, requestedByAdminId]);
-        return { token, tokenHash, email: profile.email };
+        return { token, tokenHash, email: profile.email, name: profile.name };
       });
     },
     cancelPasswordReset(tokenHash) {

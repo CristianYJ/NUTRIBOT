@@ -22,15 +22,27 @@ const upgradeState = row => row && ({ state: row.state, amountCents: row.amount_
 
 export function createWompiBilling({ transaction, profileId }) {
   const transactionsFor = id => transaction(async c => (await c.query(`
-    SELECT p.transaction_id,p.amount_cents,p.paid_at,s.plan_code,s.productive,'recurring' AS kind
-    FROM wompi_payments p JOIN wompi_subscriptions s ON s.id=p.subscription_id
-    WHERE s.profile_id=$1
-    UNION ALL
-    SELECT u.transaction_id,u.amount_cents,u.paid_at,'nutripro_plus' AS plan_code,false AS productive,'upgrade' AS kind
-    FROM wompi_upgrades u WHERE u.profile_id=$1 AND u.transaction_id IS NOT NULL
-    ORDER BY paid_at DESC,transaction_id DESC LIMIT 200`, [id])).rows.map(row => ({
-      transactionId: row.transaction_id, amountCents: row.amount_cents,
-      paidAt: row.paid_at, plan: row.plan_code, productive: row.productive, kind: row.kind,
+    SELECT * FROM (
+      SELECT 'payment:' || p.transaction_id AS record_id,p.transaction_id,s.link_id AS reference_id,p.amount_cents,p.paid_at AS occurred_at,
+        s.plan_code,s.productive,'recurring' AS kind,'confirmed' AS status
+      FROM wompi_payments p JOIN wompi_subscriptions s ON s.id=p.subscription_id WHERE s.profile_id=$1
+      UNION ALL
+      SELECT 'upgrade-payment:' || u.transaction_id,u.transaction_id,u.link_id,u.amount_cents,u.paid_at,
+        'nutripro_plus',false,'upgrade','confirmed'
+      FROM wompi_upgrades u WHERE u.profile_id=$1 AND u.transaction_id IS NOT NULL
+      UNION ALL
+      SELECT 'subscription:' || s.id::text,NULL,s.link_id,s.amount_cents,s.created_at,
+        s.plan_code,s.productive,'subscription',
+        CASE s.state WHEN 'ended' THEN 'cancelled' ELSE s.state END
+      FROM wompi_subscriptions s WHERE s.profile_id=$1 AND s.state IN ('pending','review','ended')
+      UNION ALL
+      SELECT 'upgrade:' || u.id::text,NULL,u.link_id,u.amount_cents,u.created_at,
+        'nutripro_plus',false,'upgrade',
+        CASE u.state WHEN 'expired' THEN 'unconfirmed' ELSE u.state END
+      FROM wompi_upgrades u WHERE u.profile_id=$1 AND u.transaction_id IS NULL AND u.state IN ('pending','review','expired')
+    ) events ORDER BY occurred_at DESC,record_id DESC LIMIT 200`, [id])).rows.map(row => ({
+      recordId: row.record_id, transactionId: row.transaction_id, referenceId: row.reference_id, amountCents: row.amount_cents,
+      paidAt: row.occurred_at, plan: row.plan_code, productive: row.productive, kind: row.kind, status: row.status,
     })), true);
   return {
     listBillingTransactions: () => transactionsFor(profileId()),
@@ -129,11 +141,13 @@ export function createWompiBilling({ transaction, profileId }) {
       await c.query(`UPDATE wompi_subscriptions SET state='active',last_paid_at=$2,paid_until=$3 WHERE id=$1`,
         [subscription.id, paidAt, until]);
       await c.query(`SELECT set_config('nutribot.plan_change_reason','Cobro Wompi confirmado',true)`);
-      await c.query(`UPDATE profiles SET plan_code=$2,revision=revision+1 WHERE id=$1 AND role_code='user'`,
+      const changed = await c.query(`UPDATE profiles SET plan_code=$2,revision=revision+1 WHERE id=$1 AND role_code='user'`,
         [subscription.profile_id, subscription.plan_code]);
+      if (!changed.rowCount) throw new AppError('INVALID_PAYMENT', 'La cuenta ya no admite cambios de plan.', 409);
       if (subscription.plan_code === 'nutripro_plus')
         await c.query(`UPDATE wompi_upgrades SET state='expired' WHERE profile_id=$1 AND state='active'`, [subscription.profile_id]);
-      return { applied: true };
+      const recipient = !subscription.last_paid_at && (await c.query('SELECT name,email FROM profiles WHERE id=$1', [subscription.profile_id])).rows[0];
+      return { applied: true, ...(recipient?.email ? { welcome: { to: recipient.email, name: recipient.name, plan: subscription.plan_code } } : {}) };
     }),
     recordWompiUpgradePayment: (event, details, wompi) => transaction(async c => {
       const match = /^nutribot-upgrade:([a-f\d-]{36})$/i.exec(event?.EnlacePago?.IdentificadorEnlaceComercio || '');
@@ -153,7 +167,7 @@ export function createWompiBilling({ transaction, profileId }) {
           paidAt.getTime() > Date.now() + 300000)
         throw new AppError('INVALID_PAYMENT', 'El ajuste llegó fuera de plazo.', 400);
       const source = (await c.query('SELECT * FROM wompi_subscriptions WHERE id=$1 FOR UPDATE', [upgrade.source_subscription_id])).rows[0];
-      const profile = (await c.query('SELECT role_code,plan_code FROM profiles WHERE id=$1 FOR UPDATE', [upgrade.profile_id])).rows[0];
+      const profile = (await c.query('SELECT role_code,plan_code,name,email FROM profiles WHERE id=$1 FOR UPDATE', [upgrade.profile_id])).rows[0];
       if (!source || source.state !== 'active' || source.plan_code !== 'nutripro' ||
           new Date(source.last_paid_at).getTime() !== new Date(upgrade.source_paid_at).getTime() ||
           profile?.role_code !== 'user' || profile.plan_code !== 'nutripro')
@@ -163,7 +177,7 @@ export function createWompiBilling({ transaction, profileId }) {
       await c.query(`UPDATE wompi_upgrades SET state='active',transaction_id=$2,paid_at=$3 WHERE id=$1`, [upgrade.id, transactionId, paidAt]);
       await c.query(`SELECT set_config('nutribot.plan_change_reason','Ajuste NutriMax Wompi confirmado',true)`);
       await c.query(`UPDATE profiles SET plan_code='nutripro_plus',revision=revision+1 WHERE id=$1`, [upgrade.profile_id]);
-      return { applied: true };
+      return { applied: true, ...(profile.email ? { welcome: { to: profile.email, name: profile.name, plan: 'nutripro_plus' } } : {}) };
     }),
     expireBilling: () => transaction(async c => {
       const expired = (await c.query(`SELECT s.id,s.profile_id,s.plan_code FROM wompi_subscriptions s

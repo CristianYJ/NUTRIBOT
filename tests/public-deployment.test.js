@@ -68,6 +68,7 @@ test("public requests require the local authenticated HTTPS proxy and the exact 
     "sec-fetch-mode": undefined, "sec-fetch-dest": undefined } };
   assert.equal(requestContext(redirected, network).origin, origin);
   assert.equal(requestContext({ ...redirected, url: "/?install=1" }, network).origin, origin);
+  assert.equal(requestContext({ ...redirected, url: "/pago?idTransaccion=example" }, network).origin, origin);
   for (const url of ["/api/health", "/api/auth/session", "/assets/app.js"])
     assert.throws(() => requestContext({ ...redirected, url }, network), { code: "FORBIDDEN" });
   assert.throws(() => requestContext(request({ origin: "https://nutribot.facheritossv.com" }), network), { code: "FORBIDDEN" });

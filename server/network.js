@@ -89,19 +89,13 @@ export async function printConnection(info, port) {
   );
   if (!info.urls.length) {
     console.log(
-      "Conecta la PC a una red Wi-Fi o Ethernet privada para generar el QR del teléfono.",
+      "Conecta la PC a una red Wi-Fi o Ethernet privada para abrir Nutribot desde el teléfono.",
     );
     return;
   }
   console.log(
-    `\nTeléfono: conecta ambos dispositivos a la misma red y escanea el QR.\n${info.urls[0]}\n`,
-  );
-  console.log(
-    await QRCode.toString(info.urls[0], { type: "terminal", small: true }),
+    `\nTeléfono: conecta ambos dispositivos a la misma red y abre ${info.urls[0]}\n`,
   );
   if (info.urls.length > 1)
     console.log("Otras direcciones de esta PC:", info.urls.slice(1).join(", "));
-  console.log(
-    "Este QR abre la versión local. Para instalar la versión publicada, usa el menú de perfil → Instalar en mi teléfono.\n",
-  );
 }

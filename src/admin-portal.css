@@ -41,6 +41,14 @@
 .admin-plan-trend .admin-line-chart.compact{max-width:760px;margin:0 auto;}
 .admin-account-heading-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;}
 .admin-account-heading-actions .btn{font-size:12px;white-space:normal;}
+.admin-account-data{margin-top:22px;}
+.admin-account-data-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;}
+.admin-account-data-heading h4{margin:0;}
+.admin-account-data-heading .btn{font-size:12px;padding:8px 12px;}
+.admin-account-data .admin-table-wrap td{white-space:normal;min-width:80px;overflow-wrap:anywhere;}
+.admin-account-data .admin-table-wrap td:first-child{white-space:nowrap;}
+.admin-account-data .admin-table-wrap td:last-child{min-width:65px;}
+@media(max-width:480px){.admin-account-data-heading{align-items:flex-start;flex-direction:column;}}
 .admin-success{padding:10px 13px;border-radius:10px;background:#e8f4ed;color:#146044;font-size:12px;}
 .admin-plan-control{margin:22px 0;padding:16px;border:1px solid #e1eae3;border-radius:14px;background:#fbfdfb;}
 .admin-plan-control h4{margin:0 0 12px;}.admin-plan-control p{margin:10px 0 0;color:#64786d;font-size:11px;}
@@ -55,3 +63,11 @@
 .admin-plan-trend .admin-line-chart.compact .admin-legend{margin-top:10px;}
 .admin-line-chart.compact svg{height:auto;aspect-ratio:640/190;}
 .admin-line-chart.compact .admin-legend{margin-top:10px;}
+.admin-system-log-panel{margin-bottom:18px;}
+.admin-system-log-panel .admin-panel-heading .btn{flex:none;}
+.admin-system-log-filters{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+.admin-system-log-filters label{display:grid;gap:6px;min-width:150px;color:#50675a;font-size:11px;font-weight:700;}
+.admin-system-log-filters select{min-height:40px;padding:9px 12px;border:1px solid #dce7dd;border-radius:10px;background:#fff;color:#1d382a;font:inherit;font-size:13px;}
+.admin-system-log-panel .admin-table-wrap td:last-child{white-space:normal;min-width:160px;overflow-wrap:anywhere;}
+.admin-system-log-panel .admin-table-wrap td small{display:block;}
+@media(max-width:760px){.admin-system-log-panel .admin-panel-heading{flex-direction:column;}.admin-system-log-panel .admin-panel-heading .btn{align-self:flex-start;}}

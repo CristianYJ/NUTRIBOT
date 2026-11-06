@@ -31,4 +31,6 @@ Los nuevos registros de llamadas externas y solicitudes HTTP guardan solamente c
 
 Los incidentes anteriores a esta versión no tienen datos de validación recuperables: `generation_events` solo guardaba resultado, modelo y cantidad de recetas de respuestas validadas.
 
-Las migraciones `010_admin_diagnostics.sql`, `012_admin_api_metrics.sql`, `013_admin_daily_metrics.sql`, `016_account_roles.sql` y `018_goat_role.sql` crean los diagnósticos, las métricas y los roles. El despliegue requiere el procedimiento manual con respaldo descrito en [despliegue continuo](CONTINUOUS-DEPLOYMENT.md).
+La pestaña **Sistema** reúne cambios de rol y plan ya auditados, arranques y paradas registradas por la aplicación, errores del servidor, fallos de proveedores y errores de recetas. Permite filtrar los últimos 1, 7 o 30 días y descargar un PDF de hasta 500 registros. No lee el journal de systemd ni registra mensajes, claves o contraseñas. Los eventos de servidor empiezan al instalar la migración 019; los historiales anteriores disponibles se muestran sin inventar datos faltantes.
+
+Las migraciones `010_admin_diagnostics.sql`, `012_admin_api_metrics.sql`, `013_admin_daily_metrics.sql`, `016_account_roles.sql`, `018_goat_role.sql` y `019_system_audit.sql` crean los diagnósticos, las métricas, los roles y el registro de actividad. El despliegue requiere el procedimiento manual con respaldo descrito en [despliegue continuo](CONTINUOUS-DEPLOYMENT.md).

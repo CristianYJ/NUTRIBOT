@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from './auth-api.js';
 import { adminPeriods, adminPeriodBuckets, adminPeriodYears } from './admin-periods.js';
 import { adminAccountQuery, openAdminAccount, closeAdminAccount } from './admin-account-history.js';
+import BillingTransactions from './BillingTransactions.jsx';
+import { downloadCsv } from './csv-export.js';
 import './admin-portal.css';
 
 async function readAdmin(path) {
@@ -23,6 +25,11 @@ const since = value => {
 const views = [['overview', 'Dashboard'], ['incidents', 'Incidentes'], ['quality', 'Calidad de recetas'], ['usage', 'APIs'], ['users', 'Usuarios y soporte'], ['system', 'Sistema']];
 const outcomes = { error: 'Error', success: 'Recetas', empty: 'Sin resultados', conversation: 'Conversación', review: 'Revisión' };
 const empty = <p className="admin-empty">Aún no hay datos para este período.</p>;
+const systemLabels = { server: 'Servidor', roles: 'Roles', plans: 'Planes', http: 'HTTP',
+  api: 'APIs', recipes: 'Recetas' };
+const systemActions = { server_started: 'Servidor iniciado', server_stopped: 'Servidor detenido',
+  request_error: 'Error del servidor', role_change: 'Cambio de rol', plan_change: 'Cambio de plan',
+  request_failed: 'Solicitud fallida', provider_failed: 'Proveedor fallido', recipe_failed: 'Receta fallida' };
 
 function Stat({ label, value, hint, tone = '' }) {
   return <article className={`admin-stat ${tone}`}><span>{label}</span><strong>{value ?? '—'}</strong>{hint && <small>{hint}</small>}</article>;
@@ -76,6 +83,24 @@ function EventList({ items, onSelect, compact = false }) {
   </div>;
 }
 
+const recipeLogHeaders = ['Referencia', 'Resultado', 'Etapa', 'Código de error', 'Fecha'];
+const recipeLogRow = item => [item.requestId, outcomes[item.outcome] || item.outcome, item.stage, item.errorCode, date(item.createdAt)];
+const apiCallHeaders = ['Fecha', 'Proveedor', 'Operación', 'Modelo', 'Resultado', 'Código HTTP', 'Tiempo (ms)'];
+const apiCallRow = item => [date(item.createdAt), item.provider, item.operation, item.model,
+  item.outcome === 'success' ? 'OK' : 'Error', item.statusCode, item.durationMs];
+function AccountDataTable({ title, items = [], headers, toRow, file, emptyText }) {
+  return <section className="admin-account-data"><div className="admin-account-data-heading"><h4>{title}</h4>
+    <button type="button" className="btn secondary" disabled={!items.length}
+      onClick={() => downloadCsv(file, headers, items.map(toRow))}>Exportar</button></div>
+    {items.length ? <div className="admin-table-wrap"><table><thead><tr>{headers.map(header => <th key={header}>{header}</th>)}<th>Exportar</th></tr></thead>
+      <tbody>{items.map((item, index) => <tr key={item.requestId || `${item.createdAt}-${index}`}>
+        {toRow(item).map((value, column) => <td key={headers[column]}>{value == null || value === '' ? '—' : value}</td>)}
+        <td><button type="button" className="admin-text-link"
+          onClick={() => downloadCsv(file.replace('.csv', `-${index + 1}.csv`), headers, [toRow(item)])}>CSV</button></td>
+      </tr>)}</tbody></table></div> : <p>{emptyText}</p>}
+  </section>;
+}
+
 export default function AdminPortal() {
   const [adminRole, setAdminRole] = useState(null);
   const [view, setView] = useState('overview');
@@ -98,6 +123,10 @@ export default function AdminPortal() {
   const [resetNotice, setResetNotice] = useState('');
   const [actionNotice, setActionNotice] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [systemFilters, setSystemFilters] = useState({ days: 7, category: 'all' });
+  const [systemLogs, setSystemLogs] = useState([]);
+  const [systemNextOffset, setSystemNextOffset] = useState(null);
+  const [systemBusy, setSystemBusy] = useState(false);
   const q = summary?.quality || {};
   const successes = (q.twoOptions || 0) + (q.oneOption || 0);
   const filterQuery = (offset = 0) => new URLSearchParams({ days: filters.days, outcome: filters.outcome,
@@ -135,6 +164,19 @@ export default function AdminPortal() {
     return () => { active = false; clearTimeout(timer); };
   }, [view, filters, refreshKey]);
   useEffect(() => {
+    if (view !== 'system') return;
+    let active = true;
+    setSystemBusy(true);
+    setSystemLogs([]);
+    setSystemNextOffset(null);
+    const query = new URLSearchParams({ ...systemFilters, offset: 0 });
+    readAdmin(`system-logs?${query}`).then(result => {
+      if (active) { setSystemLogs(result.items); setSystemNextOffset(result.nextOffset); setError(''); }
+    }).catch(problem => { if (active) setError(problem.message); })
+      .finally(() => { if (active) setSystemBusy(false); });
+    return () => { active = false; };
+  }, [view, systemFilters, refreshKey]);
+  useEffect(() => {
     let active = true;
     const restoreAccount = () => {
       const request = ++accountRequest.current;
@@ -154,6 +196,37 @@ export default function AdminPortal() {
     setBusy(true);
     try { const list = await readAdmin(`events?${filterQuery(nextOffset)}`); setEvents(previous => [...previous, ...list.items]); setNextOffset(list.nextOffset); }
     catch (problem) { setError(problem.message); } finally { setBusy(false); }
+  }
+  async function loadMoreSystem() {
+    if (systemNextOffset == null) return;
+    setSystemBusy(true);
+    try {
+      const query = new URLSearchParams({ ...systemFilters, offset: systemNextOffset });
+      const result = await readAdmin(`system-logs?${query}`);
+      setSystemLogs(previous => [...previous, ...result.items]);
+      setSystemNextOffset(result.nextOffset);
+    } catch (problem) { setError(problem.message); }
+    finally { setSystemBusy(false); }
+  }
+  async function exportSystemPdf() {
+    setSystemBusy(true); setError('');
+    try {
+      const query = new URLSearchParams(systemFilters);
+      const response = await authenticatedFetch(`/api/admin/system-logs.pdf?${query}`);
+      if (!response.ok) {
+        const problem = await response.json();
+        throw new Error(problem.text || 'No se pudo exportar el PDF.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `nutribot-sistema-${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (problem) { setError(problem.message); }
+    finally { setSystemBusy(false); }
   }
   async function findAccount(event) { event.preventDefault(); await showAccount(accountQuery.trim()); }
   async function sendPasswordReset() {
@@ -214,7 +287,7 @@ export default function AdminPortal() {
           <div className="admin-stats"><Stat label="Usuarios registrados" value={users?.total} hint="Cuentas con correo" />
             <Stat label="Activos · 30 días" value={users?.active} hint={`${users?.inactive ?? '—'} inactivos`} />
             <Stat label="Consultas de recetas · 24 h" value={summary?.total24h} hint={`${summary?.errors24h ?? '—'} errores`} />
-            <Stat label="Valor mensual estimado" value={users ? money(users.estimatedMonthlyCents) : null} hint="Según planes asignados; no son cobros" /></div>
+            <Stat label="Ingresos Estimados" value={users ? money(users.estimatedMonthlyCents) : null} /></div>
           <div className="admin-stats admin-performance-stats"><Stat label="Servidor ≤ 2 s" value={users?.performance?.serverUnder2s == null ? '—' : `${users.performance.serverUnder2s}%`} hint={`p95 últimos 30 días: ${duration(users?.performance?.serverP95Ms)}`} />
             <Stat label="APIs externas ≤ 2 s" value={users?.performance?.apiUnder2s == null ? '—' : `${users.performance.apiUnder2s}%`} hint={`p95 últimos 30 días: ${duration(users?.performance?.apiP95Ms)}`} /></div>
           <div className="admin-two-col"><Trend daily={summary?.daily} period={period} /><section className="admin-panel"><div className="admin-panel-heading"><div><h2>Uso por función</h2><p>Solicitudes HTTP, incluidas las fallidas</p></div></div>
@@ -271,14 +344,26 @@ export default function AdminPortal() {
               <div><dt>Tiempo sin pago tras un plan de pago</dt><dd>{accountResult.detail?.freeSinceAfterPaid ? `${since(accountResult.detail.freeSinceAfterPaid)} · desde ${date(accountResult.detail.freeSinceAfterPaid)}` : 'No aplica'}</dd></div></dl>
             {adminRole === 'goat' && accountResult.account.role !== 'goat' && <div className="admin-plan-control"><h4>Plan</h4><div className="admin-plan-slicer" role="group" aria-label="Cambiar plan asignado">{[['basico','Básico'],['nutripro','NutriPro'],['nutripro_plus','NutriMax']].map(([code,label]) => <button key={code} type="button" disabled={busy} aria-pressed={accountResult.account.plan === code} className={`admin-plan-option admin-plan-${code}${accountResult.account.plan === code ? ' active' : ''}`} onClick={() => updateAccount({ plan: code })}>{label}</button>)}</div>{accountResult.account.role === 'admin' && <p>Staff conserva los límites de NutriMax; este plan se aplicará al quitar Staff.</p>}</div>}
             <h4>Uso</h4><div className="admin-account-usage"><span>Generaciones <strong>{accountResult.detail?.usage?.recipes?.used ?? '—'} / {accountResult.detail?.usage?.recipes?.limit === null ? '∞' : accountResult.detail?.usage?.recipes?.limit ?? '—'}</strong><small>Esta semana</small></span><span>Fotos reconocidas <strong>{accountResult.detail?.usage?.vision?.used ?? '—'} / {accountResult.detail?.usage?.vision?.limit === null ? '∞' : accountResult.detail?.usage?.vision?.limit ?? '—'}</strong><small>Este mes</small></span></div>
-            <div className="admin-account-actions"><button className="btn secondary" onClick={() => openAccountIncidents(accountResult.account.id)}>Ver diagnósticos de esta cuenta</button></div><h4>Logs de recetas</h4>
-            {accountResult.recent.length ? <ul>{accountResult.recent.map(item => <li key={item.requestId}><code>#{item.requestId.slice(0, 8)}</code> · {outcomes[item.outcome] || item.outcome} · {date(item.createdAt)}</li>)}</ul> : <p>Sin eventos recientes.</p>}
-            <h4>Llamadas externas recientes</h4>{accountResult.detail?.calls?.length ? <ul>{accountResult.detail.calls.map((call, index) => <li key={`${call.createdAt}-${index}`}>{date(call.createdAt)} · {call.provider} / {call.operation} · {call.outcome === 'success' ? 'OK' : call.statusCode || 'Red'} · {duration(call.durationMs)}</li>)}</ul> : <p>Sin llamadas medidas.</p>}
+            <div className="admin-account-actions"><button className="btn secondary" onClick={() => openAccountIncidents(accountResult.account.id)}>Ver diagnósticos de esta cuenta</button></div>
+            <AccountDataTable title="Logs de recetas" items={accountResult.recent} headers={recipeLogHeaders}
+              toRow={recipeLogRow} file={`nutribot-cuenta-${accountResult.account.id}-recetas.csv`} emptyText="Sin eventos recientes." />
+            <AccountDataTable title="Llamadas externas recientes" items={accountResult.detail?.calls} headers={apiCallHeaders}
+              toRow={apiCallRow} file={`nutribot-cuenta-${accountResult.account.id}-apis.csv`} emptyText="Sin llamadas medidas." />
+            <BillingTransactions items={accountResult.detail?.transactions} />
           </section> : <p className="admin-empty">No se encontró esa cuenta.</p>)}
         </>}
         {view === 'system' && <><div className="admin-section-heading"><h2>Sistema</h2><p>Configuración observada por este servidor. “Configurado” no prueba disponibilidad externa.</p></div>
           <div className="admin-system-grid"><section className="admin-panel"><h3>Servicios</h3><dl>{[['Base de datos', Boolean(summary)], ['Gemini', summary?.providers?.gemini], ['Edamam', summary?.providers?.edamam], ['USDA', summary?.providers?.usda]].map(([name, ready]) => <div key={name}><dt>{name}</dt><dd className={ready ? 'ready' : 'missing'}>{ready ? name === 'Base de datos' ? 'Conectada' : 'Configurado' : 'Sin configurar'}</dd></div>)}</dl><p>Modelo Gemini: <strong>{summary?.model || '—'}</strong></p><p>Servidor activo: <strong>{summary?.uptimeSeconds == null ? '—' : `${Math.floor(summary.uptimeSeconds / 60)} min`}</strong></p></section>
             <section className="admin-panel"><h3>Códigos de error · 7 días</h3>{summary?.codes?.length ? <ul className="admin-codes">{summary.codes.map(item => <li key={item.code}><span>{item.code || 'INTERNAL_ERROR'}</span><strong>{item.count}</strong></li>)}</ul> : empty}</section></div>
+          <section className="admin-panel admin-system-log-panel"><div className="admin-panel-heading"><div><h2>Registro de actividad</h2><p>Cambios de roles y planes, arranques, errores del servidor y fallos de servicios.</p></div>
+            <button className="btn secondary" type="button" disabled={systemBusy} onClick={exportSystemPdf}>Exportar PDF</button></div>
+            <div className="admin-system-log-filters"><label>Período <select value={systemFilters.days} onChange={event => setSystemFilters({ ...systemFilters, days: Number(event.target.value) })}><option value={1}>24 horas</option><option value={7}>7 días</option><option value={30}>30 días</option></select></label>
+              <label>Tipo <select value={systemFilters.category} onChange={event => setSystemFilters({ ...systemFilters, category: event.target.value })}><option value="all">Todos</option>{Object.entries(systemLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label></div>
+            {systemBusy && !systemLogs.length ? <p className="admin-empty">Cargando registros…</p> : systemLogs.length ?
+              <div className="admin-table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Evento</th><th>Cuenta</th><th>Detalle</th></tr></thead><tbody>{systemLogs.map(item => <tr key={`${item.category}-${item.reference}`}><td>{date(item.createdAt)}</td><td><span className={`admin-status ${item.severity === 'error' ? 'error' : item.severity === 'warning' ? 'empty' : 'success'}`}>{systemLabels[item.category] || item.category}</span></td><td>{systemActions[item.action] || item.action}</td><td>{item.accountId ? `#${item.accountId}` : '—'}</td><td>{item.detail || '—'}{item.actor ? <small>Por {/^\d+$/.test(item.actor) ? `cuenta #${item.actor}` : item.actor}</small> : null}</td></tr>)}</tbody></table></div> : empty}
+            {systemNextOffset != null && <button className="btn secondary admin-more" type="button" disabled={systemBusy} onClick={loadMoreSystem}>Ver más</button>}
+            <p className="admin-note">Registros detallados de los últimos 30 días. El PDF contiene hasta 500 eventos del filtro seleccionado. No incluye mensajes, contraseñas ni claves.</p>
+          </section>
           <p className="admin-note">Los diagnósticos se conservan 30 días. Los eventos anteriores a la instalación de este portal no tienen causas detalladas recuperables.</p>
         </>}
       </div></div>

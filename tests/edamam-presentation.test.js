@@ -16,6 +16,24 @@ test('Gemini translates Edamam ingredients without changing quantities and estim
   } }) }), { code: 'INVALID_AI_OUTPUT' });
 });
 
+test('missing Edamam time is estimated in the same translation call', async () => {
+  const input = { title: 'Rice with mushrooms', ingredientLines: ['1 cup rice', '2 cups mushrooms'], time: null };
+  let calls = 0;
+  const result = await presentEdamamRecipe(input, { generate: async request => {
+    calls++;
+    assert(request.schema.required.includes('estimatedMinutes'));
+    return { output: { titleEs: 'Arroz con champiñones', meal: 'Cena',
+      ingredientLinesEs: ['1 taza de arroz', '2 tazas de champiñones'],
+      difficulty: 'Fácil', estimatedMinutes: 27 } };
+  } });
+  assert.equal(calls, 1);
+  assert.equal(result.estimatedMinutes, 25);
+  await assert.rejects(presentEdamamRecipe(input, { generate: async () => ({ output: {
+    titleEs: 'Arroz con champiñones', meal: 'Cena', ingredientLinesEs: ['1 taza de arroz', '2 tazas de champiñones'],
+    difficulty: 'Fácil', estimatedMinutes: 500,
+  } }) }), { code: 'INVALID_AI_OUTPUT' });
+});
+
 test('Gemini translates both choice titles in one call and keeps the requested meal', async () => {
   let calls = 0;
   const choices = await presentEdamamChoices([{ title: 'Chicken tacos', mealTypes: ['Lunch'] }, { title: 'Rice bowl', mealTypes: [] }], 'Dinner', {
@@ -58,6 +76,23 @@ test('Spanish presentation is reused across accounts and refreshed when source i
   assert.equal(await getCachedRecipePresentation({ ...input, ingredientLines: ['4 flour tortillas'] }, store), null);
   await cachedRecipePresentation({ ...input, ingredientLines: ['4 flour tortillas'] }, {}, store, present);
   assert.equal(calls, 2);
+});
+
+test('estimated time is cached for a recipe without original time', async () => {
+  const rows = new Map();
+  const store = {
+    getEdamamPresentation: async (uri, kind, hash) => rows.get(`${uri}:${kind}:${hash}`) || null,
+    saveEdamamPresentation: async value => { rows.set(`${value.uri}:${value.kind}:${value.hash}`, value); },
+  };
+  const input = { uri: 'http://www.edamam.com/ontologies/edamam.owl#recipe_time',
+    title: 'Rice with mushrooms', ingredientLines: ['1 cup rice'], time: null };
+  let calls = 0;
+  const present = async () => { calls++; return { titleEs: 'Arroz con champiñones',
+    ingredientLinesEs: ['1 taza de arroz'], difficulty: 'Fácil', meal: 'Cena', estimatedMinutes: 25 }; };
+  await cachedRecipePresentation(input, {}, store, present);
+  assert.equal((await getCachedRecipePresentation(input, store)).estimatedMinutes, 25);
+  assert.equal((await cachedRecipePresentation(input, {}, store, present)).estimatedMinutes, 25);
+  assert.equal(calls, 1);
 });
 
 test('chat choice cache translates only misses and preserves their order', async () => {

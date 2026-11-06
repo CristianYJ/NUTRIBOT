@@ -1,0 +1,16 @@
+.plan-limit-offer{box-sizing:border-box;width:min(720px,calc(100vw - 32px));max-height:min(90dvh,800px);overflow:auto;border:1px solid #dce8dc;border-radius:24px;padding:28px;background:#fff;color:#131b2e;box-shadow:0 24px 80px #131b2e35;}
+.plan-limit-offer::backdrop{background:#131b2e88;backdrop-filter:blur(4px);}
+.plan-limit-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.plan-limit-eyebrow{color:#006b51;font-size:.8rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
+.plan-limit-close{width:38px;height:38px;border-radius:50%;background:#f1f5f2;color:#18362b;font-size:1.7rem;line-height:1;cursor:pointer;}
+.plan-limit-offer h2{margin:12px 0;font-size:clamp(1.5rem,4vw,2rem);line-height:1.15;}
+.plan-limit-offer>p{color:#53675b;line-height:1.5;}
+.plan-limit-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:22px 0;}
+.plan-limit-card{padding:20px;border:1px solid #dce8dc;border-radius:18px;background:#f8fbf8;}
+.plan-limit-card h3{margin:0 0 8px;font-size:1.2rem;}
+.plan-limit-card p{margin:8px 0;line-height:1.4;}
+.plan-limit-price{font-size:1.45rem;font-weight:800;color:#006b51;}
+.plan-limit-price span{font-size:.85rem;font-weight:500;color:#53675b;}
+.plan-limit-card button{width:100%;margin-top:14px;padding:12px;border-radius:10px;background:#006b51;color:#fff;font:inherit;font-weight:700;cursor:pointer;}
+.plan-limit-offer .plan-limit-note{margin-bottom:0;font-size:.78rem;}
+@media(max-width:560px){.plan-limit-offer{padding:22px 18px;}.plan-limit-options{grid-template-columns:1fr;}.plan-limit-card{padding:16px;}}

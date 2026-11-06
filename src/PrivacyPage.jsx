@@ -52,6 +52,7 @@ export default function PrivacyPage() {
               <p>NutriBot trata los datos proporcionados por la persona usuaria y los generados durante el uso del servicio:</p>
               <ul>
                 <li><strong>Cuenta y acceso:</strong> nombre, correo electrónico, fecha de nacimiento, plan asignado e información necesaria para autenticar y proteger la cuenta. Las solicitudes de cambio de contraseña se comunican al correo registrado.</li>
+                <li><strong>Suscripciones:</strong> plan elegido, importe, identificadores de la suscripción y del pago, fechas de cobro y vigencia. Los datos de la tarjeta se introducen directamente en Wompi y no se almacenan en NutriBot.</li>
                 <li><strong>Perfil alimentario:</strong> objetivos, dieta, alergias, restricciones y alimentos excluidos. Según los campos completados, también peso, estatura, actividad, metas nutricionales y notas sobre indicaciones profesionales. Las alergias y determinadas notas pueden constituir datos relativos a la salud.</li>
                 <li><strong>Despensa:</strong> alimentos agregados, fechas de almacenamiento y vencimiento, y alimentos personalizados.</li>
                 <li><strong>Recetas y comidas:</strong> recetas guardadas, categorías, valoraciones, comidas registradas e información nutricional utilizada por las funciones de seguimiento. Los valores nutricionales proporcionados por Edamam se muestran al consultar una receta y no se conservan bajo el plan actual.</li>
@@ -63,11 +64,12 @@ export default function PrivacyPage() {
             <section id="uso">
               <h2>3. Finalidades del tratamiento</h2>
               <p>Los datos se utilizan para administrar la cuenta, proteger el acceso, mantener el perfil y la despensa, atender consultas culinarias, buscar recetas conforme a las preferencias registradas, presentar información nutricional y registrar comidas. Los registros técnicos permiten detectar errores, medir el funcionamiento del servicio y prevenir usos indebidos.</p>
+              <p>En el prototipo universitario, Wompi procesa transacciones de prueba sin cargos reales y comunica a NutriBot los datos necesarios para comprobarlas y administrar el plan simulado.</p>
               <p>El análisis de fotografías y el seguimiento nutricional se realizan cuando la persona usuaria utiliza esas funciones. Las recetas y los cálculos son información orientativa; corresponde comprobar ingredientes, alérgenos, etiquetas y cantidades antes de preparar o consumir un alimento.</p>
             </section>
             <section id="gemini">
               <h2>4. Proveedor de IA</h2>
-              <p>NutriBot utiliza Google Gemini para interpretar consultas en lenguaje natural, mantener conversaciones, identificar ingredientes en fotografías, traducir títulos e ingredientes y estimar la dificultad o categoría de una receta.</p>
+              <p>NutriBot utiliza Google Gemini para interpretar consultas en lenguaje natural, mantener conversaciones, identificar ingredientes en fotografías, traducir títulos e ingredientes y estimar la dificultad, el tiempo de preparación o la categoría de una receta cuando esa información no está disponible.</p>
               <p>Según la función utilizada, se transmiten a Google las consultas o fotografías proporcionadas y la información alimentaria pertinente para responderlas. Las credenciales de acceso no se envían para estas funciones. El texto y las imágenes proporcionados por la persona usuaria podrían contener otros datos personales.</p>
               <p>Google trata la información recibida conforme a sus <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">condiciones de Gemini API</a>. Estas contemplan usos para prestar y proteger el servicio y, según la modalidad aplicable, para mejorar sus productos.</p>
             </section>

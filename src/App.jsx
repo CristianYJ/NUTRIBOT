@@ -30,7 +30,7 @@ import NutritionPanel from "./NutritionPanel.jsx";
 import { requestRecipe, stateRequest, pantryRequest } from "./api.js";
 import { usePersistence } from "./usePersistence.js";
 import { readNavigation, navigationUrl, openRecipeInHistory, closeRecipeInHistory,
-  openPlanOfferInHistory, closePlanOfferInHistory, consumePlanOfferInHistory } from "./navigation.js";
+  openPlanOfferInHistory, closePlanOfferInHistory } from "./navigation.js";
 import { readChat } from "./chat-session.js";
 import { profileRestrictions } from "./profile-rules.js";
 import { allergyOptions } from "./data.js";
@@ -212,7 +212,7 @@ function Workspace({ initial, onSignedOut }) {
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [planOfferOpen, setPlanOfferOpen] = useState(() => Boolean(history.state?.planOffer));
-  const [preferredPlan, setPreferredPlan] = useState(null);
+  const [planOfferReason, setPlanOfferReason] = useState('upgrade');
   const [ingredients, setIngredients] = useState(initial.ingredients);
   const ingredientById = Object.fromEntries(ingredients.map((i) => [i.id, i]));
   const recipes = initial.recipes;
@@ -474,12 +474,10 @@ function Workspace({ initial, onSignedOut }) {
   function closePlanOffer() {
     if (!closePlanOfferInHistory(window)) setPlanOfferOpen(false);
   }
-  function choosePlan(code) {
-    consumePlanOfferInHistory(window);
-    setPlanOfferOpen(false);
-    setPreferredPlan(code);
-    go('profile');
-    requestAnimationFrame(() => document.getElementById('profile-billing')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  function showPlanOffer(reason) {
+    setPlanOfferReason(reason);
+    openPlanOfferInHistory(window);
+    setPlanOfferOpen(true);
   }
   function openRecipe(r, portions = 1) {
     // One history entry per open dialog. Back restores the page beneath it.
@@ -586,8 +584,7 @@ function Workspace({ initial, onSignedOut }) {
     } catch (error) {
       if (controller.signal.aborted || request.current !== controller) return;
       if (error.code === 'PLAN_LIMIT') {
-        openPlanOfferInHistory(window);
-        setPlanOfferOpen(true);
+        showPlanOffer('limit');
       }
       setMessages((m) => [
         ...m,
@@ -836,8 +833,8 @@ function Workspace({ initial, onSignedOut }) {
                 <div className="page-title">
                   <h1>Mi Perfil</h1>
                 </div>
-                <PlanUsage usage={usage} error={usageError} onUpgrade={() => document.getElementById('profile-billing')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
-                <BillingPanel plan={usage?.plan} preferredPlan={preferredPlan} />
+                <PlanUsage usage={usage} error={usageError} onUpgrade={() => showPlanOffer('upgrade')} />
+                <BillingPanel />
                 <ProfileForm
                   tracker={meals}
                   catalog={ingredients}
@@ -929,7 +926,7 @@ function Workspace({ initial, onSignedOut }) {
         </nav>
       </div>
       <PhoneConnection open={phoneOpen} onClose={() => setPhoneOpen(false)} />
-      <PlanLimitOffer open={planOfferOpen} currentPlan={usage?.plan?.code} onClose={closePlanOffer} onChoose={choosePlan} />
+      <PlanLimitOffer open={planOfferOpen} currentPlan={usage?.plan?.code} reason={planOfferReason} onClose={closePlanOffer} />
       <PantryImport
         usage={usage}
         onUsageChange={refreshUsage}

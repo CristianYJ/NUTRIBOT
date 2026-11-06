@@ -39,6 +39,11 @@ export default function PlanLimitOffer({ open, currentPlan, reason = 'upgrade', 
     return () => { active = false; };
   }, [open, currentPlan]);
 
+  function continueInWompi(url, plan) {
+    try { sessionStorage.setItem('nutribot.paymentTarget', plan); } catch { /* Storage can be disabled. */ }
+    window.location.assign(url);
+  }
+
   async function choose(plan) {
     if (busy) return;
     setError('');
@@ -48,11 +53,11 @@ export default function PlanLimitOffer({ open, currentPlan, reason = 'upgrade', 
       setError('Tu pago está en revisión. Espera la confirmación antes de iniciar otro.'); return;
     }
     if (status.state === 'pending') {
-      if (status.plan === plan.code && status.linkUrl) { window.location.assign(status.linkUrl); return; }
+      if (status.plan === plan.code && status.linkUrl) { continueInWompi(status.linkUrl, plan.code); return; }
       setError('Ya tienes una afiliación en proceso para otro plan. Complétala antes de elegir uno nuevo.'); return;
     }
     if (status.upgrade?.state === 'pending') {
-      if (status.upgrade.linkUrl) window.location.assign(status.upgrade.linkUrl);
+      if (status.upgrade.linkUrl) continueInWompi(status.upgrade.linkUrl, 'nutripro_plus');
       else setError('Ya hay un cambio de plan en proceso.');
       return;
     }
@@ -69,7 +74,7 @@ export default function PlanLimitOffer({ open, currentPlan, reason = 'upgrade', 
     try {
       const result = await billingRequest(path, body);
       if (!result.url) throw new Error('Wompi no devolvió un enlace de pago.');
-      window.location.assign(result.url);
+      continueInWompi(result.url, plan.code);
     } catch (problem) {
       setError(problem.message);
       setBusy(false);

@@ -13,7 +13,11 @@ WOMPI_RECURRING_ENABLED=0
 WOMPI_WEBHOOK_URL=https://nutribot.online/api/billing/wompi/webhook
 ```
 
-El App ID y API Secret se obtienen del negocio **en modo desarrollo** en el panel de Wompi. No se incluyen en Git. Registrar `https://nutribot.online/api/billing/wompi/webhook` como webhook del negocio en Wompi al desplegar el prototipo; Wompi no puede acceder a `localhost`. La ruta admite únicamente solicitudes firmadas. Con `WOMPI_RECURRING_ENABLED=0` no se generan enlaces nuevos. Tras configurar las credenciales y el webhook, cambiarlo a `1` permite iniciar afiliaciones de prueba. La [documentación de pruebas](https://docs.wompi.sv/metodos-api/transaccion_prueba) indica que `EsProductiva=false` significa que no se realizó un cargo real.
+El App ID y API Secret se obtienen del negocio **en modo desarrollo** en el panel de Wompi. No se incluyen en Git. Para Oracle, configurar en ese mismo negocio **Notifica vía Webhook** con `https://nutribot.online/api/billing/wompi/webhook` y **Redirect URL** con `https://nutribot.online/pago`. Configurar también `WOMPI_WEBHOOK_URL=https://nutribot.online/api/billing/wompi/webhook` en el entorno del servidor. La ruta admite únicamente solicitudes firmadas. Sin la URL del webhook y `WOMPI_RECURRING_ENABLED=1`, NutriBot no ofrece nuevas afiliaciones. La URL de retorno solo informa al navegador; el plan se activa por el webhook verificado. La [documentación de pruebas](https://docs.wompi.sv/metodos-api/transaccion_prueba) indica que `EsProductiva=false` significa que no se realizó un cargo real.
+
+Una afiliación terminada mientras el webhook estaba desactivado puede seguir pendiente en NutriBot. No cambiar el plan basándose en la pantalla de Wompi ni repetir un cobro a ciegas: consultar la transacción de prueba y el estado del enlace en Wompi, revisar los rechazos del webhook en los registros y reconciliar el caso antes de intentar una nueva afiliación. El correo de bienvenida se envía solo en la primera confirmación verificada del plan o de un cambio a NutriMax.
+
+El historial de pagos incluye las afiliaciones pendientes y su ID de enlace, las confirmaciones con ID de transacción, los enlaces cancelados y los ajustes vencidos sin confirmar. Wompi documenta la notificación de pagos exitosos; un intento sin confirmación no se presenta como fallido. Para registrar un rechazo como fallido haría falta un resultado verificable del proveedor asociado a ese enlace.
 
 ### Pruebas desde la PC local
 

@@ -408,6 +408,8 @@ test('Wompi recurrent payment grants a plan once, checks amount and expires enti
   });
   assert.equal(link.state, 'pending');
   assert.equal((await account.billingStatus()).plan, 'nutripro');
+  assert.deepEqual((await account.listBillingTransactions()).map(item => ({ kind: item.kind, status: item.status, transactionId: item.transactionId })),
+    [{ kind: 'subscription', status: 'pending', transactionId: null }]);
   assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'basico');
   const transactionId = '12345678-1234-1234-1234-123456789abc';
   const event = { IdTransaccion: transactionId, EnlacePagoRecurrente: { Id: 'wompi-link-test' },
@@ -417,7 +419,8 @@ test('Wompi recurrent payment grants a plan once, checks amount and expires enti
   await assert.rejects(f.store.recordWompiPayment({ ...event, EsProductiva: true }, details), { code: 'INVALID_PAYMENT' });
   await assert.rejects(f.store.recordWompiPayment({ ...event, Monto: 1 }, details), { code: 'INVALID_PAYMENT' });
   assert.equal((await f.sql.query('SELECT count(*)::integer AS n FROM wompi_payments')).rows[0].n, 0);
-  assert.deepEqual(await f.store.recordWompiPayment(event, details), { applied: true });
+  assert.deepEqual(await f.store.recordWompiPayment(event, details), { applied: true,
+    welcome: { to: 'billing@example.test', name: 'Billing user', plan: 'nutripro' } });
   assert.deepEqual(await f.store.recordWompiPayment(event, details), { duplicate: true });
   const otherId = await f.store.auth.register({ name: 'Other billing user', email: 'other-billing@example.test',
     password: 'A long test password 2026', birthDate: '1990-01-01' }, false);
@@ -476,11 +479,13 @@ test('confirmed prorated upgrade disables only the old link and records one adju
     disableRecurringLink: async () => { throw new Error('Wompi unavailable'); },
   }), /Wompi unavailable/);
   assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'nutripro');
-  assert.deepEqual(await f.store.recordWompiUpgradePayment(event, details, wompi), { applied: true });
+  assert.deepEqual(await f.store.recordWompiUpgradePayment(event, details, wompi), { applied: true,
+    welcome: { to: 'upgrade@example.test', name: 'Upgrade user', plan: 'nutripro_plus' } });
   assert.deepEqual(await f.store.recordWompiUpgradePayment(event, details, wompi), { duplicate: true });
   assert.equal(disabled, 1);
   assert.equal((await f.sql.query('SELECT plan_code FROM profiles WHERE id=$1', [id])).rows[0].plan_code, 'nutripro_plus');
   assert.equal((await f.sql.query('SELECT state FROM wompi_subscriptions WHERE link_id=$1', ['pro-link'])).rows[0].state, 'ended');
+  assert.equal((await account.listBillingTransactions()).find(item => item.kind === 'subscription')?.status, 'cancelled');
   assert.equal((await account.listBillingTransactions()).filter(item => item.kind === 'upgrade').length, 1);
   await assert.rejects(f.store.recordWompiPayment({ IdTransaccion: '34567890-1234-1234-1234-123456789abc',
     EnlacePagoRecurrente: { Id: 'pro-link' }, ResultadoTransaccion: 'ExitosaAprobada',

@@ -60,7 +60,7 @@ export function requestContext(req, network = {}) {
   // account data; API routes still require the exact current origin.
   const publicEntry = network.public && req.method === "GET" &&
     typeof req.url === "string" &&
-    /^\/(?:index\.html)?(?:\?.*)?$/.test(req.url);
+    /^\/(?:index\.html|pago)?(?:\?.*)?$/.test(req.url);
   if (
     (req.headers.origin && !origins.includes(req.headers.origin) && !publicEntry) ||
     (req.headers["sec-fetch-site"] === "cross-site" && !publicEntry)
@@ -131,7 +131,7 @@ export function createAuthentication(store, { sendPasswordResetEmail = null, res
     const issued = await store.auth.issuePasswordReset(email, requestedByAdminId);
     if (!issued) return false;
     try {
-      await sendPasswordResetEmail({ to: issued.email, link: `${resetOrigin}/#restablecer/${issued.token}` });
+      await sendPasswordResetEmail({ to: issued.email, name: issued.name, link: `${resetOrigin}/#restablecer/${issued.token}` });
       return true;
     } catch (error) {
       await store.auth.cancelPasswordReset(issued.tokenHash);

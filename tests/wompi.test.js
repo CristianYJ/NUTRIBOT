@@ -67,10 +67,13 @@ test('one-time upgrade link fixes amount, single use and webhook; old link is di
 
 test('local HTTPS tunnel host accepts only a signed Wompi webhook', async t => {
   const recorded = [];
+  const welcomed = [];
   const server = createAppServer({ authentication: false, store: {
-    recordWompiPayment: async event => { recorded.push(event.IdTransaccion); },
+    recordWompiPayment: async event => { recorded.push(event.IdTransaccion); return { applied: true,
+      welcome: { to: 'customer@example.test', name: 'Customer', plan: 'nutripro' } }; },
   }, network: {}, wompiAppId: 'app-id', wompiApiSecret: 'private-key', wompiRecurringEnabled: true,
   wompiWebhookUrl: 'https://test-tunnel.example/api/billing/wompi/webhook',
+  sendPlanWelcomeEmail: async message => { welcomed.push(message); },
   wompiFetch: async url => url.includes('/connect/token')
     ? Response.json({ access_token: 'token', expires_in: 3600 })
     : Response.json({ idTransaccion: '12345678-1234-1234-1234-123456789abc', esAprobada: true, esReal: false, monto: 2.99 }),
@@ -91,4 +94,5 @@ test('local HTTPS tunnel host accepts only a signed Wompi webhook', async t => {
   assert.equal(await send('/api/billing/wompi/webhook', true), 200);
   assert.equal(await send('/api/billing/status', true), 403);
   assert.deepEqual(recorded, ['12345678-1234-1234-1234-123456789abc']);
+  assert.deepEqual(welcomed, [{ to: 'customer@example.test', name: 'Customer', plan: 'nutripro' }]);
 });
